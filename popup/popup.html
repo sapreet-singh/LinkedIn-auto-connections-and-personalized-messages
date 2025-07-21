@@ -28,6 +28,12 @@
                 </div>
                 <button class="btn btn-primary" id="create-campaign">+ New Campaign</button>
             </div>
+
+            <div class="section">
+                <h3>Quick Actions</h3>
+                <button class="btn btn-secondary" id="collect-profiles">Collect Profiles from Current Page</button>
+                <button class="btn btn-secondary" id="view-collected">View Collected Profiles (<span id="profile-count">0</span>)</button>
+            </div>
         </div>
 
         <!-- Messages Tab -->
@@ -53,10 +59,28 @@
         <!-- Settings Tab -->
         <div class="tab-content" id="settings">
             <div class="section">
+                <h3>AI Settings</h3>
+                <div class="form-group">
+                    <label>OpenAI API Key:</label>
+                    <input type="password" id="openai-key" placeholder="sk-...">
+                    <small>Required for AI-generated personalized messages</small>
+                </div>
+                <div class="form-group">
+                    <label>Message Style:</label>
+                    <select id="message-style">
+                        <option value="professional">Professional</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="casual">Casual</option>
+                        <option value="sales">Sales-focused</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section">
                 <h3>Safety Settings</h3>
                 <div class="form-group">
                     <label>Daily Connection Limit:</label>
-                    <input type="number" id="daily-limit" value="50" min="1" max="100">
+                    <input type="number" id="daily-limit" value="20" min="1" max="100">
                 </div>
                 <div class="form-group">
                     <label>Delay Between Actions (seconds):</label>
@@ -70,26 +94,242 @@
             </div>
         </div>
 
-        <!-- Campaign Modal -->
+        <!-- Campaign Creation Wizard -->
         <div class="modal" id="campaign-modal">
+            <div class="modal-content campaign-wizard">
+                <!-- Step 1: Campaign Name -->
+                <div class="wizard-step active" id="step-1">
+                    <div class="wizard-header">
+                        <button class="back-btn" style="display: none;">&larr;</button>
+                        <h3>Campaign name</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 1 out of 4</div>
+
+                    <div class="form-group">
+                        <input type="text" id="campaign-name" placeholder="Enter campaign name" class="campaign-input">
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-primary wizard-next" id="next-step-1">NEXT</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Add People Options -->
+                <div class="wizard-step" id="step-2">
+                    <div class="wizard-header">
+                        <button class="back-btn" id="back-to-step-1">&larr;</button>
+                        <h3>Add people</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 2 out of 4</div>
+
+                    <div class="add-people-options">
+                        <button class="option-btn" id="linkedin-search-option">
+                            <div class="option-title">ADD PEOPLE FROM LINKEDIN SEARCH</div>
+                        </button>
+
+                        <button class="option-btn" id="sales-navigator-option">
+                            <div class="option-title">ADD PEOPLE FROM SALES NAVIGATOR</div>
+                        </button>
+
+                        <button class="option-btn" id="network-option">
+                            <div class="option-title">ADD PEOPLE FROM MY NETWORK</div>
+                        </button>
+
+                        <div class="or-divider">Or</div>
+
+                        <div class="csv-upload-area">
+                            <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
+                            <button class="upload-btn" id="csv-upload-btn">Click to import the file</button>
+                            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                            <div class="upload-hint">or drop it here</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Network Search -->
+                <div class="wizard-step" id="step-3-network">
+                    <div class="wizard-header">
+                        <button class="back-btn" id="back-to-step-2-from-network">&larr;</button>
+                        <h3>Add people from your network</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 3 out of 4</div>
+
+                    <div class="network-search-options">
+                        <div class="search-instructions">
+                            <p>- Use native LinkedIn search filters to find people from your network. Scroll the filters to see more fields.</p>
+                            <p>- Once specified, click "Apply LinkedIn filters" to see the results and then press "Start Collecting People" to collect the people.</p>
+                        </div>
+
+                        <div class="search-actions">
+                            <button class="btn btn-secondary" id="show-network-filters">SHOW LINKEDIN NETWORK FILTERS</button>
+                            <button class="btn btn-primary" id="start-network-collecting">START COLLECTING PEOPLE</button>
+                        </div>
+
+                        <div class="or-divider">Or</div>
+
+                        <div class="network-list-option">
+                            <h4>Browse Your Connections</h4>
+                            <p>View and select from your existing LinkedIn connections</p>
+                            <button class="btn btn-secondary" id="browse-connections">BROWSE MY CONNECTIONS</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: LinkedIn Search Filters -->
+                <div class="wizard-step" id="step-3-search">
+                    <div class="wizard-header">
+                        <button class="back-btn" id="back-to-step-2">&larr;</button>
+                        <h3>Add people</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 3 out of 4</div>
+
+                    <div class="search-instructions">
+                        <p>- Use native LinkedIn search filters to specify your target audience. Scroll the filters to see more fields.</p>
+                        <p>- Once specified, click "Apply LinkedIn filters" to see the results and then press "Start Collecting People" to collect the people.</p>
+                    </div>
+
+                    <div class="search-actions">
+                        <button class="btn btn-secondary" id="show-filters">SHOW LINKEDIN FILTERS</button>
+                        <button class="btn btn-primary" id="start-collecting">START COLLECTING PEOPLE</button>
+                    </div>
+
+                    <div class="or-divider">Or</div>
+
+                    <div class="csv-upload-area">
+                        <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
+                        <button class="upload-btn" id="csv-upload-btn-2">Click to import the file</button>
+                        <div class="upload-hint">or drop it here</div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Collection Progress -->
+                <div class="wizard-step" id="step-3-collecting">
+                    <div class="wizard-header">
+                        <button class="back-btn" id="back-to-search">&larr;</button>
+                        <h3>Add people</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 3 out of 4</div>
+
+                    <div class="collection-status">
+                        <div class="collected-count">
+                            <span>Collected: <span id="collected-number">0</span></span>
+                            <button class="btn btn-secondary" id="pause-collection">PAUSE</button>
+                        </div>
+
+                        <div class="collected-profiles" id="collected-profiles-list">
+                            <!-- Profiles will be added here dynamically -->
+                        </div>
+
+                        <button class="btn btn-primary" id="next-to-messaging">NEXT: CONFIGURE MESSAGING</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Messaging Strategy -->
+                <div class="wizard-step" id="step-4-messaging">
+                    <div class="wizard-header">
+                        <button class="back-btn" id="back-to-collecting">&larr;</button>
+                        <h3>Configure messaging strategy</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="step-indicator">Create campaign: step 4 out of 4</div>
+
+                    <div class="messaging-strategy">
+                        <div class="strategy-options">
+                            <div class="strategy-option" id="single-message-option">
+                                <input type="radio" name="messaging-strategy" value="single" id="single-message-radio" checked>
+                                <label for="single-message-radio">
+                                    <div class="strategy-title">Single Message</div>
+                                    <div class="strategy-description">Send one personalized connection request message</div>
+                                </label>
+                            </div>
+
+                            <div class="strategy-option" id="multi-step-option">
+                                <input type="radio" name="messaging-strategy" value="multi" id="multi-step-radio">
+                                <label for="multi-step-radio">
+                                    <div class="strategy-title">Multi-Step Follow-Up</div>
+                                    <div class="strategy-description">Connection message + 1-2 follow-up messages (scheduled)</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="follow-up-config" id="follow-up-config" style="display: none;">
+                            <h4>Follow-up Configuration</h4>
+                            <div class="form-group">
+                                <label>Number of follow-up messages:</label>
+                                <select id="follow-up-count">
+                                    <option value="1">1 follow-up message</option>
+                                    <option value="2">2 follow-up messages</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Days between messages:</label>
+                                <input type="number" id="follow-up-delay" value="3" min="1" max="14">
+                            </div>
+                        </div>
+
+                        <div class="ai-analysis-config">
+                            <h4>AI Analysis & Personalization</h4>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="analyze-profile" checked>
+                                    Analyze profile details (name, headline, experience, education)
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="analyze-posts" checked>
+                                    Analyze recent posts and activity (when available)
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Message style:</label>
+                                <select id="message-style">
+                                    <option value="professional">Professional</option>
+                                    <option value="casual">Casual & Friendly</option>
+                                    <option value="direct">Direct & Brief</option>
+                                    <option value="consultative">Consultative</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" id="create-campaign-final">CREATE CAMPAIGN</button>
+                    </div>
+                </div>
+
+                <!-- Duplicates Modal -->
+                <div class="duplicates-overlay" id="duplicates-modal" style="display: none;">
+                    <div class="duplicates-content">
+                        <h3><span id="duplicate-count">0</span> duplicates found</h3>
+                        <p>The following people already appeared in one of your campaigns or you contacted them before.</p>
+                        <p>They will be excluded automatically.</p>
+
+                        <div class="duplicate-profiles" id="duplicate-profiles-list">
+                            <!-- Duplicate profiles will be shown here -->
+                        </div>
+
+                        <div class="duplicate-actions">
+                            <button class="btn btn-secondary" id="cancel-duplicates">CANCEL</button>
+                            <button class="btn btn-primary" id="exclude-duplicates">EXCLUDE</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Collection Modal -->
+        <div class="modal" id="profiles-modal">
             <div class="modal-content">
-                <span class="close">&times;</span>
-                <h3>Create New Campaign</h3>
-                <div class="form-group">
-                    <label>Campaign Name:</label>
-                    <input type="text" id="campaign-name" placeholder="My LinkedIn Campaign">
-                </div>
-                <div class="form-group">
-                    <label>Target URL (LinkedIn search results):</label>
-                    <input type="url" id="target-url" placeholder="https://www.linkedin.com/search/people/...">
-                </div>
-                <div class="form-group">
-                    <label>Max Connections:</label>
-                    <input type="number" id="max-connections" value="100" min="1">
-                </div>
+                <span class="close" id="close-profiles">&times;</span>
+                <h3>Collected Profiles</h3>
+                <div id="profiles-list"></div>
                 <div class="modal-actions">
-                    <button class="btn btn-secondary" id="cancel-campaign">Cancel</button>
-                    <button class="btn btn-primary" id="save-campaign">Create Campaign</button>
+                    <button class="btn btn-secondary" id="export-profiles">Export CSV</button>
+                    <button class="btn btn-primary" id="create-campaign-from-profiles">Create Campaign</button>
                 </div>
             </div>
         </div>

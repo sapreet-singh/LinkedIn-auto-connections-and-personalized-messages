@@ -135,20 +135,55 @@ class LinkedInAutomationBackground {
     
     async executeAutomation(tabId, campaign) {
         try {
-            // Send message to content script to start automation
-            chrome.tabs.sendMessage(tabId, {
-                action: 'startAutomation',
-                campaign: campaign
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    console.error('Error communicating with content script:', chrome.runtime.lastError);
-                } else {
-                    console.log('Automation started:', response);
+            let action = 'startAutomation';
+            let targetUrl = '';
+
+            // Handle different campaign types
+            if (campaign.targetData) {
+                switch (campaign.targetData.type) {
+                    case 'company':
+                        // Search for company employees
+                        targetUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(campaign.targetData.companyName)}&origin=GLOBAL_SEARCH_HEADER`;
+                        break;
+                    case 'search':
+                        targetUrl = campaign.targetData.targetUrl;
+                        break;
+                    case 'list':
+                        // Use collected profiles
+                        action = 'startListCampaign';
+                        break;
                 }
-            });
+            } else {
+                // Legacy campaign format
+                targetUrl = campaign.targetUrl;
+            }
+
+            // Navigate to target URL if needed
+            if (targetUrl) {
+                chrome.tabs.update(tabId, { url: targetUrl }, () => {
+                    setTimeout(() => {
+                        this.sendAutomationMessage(tabId, action, campaign);
+                    }, 3000);
+                });
+            } else {
+                this.sendAutomationMessage(tabId, action, campaign);
+            }
         } catch (error) {
             console.error('Error executing automation:', error);
         }
+    }
+
+    sendAutomationMessage(tabId, action, campaign) {
+        chrome.tabs.sendMessage(tabId, {
+            action: action,
+            campaign: campaign
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error('Error communicating with content script:', chrome.runtime.lastError);
+            } else {
+                console.log('Automation started:', response);
+            }
+        });
     }
     
     pauseCampaign(campaignId, sendResponse) {

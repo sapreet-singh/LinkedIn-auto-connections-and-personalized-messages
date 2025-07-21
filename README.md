@@ -5,11 +5,15 @@ A Chrome extension that automates LinkedIn connection requests and follow-up mes
 ## Features
 
 - 🤝 **Auto Connection Requests** - Automatically send personalized connection requests
+- 🤖 **AI-Powered Messages** - Generate personalized messages using OpenAI GPT
+- 🏢 **Company-Based Targeting** - Search and connect with employees from specific companies
+- 📋 **Profile Collection** - Automatically collect and store LinkedIn profile data
 - 💬 **Follow-up Messages** - Send automated follow-up message sequences
-- 🎯 **Personalization** - Use variables like {firstName}, {company}, etc.
+- 🎯 **Multiple Campaign Types** - Company search, LinkedIn search URLs, or custom profile lists
 - 📊 **Campaign Management** - Create and manage multiple outreach campaigns
 - 🛡️ **Safety Features** - Built-in daily limits and delays to protect your account
 - 📈 **Statistics** - Track your connection success rates
+- 📤 **Data Export** - Export collected profiles to CSV
 
 ## Installation
 
@@ -24,23 +28,35 @@ A Chrome extension that automates LinkedIn connection requests and follow-up mes
 ### 1. Configure Settings
 - Click the extension icon to open the popup
 - Go to the "Settings" tab
+- **Add your OpenAI API Key** for AI-generated messages (optional)
 - Set your daily connection limit (recommended: 20 or less)
 - Set delays between actions (recommended: 30+ seconds)
+- Choose message style (Professional, Friendly, Casual, Sales-focused)
 
-### 2. Set Up Message Templates
+### 2. Set Up Message Templates (Optional)
 - Go to the "Messages" tab
-- Customize your connection request message
+- Customize your connection request message (used as fallback if AI fails)
 - Set up follow-up messages
 - Use variables like `{firstName}`, `{company}`, `{title}` for personalization
 
 ### 3. Create a Campaign
 - Go to the "Campaigns" tab
 - Click "New Campaign"
-- Enter campaign name and LinkedIn search URL
+- Choose campaign type:
+  - **Company Employees**: Enter company name to target employees
+  - **LinkedIn Search URL**: Paste a LinkedIn search results URL
+  - **Upload Profile List**: Upload a CSV file with profile data
 - Set maximum connections for this campaign
+- Enable/disable AI-generated messages
 
-### 4. Start Automation
-- Navigate to a LinkedIn search results page
+### 4. Collect Profiles (Optional)
+- Navigate to any LinkedIn search results page
+- Click "Collect Profiles from Current Page" to gather profile data
+- View and export collected profiles
+- Create campaigns from collected profiles
+
+### 5. Start Automation
+- Navigate to a LinkedIn search results page (or let the extension navigate for company campaigns)
 - The extension will show a floating panel
 - Click "Start Auto Connect" to begin automation
 - Monitor progress in the extension popup
