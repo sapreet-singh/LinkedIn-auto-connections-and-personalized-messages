@@ -1,5 +1,11 @@
 // LinkedIn Content Script - Handles automation on LinkedIn pages
 
+// Prevent multiple injections
+if (window.linkedInAutomationInjected) {
+    console.log('LinkedIn Automation already injected, skipping...');
+} else {
+    window.linkedInAutomationInjected = true;
+
 class LinkedInAutomation {
     constructor() {
         this.isRunning = false;
@@ -15,17 +21,12 @@ class LinkedInAutomation {
         console.log('LinkedIn Automation initialized');
         
         // Listen for messages from background script
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             this.handleMessage(message, sendResponse);
         });
         
         // Load settings
         this.loadSettings();
-        
-        // Check if we're on a search results page
-        if (this.isSearchResultsPage()) {
-            this.addAutomationUI();
-        }
     }
     
     loadSettings() {
@@ -79,46 +80,19 @@ class LinkedInAutomation {
     }
     
     isSearchResultsPage() {
-        return window.location.href.includes('/search/people/') || 
+        return window.location.href.includes('/search/people/') ||
                window.location.href.includes('/search/results/people/');
-    }
-    
-    addAutomationUI() {
-        // Add a floating button to start automation
-        const automationButton = document.createElement('div');
-        automationButton.id = 'linkedin-automation-btn';
-        automationButton.innerHTML = `
-            <div class="automation-panel">
-                <button id="start-automation">Start Auto Connect</button>
-                <button id="stop-automation" style="display: none;">Stop</button>
-                <div class="automation-status">Ready</div>
-            </div>
-        `;
-        
-        document.body.appendChild(automationButton);
-        
-        // Add event listeners
-        document.getElementById('start-automation').addEventListener('click', () => {
-            this.startAutomationFromPage();
-        });
-        
-        document.getElementById('stop-automation').addEventListener('click', () => {
-            this.stopAutomation();
-        });
     }
     
     startAutomationFromPage() {
         if (this.todayCount >= this.dailyLimit) {
-            this.updateStatus('Daily limit reached!', 'error');
+            console.log('Daily limit reached!');
             return;
         }
-        
+
         this.isRunning = true;
-        this.updateStatus('Starting automation...', 'running');
-        
-        document.getElementById('start-automation').style.display = 'none';
-        document.getElementById('stop-automation').style.display = 'block';
-        
+        console.log('Starting automation...');
+
         this.processConnections();
     }
     
@@ -128,42 +102,42 @@ class LinkedInAutomation {
         const connectButtons = this.findConnectButtons();
         
         if (connectButtons.length === 0) {
-            this.updateStatus('No connect buttons found', 'warning');
+            console.log('No connect buttons found');
             this.stopAutomation();
             return;
         }
-        
+
         for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
             if (this.todayCount >= this.dailyLimit) {
-                this.updateStatus('Daily limit reached!', 'error');
+                console.log('Daily limit reached!');
                 break;
             }
-            
+
             const button = connectButtons[i];
             const personInfo = this.extractPersonInfo(button);
-            
-            this.updateStatus(`Connecting to ${personInfo.name}...`, 'running');
+
+            console.log(`Connecting to ${personInfo.name}...`);
             
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-                
+
                 // Update storage
                 chrome.storage.local.set({ todayCount: this.todayCount });
-                
-                this.updateStatus(`Connected to ${personInfo.name}. Waiting...`, 'success');
-                
+
+                console.log(`Connected to ${personInfo.name}. Waiting...`);
+
                 // Wait before next action
                 if (i < connectButtons.length - 1) {
                     await this.delay(this.actionDelay);
                 }
             } catch (error) {
                 console.error('Error sending connection request:', error);
-                this.updateStatus(`Error connecting to ${personInfo.name}`, 'error');
+                console.log(`Error connecting to ${personInfo.name}`);
             }
         }
-        
-        this.updateStatus('Automation completed', 'success');
+
+        console.log('Automation completed');
         this.stopAutomation();
     }
     
@@ -265,41 +239,10 @@ class LinkedInAutomation {
     
     async sendCustomMessage(personInfo, resolve, reject) {
         try {
-            // Check if AI should be used and get messaging strategy
-            chrome.storage.local.get(['openaiKey', 'messageStyle', 'connectionMessage'], async (result) => {
-                let personalizedMessage;
-                const messagingStrategy = this.currentCampaign?.messagingStrategy || {};
-
-                if (result.openaiKey && this.currentCampaign?.useAI) {
-                    // Use AI to generate message with enhanced analysis
-                    try {
-                        // Perform enhanced profile analysis if enabled
-                        let enhancedData = null;
-                        if (messagingStrategy.analyzeProfile || messagingStrategy.analyzePosts) {
-                            enhancedData = await this.extractEnhancedProfileData(personInfo.profileUrl);
-                        }
-
-                        // Combine basic and enhanced data
-                        const fullPersonData = {
-                            ...personInfo,
-                            ...enhancedData
-                        };
-
-                        personalizedMessage = await this.generateAIMessage(
-                            result.openaiKey,
-                            fullPersonData,
-                            messagingStrategy.messageStyle || result.messageStyle || 'professional'
-                        );
-                    } catch (error) {
-                        console.error('AI message generation failed, using template:', error);
-                        const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
-                        personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
-                    }
-                } else {
-                    // Use template
-                    const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
-                    personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
-                }
+            // Get connection message template
+            chrome.storage.local.get(['connectionMessage'], async (result) => {
+                const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
+                const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
 
                 // Find message textarea
                 const messageTextarea = document.querySelector('#custom-message') ||
@@ -343,29 +286,19 @@ class LinkedInAutomation {
             .replace(/{title}/g, personInfo.title);
     }
     
+    // Start automation with campaign data (called from popup)
+    startAutomation(campaign) {
+        console.log('Starting automation with campaign:', campaign);
+        this.currentCampaign = campaign;
+        this.startAutomationFromPage();
+    }
+
     stopAutomation() {
         this.isRunning = false;
-        
-        const startBtn = document.getElementById('start-automation');
-        const stopBtn = document.getElementById('stop-automation');
-        
-        if (startBtn && stopBtn) {
-            startBtn.style.display = 'block';
-            stopBtn.style.display = 'none';
-        }
-        
-        this.updateStatus('Automation stopped', 'ready');
+        console.log('Automation stopped');
     }
     
-    updateStatus(message, type = 'ready') {
-        const statusElement = document.querySelector('.automation-status');
-        if (statusElement) {
-            statusElement.textContent = message;
-            statusElement.className = `automation-status ${type}`;
-        }
-        
-        console.log(`LinkedIn Automation: ${message}`);
-    }
+
     
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -382,20 +315,40 @@ class LinkedInAutomation {
 
     // Collect profiles from current page
     async collectProfiles() {
+        console.log('collectProfiles method called');
         const profiles = [];
 
-        // Find all profile cards on the page
-        const profileCards = document.querySelectorAll('.search-result') ||
-                           document.querySelectorAll('.reusable-search__result-container') ||
-                           document.querySelectorAll('[data-chameleon-result-urn]');
+        // Find all profile cards on the page using multiple selectors
+        let profileCards = document.querySelectorAll('.reusable-search__result-container');
 
-        profileCards.forEach(card => {
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('[data-chameleon-result-urn]');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.search-result');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.entity-result');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.search-results-container .entity-result');
+        }
+
+        console.log(`Found ${profileCards.length} profile cards on page`);
+
+        profileCards.forEach((card, index) => {
             const profile = this.extractProfileFromCard(card);
+            console.log(`Profile ${index + 1}:`, profile);
             if (profile.name && profile.url) {
                 profiles.push(profile);
+                console.log(`Added profile: ${profile.name} - ${profile.url}`);
             }
         });
 
+        console.log(`Returning ${profiles.length} profiles:`, profiles);
         return profiles;
     }
 
@@ -416,7 +369,11 @@ class LinkedInAutomation {
                           card.querySelector('.search-result__result-link') ||
                           card.querySelector('[data-anonymize="person-name"]') ||
                           card.querySelector('a[href*="/in/"]') ||
-                          card.querySelector('a[href*="linkedin.com/in/"]');
+                          card.querySelector('a[href*="linkedin.com/in/"]') ||
+                          card.querySelector('.app-aware-link') ||
+                          card.querySelector('a[data-control-name="search_srp_result"]') ||
+                          card.querySelector('.entity-result__title-text') ||
+                          card.querySelector('a[data-test-app-aware-link]');
 
             // If no direct link found, look for name in span elements
             if (!nameLink) {
@@ -431,15 +388,45 @@ class LinkedInAutomation {
                     // Try to find the profile URL in parent elements
                     const parentLink = nameSpan.closest('a') ||
                                      card.querySelector('a[href*="/in/"]') ||
-                                     card.querySelector('a[href*="linkedin.com/in/"]');
+                                     card.querySelector('a[href*="linkedin.com/in/"]') ||
+                                     card.querySelector('.app-aware-link') ||
+                                     card.querySelector('a[data-control-name="search_srp_result"]') ||
+                                     card.querySelector('a[data-test-app-aware-link]');
 
                     if (parentLink) {
                         profile.url = parentLink.href;
+                        // Clean and normalize the profile URL
+                        if (profile.url) {
+                            // Ensure we have a complete LinkedIn URL
+                            if (profile.url.startsWith('/')) {
+                                profile.url = 'https://www.linkedin.com' + profile.url;
+                            }
+                            // Clean up the URL to get the base profile URL
+                            if (profile.url.includes('?')) {
+                                profile.url = profile.url.split('?')[0];
+                            }
+                            // Remove trailing slash
+                            profile.url = profile.url.replace(/\/$/, '');
+                        }
                     }
                 }
             } else {
                 profile.name = nameLink.textContent.trim();
                 profile.url = nameLink.href || '';
+            }
+
+            // Clean and normalize the profile URL
+            if (profile.url) {
+                // Ensure we have a complete LinkedIn URL
+                if (profile.url.startsWith('/')) {
+                    profile.url = 'https://www.linkedin.com' + profile.url;
+                }
+                // Clean up the URL to get the base profile URL
+                if (profile.url.includes('?')) {
+                    profile.url = profile.url.split('?')[0];
+                }
+                // Remove trailing slash
+                profile.url = profile.url.replace(/\/$/, '');
             }
 
             // Extract title and company with multiple selectors
@@ -471,11 +458,13 @@ class LinkedInAutomation {
 
             // Only return profile if we have at least name and URL
             if (!profile.name || !profile.url) {
+                console.log('Skipping profile - missing name or URL:', { name: profile.name, url: profile.url });
                 return null;
             }
 
             // Clean up the URL to ensure it's a proper LinkedIn profile URL
-            if (profile.url && !profile.url.includes('linkedin.com/in/')) {
+            if (profile.url && !profile.url.includes('linkedin.com/in/') && !profile.url.includes('/in/')) {
+                console.log('Skipping profile - invalid URL format:', profile.url);
                 return null;
             }
 
@@ -491,33 +480,7 @@ class LinkedInAutomation {
         }
     }
 
-    // Enhanced profile analysis for comprehensive data extraction
-    async extractEnhancedProfileData(profileUrl) {
-        try {
-            const enhancedData = {
-                name: '',
-                headline: '',
-                summary: '',
-                experience: [],
-                education: [],
-                skills: [],
-                recentPosts: [],
-                connections: '',
-                profileUrl: profileUrl,
-                analyzedAt: new Date().toISOString()
-            };
 
-            // For now, we'll extract what we can from the current search results
-            // In a full implementation, this would navigate to the profile page
-            // But due to LinkedIn's restrictions, we'll work with available data
-
-            console.log('Enhanced profile analysis requested for:', profileUrl);
-            return enhancedData;
-        } catch (error) {
-            console.error('Error in enhanced profile extraction:', error);
-            return null;
-        }
-    }
 
     // Search for people by company name
     async searchByCompany(companyName) {
@@ -535,99 +498,9 @@ class LinkedInAutomation {
         }
     }
 
-    // AI Message Generation
-    async generateAIMessage(apiKey, personData, style = 'professional') {
-        try {
-            const prompt = this.buildAIPrompt(personData, style);
 
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-3.5-turbo',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a professional LinkedIn messaging assistant. Generate personalized, engaging messages that help build meaningful professional connections.'
-                        },
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
-                    max_tokens: 150,
-                    temperature: 0.7
-                })
-            });
 
-            if (!response.ok) {
-                throw new Error(`OpenAI API error: ${response.status}`);
-            }
 
-            const data = await response.json();
-            return data.choices[0].message.content.trim();
-        } catch (error) {
-            console.error('AI message generation failed:', error);
-            return `Hi ${personData.name?.split(' ')[0] || 'there'}, I'd love to connect with you!`;
-        }
-    }
-
-    buildAIPrompt(personData, style) {
-        const styleInstructions = {
-            professional: 'Write in a professional, respectful tone. Be concise and business-focused.',
-            casual: 'Write in a casual, friendly tone. Be approachable and personable.',
-            direct: 'Write in a direct, brief tone. Get straight to the point.',
-            consultative: 'Write in a consultative tone. Focus on potential collaboration and mutual benefit.'
-        };
-
-        let prompt = `Write a personalized LinkedIn connection request message (max 200 characters) for:
-
-Name: ${personData.name || 'Unknown'}
-Company: ${personData.company || 'Unknown'}
-Title: ${personData.title || 'Unknown'}`;
-
-        if (personData.headline) {
-            prompt += `\nHeadline: ${personData.headline}`;
-        }
-
-        if (personData.experience && personData.experience.length > 0) {
-            prompt += `\nRecent Experience: ${personData.experience[0].title} at ${personData.experience[0].company}`;
-        }
-
-        if (personData.education && personData.education.length > 0) {
-            prompt += `\nEducation: ${personData.education[0].degree} from ${personData.education[0].school}`;
-        }
-
-        if (personData.skills && personData.skills.length > 0) {
-            prompt += `\nKey Skills: ${personData.skills.slice(0, 3).join(', ')}`;
-        }
-
-        if (personData.recentPosts && personData.recentPosts.length > 0) {
-            prompt += `\nRecent Activity: ${personData.recentPosts[0].text.substring(0, 100)}...`;
-        }
-
-        prompt += `\n\nStyle: ${styleInstructions[style] || styleInstructions.professional}
-
-Return only the message text, nothing else.`;
-
-        return prompt;
-    }
-
-    // Enhanced automation for company-based campaigns
-    async startCompanyCampaign(companyName) {
-        this.updateStatus(`Starting campaign for ${companyName}...`, 'running');
-
-        // First, navigate to company search
-        await this.searchByCompany(companyName);
-
-        // Wait for page to load
-        setTimeout(() => {
-            this.processConnections();
-        }, 3000);
-    }
 
     // Search network connections with auto-scrolling
     async searchNetwork(criteria) {
@@ -705,7 +578,8 @@ Return only the message text, nothing else.`;
                                 if (!isDuplicate) {
                                     profile.source = 'network-search';
                                     profiles.push(profile);
-                                    console.log(`Extracted profile ${profiles.length}:`, profile.name, profile.url);
+                                    console.log(`Extracted profile ${profiles.length}:`, profile.name);
+                                    console.log(`Profile URL: ${profile.url}`);
                                 }
                             }
                         }
@@ -840,6 +714,20 @@ Return only the message text, nothing else.`;
                 profile.url = nameLink.href || '';
             }
 
+            // Clean and normalize the profile URL
+            if (profile.url) {
+                // Ensure we have a complete LinkedIn URL
+                if (profile.url.startsWith('/')) {
+                    profile.url = 'https://www.linkedin.com' + profile.url;
+                }
+                // Clean up the URL to get the base profile URL
+                if (profile.url.includes('?')) {
+                    profile.url = profile.url.split('?')[0];
+                }
+                // Remove trailing slash
+                profile.url = profile.url.replace(/\/$/, '');
+            }
+
             // Extract title and company with multiple selectors
             const occupationElement = card.querySelector('.mn-connection-card__occupation') ||
                                     card.querySelector('.connection-card__occupation') ||
@@ -861,11 +749,13 @@ Return only the message text, nothing else.`;
 
             // Only return profile if we have at least name and URL
             if (!profile.name || !profile.url) {
+                console.log('Skipping network profile - missing name or URL:', { name: profile.name, url: profile.url });
                 return null;
             }
 
             // Clean up the URL to ensure it's a proper LinkedIn profile URL
-            if (profile.url && !profile.url.includes('linkedin.com/in/')) {
+            if (profile.url && !profile.url.includes('linkedin.com/in/') && !profile.url.includes('/in/')) {
+                console.log('Skipping network profile - invalid URL format:', profile.url);
                 return null;
             }
 
@@ -896,8 +786,6 @@ if (document.readyState === 'loading') {
     window.linkedInAutomation = new LinkedInAutomation();
 }
 
-// Add a simple test function to verify script is working
-window.testLinkedInScript = function() {
-    console.log('LinkedIn script is working!');
-    return 'Script is active';
-};
+
+
+} // End of injection guard

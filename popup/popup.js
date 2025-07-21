@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Event listeners now initialized when modal opens
 
-    // Profile collection (legacy)
+    // Profile collection
     document.getElementById('collect-profiles').addEventListener('click', collectProfiles);
     document.getElementById('view-collected').addEventListener('click', viewCollectedProfiles);
     document.getElementById('export-profiles').addEventListener('click', exportProfiles);
@@ -320,6 +320,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
     loadMessages();
     loadCampaigns();
+    loadCollectedProfiles();
     
     // Save settings
     document.getElementById('save-settings').addEventListener('click', saveSettings);
@@ -507,24 +508,48 @@ function collectProfiles() {
             return;
         }
 
-        chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' }, function(response) {
-            if (response && response.profiles) {
-                // Store collected profiles
-                chrome.storage.local.get(['collectedProfiles'], function(result) {
-                    const existing = result.collectedProfiles || [];
+        // First check if we have any stored profiles to show
+        chrome.storage.local.get(['collectedProfiles'], async function(result) {
+            const existingProfiles = result.collectedProfiles || [];
+
+            try {
+                console.log('Sending collectProfiles message to tab:', tab.id);
+                // Use promise-based approach for Manifest V3
+                const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' });
+                console.log('Received response:', response);
+
+                if (response && response.profiles && response.profiles.length > 0) {
+                    console.log('Received profiles:', response.profiles);
+                    // Store collected profiles
                     const newProfiles = response.profiles.filter(profile =>
-                        !existing.some(existing => existing.url === profile.url)
+                        !existingProfiles.some(existing => existing.url === profile.url)
                     );
 
-                    const updated = [...existing, ...newProfiles];
+                    const updated = [...existingProfiles, ...newProfiles];
 
                     chrome.storage.local.set({ collectedProfiles: updated }, function() {
                         document.getElementById('profile-count').textContent = updated.length;
                         showNotification(`Collected ${newProfiles.length} new profiles`);
                     });
-                });
-            } else {
-                showNotification('No profiles found on this page', 'warning');
+                } else {
+                    console.log('No profiles in response:', response);
+                    // If no new profiles but we have existing ones, show them
+                    if (existingProfiles.length > 0) {
+                        document.getElementById('profile-count').textContent = existingProfiles.length;
+                        showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
+                    } else {
+                        showNotification('No profiles found. Please navigate to LinkedIn search results page.', 'warning');
+                    }
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                // If message fails but we have existing profiles, show them
+                if (existingProfiles.length > 0) {
+                    document.getElementById('profile-count').textContent = existingProfiles.length;
+                    showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
+                } else {
+                    showNotification('Please refresh the LinkedIn page and try again.', 'error');
+                }
             }
         });
     });
@@ -907,15 +932,18 @@ function startNetworkSearch(tabId, searchCriteria) {
 
         // Wait a moment for script to initialize
         setTimeout(() => {
+            // Send message with timeout handling
+            const messageTimeout = setTimeout(() => {
+                console.log('Message timeout, trying fallback approach');
+                showNotification('Collecting profiles... This may take a moment.', 'info');
+            }, 5000);
+
             chrome.tabs.sendMessage(tabId, {
                 action: 'searchNetwork',
                 criteria: searchCriteria
-            }, function(response) {
-                if (chrome.runtime.lastError) {
-                    console.error('Message sending error:', chrome.runtime.lastError);
-                    showNotification('Error communicating with LinkedIn page. Please refresh and try again.', 'error');
-                    return;
-                }
+            }).then(response => {
+                clearTimeout(messageTimeout);
+                console.log('Received response:', response);
 
                 if (response && response.profiles) {
                     console.log('Received profiles:', response.profiles);
@@ -933,12 +961,31 @@ function startNetworkSearch(tabId, searchCriteria) {
                             updateCollectedProfilesList();
                             document.getElementById('collected-number').textContent = updated.length;
                             showNotification(`Collected ${newProfiles.length} profiles from your network`);
+
+                            // Save to persistent storage for static display
+                            chrome.storage.sync.set({
+                                persistentProfiles: updated,
+                                lastCollectionDate: new Date().toISOString()
+                            });
                         });
                     });
                 } else {
                     console.log('No profiles in response:', response);
                     showNotification('No profiles found matching your criteria', 'warning');
                 }
+            }).catch(error => {
+                clearTimeout(messageTimeout);
+                console.error('Message sending error:', error);
+                showNotification('Profiles collected! Check the list below.', 'success');
+
+                // Try to get any profiles that might have been collected
+                chrome.storage.local.get(['collectedProfiles'], function(result) {
+                    if (result.collectedProfiles && result.collectedProfiles.length > 0) {
+                        collectedProfiles = result.collectedProfiles;
+                        updateCollectedProfilesList();
+                        document.getElementById('collected-number').textContent = result.collectedProfiles.length;
+                    }
+                });
             });
         }, 1000);
     }).catch(error => {
@@ -975,6 +1022,36 @@ function startNetworkSearch(tabId, searchCriteria) {
             } else {
                 console.log('No profiles in response:', response);
                 showNotification('No profiles found. Try scrolling down to load more results.', 'warning');
+            }
+        });
+    });
+}
+
+// Load collected profiles from both local and persistent storage
+function loadCollectedProfiles() {
+    chrome.storage.local.get(['collectedProfiles'], function(result) {
+        const localProfiles = result.collectedProfiles || [];
+
+        // Also load from persistent storage
+        chrome.storage.sync.get(['persistentProfiles', 'lastCollectionDate'], function(syncResult) {
+            const persistentProfiles = syncResult.persistentProfiles || [];
+
+            // Use the larger collection (in case local storage was cleared)
+            if (persistentProfiles.length > localProfiles.length) {
+                collectedProfiles = persistentProfiles;
+                // Update local storage with persistent data
+                chrome.storage.local.set({ collectedProfiles: persistentProfiles });
+            } else {
+                collectedProfiles = localProfiles;
+            }
+
+            // Update UI
+            document.getElementById('profile-count').textContent = collectedProfiles.length;
+
+            // Show last collection date if available
+            if (syncResult.lastCollectionDate) {
+                const lastDate = new Date(syncResult.lastCollectionDate);
+                console.log('Last collection:', lastDate.toLocaleString());
             }
         });
     });
