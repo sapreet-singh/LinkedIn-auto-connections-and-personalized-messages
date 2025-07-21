@@ -19,18 +19,7 @@ class LinkedInAutomationBackground {
             return true; // Keep the message channel open for async responses
         });
         
-        // Set up daily reset alarm
-        chrome.alarms.onAlarm.addListener((alarm) => {
-            if (alarm.name === 'dailyReset') {
-                this.resetDailyCounters();
-            }
-        });
-        
-        // Create daily reset alarm
-        chrome.alarms.create('dailyReset', {
-            when: this.getNextMidnight(),
-            periodInMinutes: 24 * 60 // 24 hours
-        });
+
         
         // Load existing campaigns
         this.loadCampaigns();
@@ -77,33 +66,24 @@ class LinkedInAutomationBackground {
         try {
             const campaigns = await this.getCampaigns();
             const campaign = campaigns.find(c => c.id === campaignId);
-            
+
             if (!campaign) {
                 sendResponse({ error: 'Campaign not found' });
                 return;
             }
-            
-            // Check if we're already at daily limit
+
             const { todayCount, dailyLimit } = await this.getSettings();
-            
             if (todayCount >= dailyLimit) {
                 sendResponse({ error: 'Daily limit reached' });
                 return;
             }
-            
-            // Find LinkedIn tabs
+
             const linkedInTabs = await this.findLinkedInTabs();
-            
+            const targetUrl = campaign.targetUrl || 'https://www.linkedin.com/search/results/people/';
+
             if (linkedInTabs.length === 0) {
-                // Open LinkedIn search page
-                chrome.tabs.create({ url: campaign.targetUrl }, (tab) => {
-                    this.activeCampaigns.set(campaignId, {
-                        ...campaign,
-                        tabId: tab.id,
-                        status: 'running'
-                    });
-                    
-                    // Wait for tab to load then start automation
+                chrome.tabs.create({ url: targetUrl }, (tab) => {
+                    this.activeCampaigns.set(campaignId, { ...campaign, tabId: tab.id, status: 'running' });
                     chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
                         if (tabId === tab.id && changeInfo.status === 'complete') {
                             this.executeAutomation(tab.id, campaign);
@@ -111,21 +91,13 @@ class LinkedInAutomationBackground {
                     });
                 });
             } else {
-                // Use existing LinkedIn tab
                 const tab = linkedInTabs[0];
-                chrome.tabs.update(tab.id, { url: campaign.targetUrl }, () => {
-                    this.activeCampaigns.set(campaignId, {
-                        ...campaign,
-                        tabId: tab.id,
-                        status: 'running'
-                    });
-                    
-                    setTimeout(() => {
-                        this.executeAutomation(tab.id, campaign);
-                    }, 2000);
+                chrome.tabs.update(tab.id, { url: targetUrl }, () => {
+                    this.activeCampaigns.set(campaignId, { ...campaign, tabId: tab.id, status: 'running' });
+                    setTimeout(() => this.executeAutomation(tab.id, campaign), 2000);
                 });
             }
-            
+
             sendResponse({ success: true });
         } catch (error) {
             console.error('Error starting campaign:', error);
@@ -135,20 +107,34 @@ class LinkedInAutomationBackground {
     
     async executeAutomation(tabId, campaign) {
         try {
-            // Send message to content script to start automation
-            chrome.tabs.sendMessage(tabId, {
-                action: 'startAutomation',
-                campaign: campaign
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    console.error('Error communicating with content script:', chrome.runtime.lastError);
-                } else {
-                    console.log('Automation started:', response);
-                }
-            });
+            const action = 'startAutomation';
+            const targetUrl = campaign.targetUrl || campaign.targetData?.targetUrl;
+
+            if (targetUrl) {
+                chrome.tabs.update(tabId, { url: targetUrl }, () => {
+                    setTimeout(() => {
+                        this.sendAutomationMessage(tabId, action, campaign);
+                    }, 3000);
+                });
+            } else {
+                this.sendAutomationMessage(tabId, action, campaign);
+            }
         } catch (error) {
             console.error('Error executing automation:', error);
         }
+    }
+
+    sendAutomationMessage(tabId, action, campaign) {
+        chrome.tabs.sendMessage(tabId, {
+            action: action,
+            campaign: campaign
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error('Error communicating with content script:', chrome.runtime.lastError);
+            } else {
+                console.log('Automation started:', response);
+            }
+        });
     }
     
     pauseCampaign(campaignId, sendResponse) {
@@ -247,18 +233,7 @@ class LinkedInAutomationBackground {
         });
     }
     
-    resetDailyCounters() {
-        chrome.storage.local.set({ todayCount: 0 }, () => {
-            console.log('Daily counters reset');
-        });
-    }
-    
-    getNextMidnight() {
-        const now = new Date();
-        const midnight = new Date(now);
-        midnight.setHours(24, 0, 0, 0);
-        return midnight.getTime();
-    }
+
 }
 
 // Initialize the background service
