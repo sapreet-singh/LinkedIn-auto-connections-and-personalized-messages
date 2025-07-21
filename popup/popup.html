@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Automation</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LinkedIn Auto Connect</h1>
+            <div class="status" id="status">Ready</div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="campaigns">Campaigns</button>
+            <button class="tab-btn" data-tab="messages">Messages</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Campaigns Tab -->
+        <div class="tab-content active" id="campaigns">
+            <div class="section">
+                <h3>Active Campaigns</h3>
+                <div id="campaign-list">
+                    <div class="empty-state">No campaigns yet. Create your first campaign!</div>
+                </div>
+                <button class="btn btn-primary" id="create-campaign">+ New Campaign</button>
+            </div>
+        </div>
+
+        <!-- Messages Tab -->
+        <div class="tab-content" id="messages">
+            <div class="section">
+                <h3>Message Templates</h3>
+                <div class="form-group">
+                    <label>Connection Request Message:</label>
+                    <textarea id="connection-message" placeholder="Hi {firstName}, I'd love to connect with you!">Hi {firstName}, I'd love to connect with you!</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Follow-up Message 1:</label>
+                    <textarea id="followup-1" placeholder="Thanks for connecting, {firstName}!">Thanks for connecting, {firstName}!</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Follow-up Message 2:</label>
+                    <textarea id="followup-2" placeholder="Hope you're doing well, {firstName}!">Hope you're doing well, {firstName}!</textarea>
+                </div>
+                <button class="btn btn-primary" id="save-messages">Save Messages</button>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="settings">
+            <div class="section">
+                <h3>Safety Settings</h3>
+                <div class="form-group">
+                    <label>Daily Connection Limit:</label>
+                    <input type="number" id="daily-limit" value="50" min="1" max="100">
+                </div>
+                <div class="form-group">
+                    <label>Delay Between Actions (seconds):</label>
+                    <input type="number" id="action-delay" value="30" min="10" max="300">
+                </div>
+                <div class="form-group">
+                    <label>Follow-up Delay (days):</label>
+                    <input type="number" id="followup-delay" value="3" min="1" max="14">
+                </div>
+                <button class="btn btn-primary" id="save-settings">Save Settings</button>
+            </div>
+        </div>
+
+        <!-- Campaign Modal -->
+        <div class="modal" id="campaign-modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h3>Create New Campaign</h3>
+                <div class="form-group">
+                    <label>Campaign Name:</label>
+                    <input type="text" id="campaign-name" placeholder="My LinkedIn Campaign">
+                </div>
+                <div class="form-group">
+                    <label>Target URL (LinkedIn search results):</label>
+                    <input type="url" id="target-url" placeholder="https://www.linkedin.com/search/people/...">
+                </div>
+                <div class="form-group">
+                    <label>Max Connections:</label>
+                    <input type="number" id="max-connections" value="100" min="1">
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="cancel-campaign">Cancel</button>
+                    <button class="btn btn-primary" id="save-campaign">Create Campaign</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="stats">
+                <span>Today: <span id="today-count">0</span> connections</span>
+                <span>Total: <span id="total-count">0</span> connections</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
