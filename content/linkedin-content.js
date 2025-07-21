@@ -140,30 +140,24 @@ class LinkedInAutomation {
     
     findConnectButtons() {
         // Find all "Connect" buttons on the page
-        const buttons = [];
-        
-        // Different selectors for different LinkedIn layouts
         const selectors = [
             'button[aria-label*="Connect"]',
             'button[data-control-name="connect"]',
-            'button:contains("Connect")',
             '.search-result__actions button[aria-label*="Invite"]'
         ];
-        
+
+        const buttons = [];
         selectors.forEach(selector => {
-            try {
-                const elements = document.querySelectorAll(selector);
-                elements.forEach(el => {
-                    if (el.textContent.includes('Connect') || el.getAttribute('aria-label')?.includes('Connect')) {
-                        buttons.push(el);
-                    }
-                });
-            } catch (e) {
-                // Ignore selector errors
-            }
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(el => {
+                if ((el.textContent.includes('Connect') || el.getAttribute('aria-label')?.includes('Connect'))
+                    && el.offsetParent !== null) {
+                    buttons.push(el);
+                }
+            });
         });
-        
-        return buttons.filter(btn => btn.offsetParent !== null); // Only visible buttons
+
+        return buttons;
     }
     
     extractPersonInfo(connectButton) {
@@ -312,221 +306,189 @@ class LinkedInAutomation {
 
     // Collect profiles from current page
     async collectProfiles() {
-        console.log('collectProfiles method called');
-        console.log('Current URL:', window.location.href);
         const profiles = [];
 
         // Check if we're on My Network page
         if (window.location.href.includes('/mynetwork/')) {
-            console.log('Detected My Network page, using network-specific selectors');
             return this.collectNetworkProfiles();
         }
 
-        // Find all profile cards on the page using multiple selectors for search pages
-        let profileCards = document.querySelectorAll('.reusable-search__result-container');
+        // Find profile cards using common selectors
+        const selectors = [
+            '.reusable-search__result-container',
+            '[data-chameleon-result-urn]',
+            '.search-result',
+            '.entity-result'
+        ];
 
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('[data-chameleon-result-urn]');
+        let profileCards = [];
+        for (const selector of selectors) {
+            profileCards = document.querySelectorAll(selector);
+            if (profileCards.length > 0) break;
         }
 
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.search-result');
-        }
-
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.entity-result');
-        }
-
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.search-results-container .entity-result');
-        }
-
-        console.log(`Found ${profileCards.length} profile cards on page`);
-
-        profileCards.forEach((card, index) => {
+        profileCards.forEach(card => {
             const profile = this.extractProfileFromCard(card);
-            console.log(`Profile ${index + 1}:`, profile);
-            if (profile.name && profile.url) {
+            if (profile?.name && profile?.url) {
                 profiles.push(profile);
-                console.log(`Added profile: ${profile.name} - ${profile.url}`);
             }
         });
 
-        console.log(`Returning ${profiles.length} profiles:`, profiles);
         return profiles;
     }
 
     // Collect profiles specifically from My Network page
     async collectNetworkProfiles() {
-        console.log('collectNetworkProfiles method called for My Network page');
         const profiles = [];
 
         // Selectors for My Network page
-        let profileCards = document.querySelectorAll('.discover-entity-type-card');
+        const selectors = [
+            '.discover-entity-type-card',
+            '.mn-person-card',
+            '[data-test-id="person-card"]',
+            '.artdeco-entity-lockup',
+            '.discover-person-card'
+        ];
 
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.mn-person-card');
+        let profileCards = [];
+        for (const selector of selectors) {
+            profileCards = document.querySelectorAll(selector);
+            if (profileCards.length > 0) break;
         }
 
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('[data-test-id="person-card"]');
-        }
-
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.artdeco-entity-lockup');
-        }
-
-        if (profileCards.length === 0) {
-            profileCards = document.querySelectorAll('.discover-person-card');
-        }
-
-        console.log(`Found ${profileCards.length} network profile cards on page`);
-
-        profileCards.forEach((card, index) => {
-            const profile = this.extractNetworkProfileFromCard(card);
-            console.log(`Network Profile ${index + 1}:`, profile);
-            if (profile.name && profile.url) {
+        profileCards.forEach(card => {
+            const profile = this.extractProfileFromCard(card, true); // Use unified extraction with network flag
+            if (profile?.name && profile?.url) {
                 profiles.push(profile);
-                console.log(`Added network profile: ${profile.name} - ${profile.url}`);
             }
         });
 
-        console.log(`Returning ${profiles.length} network profiles:`, profiles);
         return profiles;
     }
 
-    // Extract profile information from a profile card
-    extractProfileFromCard(card) {
+    // Extract profile information from a profile card (unified for all page types)
+    extractProfileFromCard(card, isNetworkPage = false) {
         const profile = {
             name: '',
             url: '',
             company: '',
             title: '',
             location: '',
-            industry: ''
+            industry: '',
+            profilePic: '',
+            collectedAt: new Date().toISOString()
         };
 
         try {
-            // Extract name and profile URL with multiple selectors
-            let nameLink = card.querySelector('.entity-result__title-text a') ||
-                          card.querySelector('.search-result__result-link') ||
-                          card.querySelector('[data-anonymize="person-name"]') ||
-                          card.querySelector('a[href*="/in/"]') ||
-                          card.querySelector('a[href*="linkedin.com/in/"]') ||
-                          card.querySelector('.app-aware-link') ||
-                          card.querySelector('a[data-control-name="search_srp_result"]') ||
-                          card.querySelector('.entity-result__title-text') ||
-                          card.querySelector('a[data-test-app-aware-link]');
+            // Common selectors for name and URL
+            const nameSelectors = isNetworkPage ? [
+                'a[href*="/in/"]',
+                '.discover-entity-type-card__link',
+                '.mn-person-card__link',
+                '.artdeco-entity-lockup__title a'
+            ] : [
+                '.entity-result__title-text a',
+                '.search-result__result-link',
+                'a[href*="/in/"]',
+                '.app-aware-link'
+            ];
 
-            // If no direct link found, look for name in span elements
-            if (!nameLink) {
+            let nameLink = null;
+            for (const selector of nameSelectors) {
+                nameLink = card.querySelector(selector);
+                if (nameLink) break;
+            }
+
+            if (nameLink) {
+                profile.name = nameLink.textContent.trim();
+                profile.url = nameLink.href || '';
+            } else {
+                // Fallback: look for name in span elements
                 const nameSpan = card.querySelector('span[aria-hidden="true"]') ||
-                               card.querySelector('.entity-result__title-text span') ||
                                card.querySelector('.t-16.t-black.t-bold') ||
                                card.querySelector('[data-anonymize="person-name"] span');
 
                 if (nameSpan) {
                     profile.name = nameSpan.textContent.trim();
-
-                    // Try to find the profile URL in parent elements
-                    const parentLink = nameSpan.closest('a') ||
-                                     card.querySelector('a[href*="/in/"]') ||
-                                     card.querySelector('a[href*="linkedin.com/in/"]') ||
-                                     card.querySelector('.app-aware-link') ||
-                                     card.querySelector('a[data-control-name="search_srp_result"]') ||
-                                     card.querySelector('a[data-test-app-aware-link]');
-
-                    if (parentLink) {
-                        profile.url = parentLink.href;
-                        // Clean and normalize the profile URL
-                        if (profile.url) {
-                            // Ensure we have a complete LinkedIn URL
-                            if (profile.url.startsWith('/')) {
-                                profile.url = 'https://www.linkedin.com' + profile.url;
-                            }
-                            // Clean up the URL to get the base profile URL
-                            if (profile.url.includes('?')) {
-                                profile.url = profile.url.split('?')[0];
-                            }
-                            // Remove trailing slash
-                            profile.url = profile.url.replace(/\/$/, '');
-                        }
-                    }
+                    const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
+                    if (parentLink) profile.url = parentLink.href;
                 }
-            } else {
-                profile.name = nameLink.textContent.trim();
-                profile.url = nameLink.href || '';
-            }
-
-            // Extract profile picture
-            const imgElement = card.querySelector('.entity-result__image img') ||
-                             card.querySelector('.presence-entity__image img') ||
-                             card.querySelector('img[alt*="profile"]') ||
-                             card.querySelector('img[alt*="Photo"]') ||
-                             card.querySelector('.search-result__image img') ||
-                             card.querySelector('img');
-
-            if (imgElement && imgElement.src) {
-                profile.profilePic = imgElement.src;
             }
 
             // Clean and normalize the profile URL
             if (profile.url) {
-                // Ensure we have a complete LinkedIn URL
                 if (profile.url.startsWith('/')) {
                     profile.url = 'https://www.linkedin.com' + profile.url;
                 }
-                // Clean up the URL to get the base profile URL
                 if (profile.url.includes('?')) {
                     profile.url = profile.url.split('?')[0];
                 }
-                // Remove trailing slash
                 profile.url = profile.url.replace(/\/$/, '');
             }
 
-            // Extract title and company with multiple selectors
-            const subtitleElement = card.querySelector('.entity-result__primary-subtitle') ||
-                                   card.querySelector('.search-result__truncate') ||
-                                   card.querySelector('.t-14.t-normal') ||
-                                   card.querySelector('.entity-result__summary');
+            // Extract profile picture
+            const imgSelectors = [
+                '.entity-result__image img',
+                '.presence-entity__image img',
+                'img[alt*="profile"]',
+                'img[alt*="Photo"]',
+                'img'
+            ];
 
-            if (subtitleElement) {
-                const subtitle = subtitleElement.textContent.trim();
-                const atIndex = subtitle.toLowerCase().indexOf(' at ');
-
-                if (atIndex !== -1) {
-                    profile.title = subtitle.substring(0, atIndex).trim();
-                    profile.company = subtitle.substring(atIndex + 4).trim();
-                } else {
-                    profile.title = subtitle;
+            for (const selector of imgSelectors) {
+                const imgElement = card.querySelector(selector);
+                if (imgElement?.src) {
+                    profile.profilePic = imgElement.src;
+                    break;
                 }
             }
 
-            // Extract location with multiple selectors
-            const locationElement = card.querySelector('.entity-result__secondary-subtitle') ||
-                                   card.querySelector('[data-anonymize="location"]') ||
-                                   card.querySelector('.t-12.t-black--light');
+            // Extract title and company
+            const subtitleSelectors = isNetworkPage ? [
+                '.discover-entity-type-card__occupation',
+                '.mn-person-card__occupation',
+                '.artdeco-entity-lockup__subtitle'
+            ] : [
+                '.entity-result__primary-subtitle',
+                '.search-result__truncate',
+                '.t-14.t-normal'
+            ];
 
-            if (locationElement) {
-                profile.location = locationElement.textContent.trim();
+            for (const selector of subtitleSelectors) {
+                const subtitleElement = card.querySelector(selector);
+                if (subtitleElement) {
+                    const subtitle = subtitleElement.textContent.trim();
+                    const atIndex = subtitle.toLowerCase().indexOf(' at ');
+                    if (atIndex !== -1) {
+                        profile.title = subtitle.substring(0, atIndex).trim();
+                        profile.company = subtitle.substring(atIndex + 4).trim();
+                    } else {
+                        profile.title = subtitle;
+                    }
+                    break;
+                }
             }
 
-            // Only return profile if we have at least name and URL
-            if (!profile.name || !profile.url) {
-                console.log('Skipping profile - missing name or URL:', { name: profile.name, url: profile.url });
+            // Extract location
+            const locationSelectors = [
+                '.entity-result__secondary-subtitle',
+                '[data-anonymize="location"]',
+                '.t-12.t-black--light'
+            ];
+
+            for (const selector of locationSelectors) {
+                const locationElement = card.querySelector(selector);
+                if (locationElement) {
+                    profile.location = locationElement.textContent.trim();
+                    break;
+                }
+            }
+
+            // Validate profile
+            if (!profile.name || !profile.url || !profile.url.includes('/in/')) {
                 return null;
             }
 
-            // Clean up the URL to ensure it's a proper LinkedIn profile URL
-            if (profile.url && !profile.url.includes('linkedin.com/in/') && !profile.url.includes('/in/')) {
-                console.log('Skipping profile - invalid URL format:', profile.url);
-                return null;
-            }
-
-            // Add timestamp
-            profile.collectedAt = new Date().toISOString();
-
-            console.log('Extracted search profile:', profile);
             return profile;
 
         } catch (error) {
@@ -535,127 +497,7 @@ class LinkedInAutomation {
         }
     }
 
-    // Extract profile information from My Network page cards
-    extractNetworkProfileFromCard(card) {
-        const profile = {
-            name: '',
-            url: '',
-            company: '',
-            title: '',
-            location: '',
-            industry: '',
-            profilePic: ''
-        };
 
-        try {
-            console.log('Processing card HTML:', card.outerHTML.substring(0, 500) + '...');
-
-            // Extract name and profile URL for My Network page
-            let nameLink = card.querySelector('a[href*="/in/"]') ||
-                          card.querySelector('a[href*="linkedin.com/in/"]') ||
-                          card.querySelector('.discover-entity-type-card__link') ||
-                          card.querySelector('.mn-person-card__link') ||
-                          card.querySelector('.artdeco-entity-lockup__title a') ||
-                          card.querySelector('a[data-control-name="people_profile_card"]');
-
-            if (nameLink) {
-                profile.name = nameLink.textContent.trim();
-                profile.url = nameLink.href || '';
-
-                // Clean up the URL
-                if (profile.url.startsWith('/')) {
-                    profile.url = 'https://www.linkedin.com' + profile.url;
-                }
-                if (profile.url.includes('?')) {
-                    profile.url = profile.url.split('?')[0];
-                }
-                profile.url = profile.url.replace(/\/$/, '');
-            }
-
-            // If no name found from link, try other selectors
-            if (!profile.name) {
-                const nameElement = card.querySelector('.discover-entity-type-card__name') ||
-                                  card.querySelector('.mn-person-card__name') ||
-                                  card.querySelector('.artdeco-entity-lockup__title') ||
-                                  card.querySelector('[data-anonymize="person-name"]') ||
-                                  card.querySelector('.t-16.t-black.t-bold') ||
-                                  card.querySelector('span[aria-hidden="true"]');
-
-                if (nameElement) {
-                    profile.name = nameElement.textContent.trim();
-                }
-            }
-
-            // If still no name, try to extract from the full card text
-            if (!profile.name) {
-                const cardText = card.textContent;
-                // Look for pattern: "Name • 1st" or "Name View Name's profile"
-                const nameMatch = cardText.match(/^([^•\n]+?)(?:\s*•|\s*View|\s*\n)/);
-                if (nameMatch) {
-                    profile.name = nameMatch[1].trim();
-                }
-            }
-
-            // Extract profile picture for My Network page - try multiple selectors
-            const imgElement = card.querySelector('img[alt*="profile"]') ||
-                             card.querySelector('img[alt*="Photo"]') ||
-                             card.querySelector('img[alt*="picture"]') ||
-                             card.querySelector('.discover-entity-type-card__image img') ||
-                             card.querySelector('.mn-person-card__picture img') ||
-                             card.querySelector('.artdeco-entity-lockup__image img') ||
-                             card.querySelector('.presence-entity__image img') ||
-                             card.querySelector('.EntityPhoto-circle-3 img') ||
-                             card.querySelector('.lazy-image img') ||
-                             card.querySelector('img[src*="profile-displayphoto"]') ||
-                             card.querySelector('img[src*="media.licdn.com"]') ||
-                             card.querySelector('img');
-
-            if (imgElement) {
-                // Try different image source attributes
-                profile.profilePic = imgElement.src ||
-                                   imgElement.getAttribute('data-delayed-url') ||
-                                   imgElement.getAttribute('data-src') ||
-                                   imgElement.getAttribute('data-ghost-url') ||
-                                   '';
-
-                console.log('Found image element:', imgElement);
-                console.log('Image src:', profile.profilePic);
-                console.log('Image alt:', imgElement.alt);
-                console.log('All image attributes:', imgElement.attributes);
-            } else {
-                console.log('No image element found in card');
-            }
-
-            // Extract title/headline for My Network page
-            const titleElement = card.querySelector('.discover-entity-type-card__occupation') ||
-                               card.querySelector('.mn-person-card__occupation') ||
-                               card.querySelector('.artdeco-entity-lockup__subtitle') ||
-                               card.querySelector('.t-14.t-normal');
-
-            if (titleElement) {
-                profile.title = titleElement.textContent.trim();
-            }
-
-            // For My Network, put the full text in location field (as per your data structure)
-            const fullTextElement = card.querySelector('.discover-entity-type-card__meta-container') ||
-                                  card.querySelector('.mn-person-card__details') ||
-                                  card;
-
-            if (fullTextElement) {
-                profile.location = fullTextElement.textContent.trim();
-            }
-
-            // Add timestamp
-            profile.collectedAt = new Date().toISOString();
-
-            console.log('Extracted network profile:', profile);
-            return profile;
-
-        } catch (error) {
-            console.error('Error extracting network profile data:', error);
-            return null;
-        }
-    }
 
     // Search for people by company name
     async searchByCompany(companyName) {
@@ -799,13 +641,10 @@ class LinkedInAutomation {
 
                 connectionCards.forEach((card, index) => {
                     if (index < 10) { // Only process first 10 to avoid overwhelming
-                        const profile = this.extractNetworkProfile(card);
-                        if (profile && profile.name && profile.url) {
+                        const profile = this.extractProfileFromCard(card, true); // Use unified extraction
+                        if (profile?.name && profile?.url) {
                             profile.source = 'connections';
                             profiles.push(profile);
-                            console.log('Successfully extracted profile:', profile);
-                        } else if (index < 3) {
-                            console.log(`Failed to extract from card ${index}:`, card.outerHTML.substring(0, 200));
                         }
                     }
                 });
@@ -844,106 +683,7 @@ class LinkedInAutomation {
         });
     }
 
-    // Extract profile from network connection card
-    extractNetworkProfile(card) {
-        try {
-            const profile = {
-                name: '',
-                url: '',
-                company: '',
-                title: '',
-                location: '',
-                industry: '',
-                connectionLevel: '1st',
-                source: 'network'
-            };
 
-            // Try multiple selectors for name and profile URL
-            let nameLink = card.querySelector('.mn-connection-card__name') ||
-                          card.querySelector('.connection-card__name') ||
-                          card.querySelector('a[data-control-name="connection_profile"]') ||
-                          card.querySelector('a[href*="/in/"]') ||
-                          card.querySelector('a[href*="linkedin.com/in/"]');
-
-            // If no direct link found, look for name in span elements
-            if (!nameLink) {
-                const nameSpan = card.querySelector('span[aria-hidden="true"]') ||
-                               card.querySelector('.t-16.t-black.t-bold') ||
-                               card.querySelector('.mn-connection-card__name') ||
-                               card.querySelector('.artdeco-entity-lockup__title');
-
-                if (nameSpan) {
-                    profile.name = nameSpan.textContent.trim();
-
-                    // Try to find the profile URL in parent elements
-                    const parentLink = nameSpan.closest('a') ||
-                                     card.querySelector('a[href*="/in/"]') ||
-                                     card.querySelector('a[href*="linkedin.com/in/"]');
-
-                    if (parentLink) {
-                        profile.url = parentLink.href;
-                    }
-                }
-            } else {
-                profile.name = nameLink.textContent.trim();
-                profile.url = nameLink.href || '';
-            }
-
-            // Clean and normalize the profile URL
-            if (profile.url) {
-                // Ensure we have a complete LinkedIn URL
-                if (profile.url.startsWith('/')) {
-                    profile.url = 'https://www.linkedin.com' + profile.url;
-                }
-                // Clean up the URL to get the base profile URL
-                if (profile.url.includes('?')) {
-                    profile.url = profile.url.split('?')[0];
-                }
-                // Remove trailing slash
-                profile.url = profile.url.replace(/\/$/, '');
-            }
-
-            // Extract title and company with multiple selectors
-            const occupationElement = card.querySelector('.mn-connection-card__occupation') ||
-                                    card.querySelector('.connection-card__occupation') ||
-                                    card.querySelector('.t-14.t-black--light') ||
-                                    card.querySelector('.t-14.t-normal') ||
-                                    card.querySelector('.artdeco-entity-lockup__subtitle');
-
-            if (occupationElement) {
-                const occupation = occupationElement.textContent.trim();
-                const atIndex = occupation.toLowerCase().indexOf(' at ');
-
-                if (atIndex !== -1) {
-                    profile.title = occupation.substring(0, atIndex).trim();
-                    profile.company = occupation.substring(atIndex + 4).trim();
-                } else {
-                    profile.title = occupation;
-                }
-            }
-
-            // Only return profile if we have at least name and URL
-            if (!profile.name || !profile.url) {
-                console.log('Skipping network profile - missing name or URL:', { name: profile.name, url: profile.url });
-                return null;
-            }
-
-            // Clean up the URL to ensure it's a proper LinkedIn profile URL
-            if (profile.url && !profile.url.includes('linkedin.com/in/') && !profile.url.includes('/in/')) {
-                console.log('Skipping network profile - invalid URL format:', profile.url);
-                return null;
-            }
-
-            // Add timestamp
-            profile.collectedAt = new Date().toISOString();
-
-            console.log('Extracted profile:', profile);
-            return profile;
-        } catch (error) {
-            console.error('Error extracting network profile:', error);
-            return null;
-        }
-    }
 
 
 }

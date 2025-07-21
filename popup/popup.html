@@ -59,25 +59,7 @@
         <!-- Settings Tab -->
         <div class="tab-content" id="settings">
             <div class="section">
-                <h3>AI Settings</h3>
-                <div class="form-group">
-                    <label>OpenAI API Key:</label>
-                    <input type="password" id="openai-key" placeholder="sk-...">
-                    <small>Required for AI-generated personalized messages</small>
-                </div>
-                <div class="form-group">
-                    <label>Message Style:</label>
-                    <select id="message-style">
-                        <option value="professional">Professional</option>
-                        <option value="friendly">Friendly</option>
-                        <option value="casual">Casual</option>
-                        <option value="sales">Sales-focused</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="section">
-                <h3>Safety Settings</h3>
+                <h3>Settings</h3>
                 <div class="form-group">
                     <label>Daily Connection Limit:</label>
                     <input type="number" id="daily-limit" value="20" min="1" max="100">
@@ -89,6 +71,18 @@
                 <div class="form-group">
                     <label>Follow-up Delay (days):</label>
                     <input type="number" id="followup-delay" value="3" min="1" max="14">
+                </div>
+                <div class="form-group">
+                    <label>OpenAI API Key (optional):</label>
+                    <input type="password" id="openai-key" placeholder="sk-...">
+                </div>
+                <div class="form-group">
+                    <label>Message Style:</label>
+                    <select id="message-style">
+                        <option value="professional">Professional</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="casual">Casual</option>
+                    </select>
                 </div>
                 <button class="btn btn-primary" id="save-settings">Save Settings</button>
             </div>
@@ -273,17 +267,11 @@
                         </div>
 
                         <div class="ai-analysis-config">
-                            <h4>AI Analysis & Personalization</h4>
+                            <h4>Message Configuration</h4>
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="analyze-profile" checked>
-                                    Analyze profile details (name, headline, experience, education)
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="analyze-posts" checked>
-                                    Analyze recent posts and activity (when available)
+                                    Use profile information for personalization
                                 </label>
                             </div>
                             <div class="form-group">
@@ -292,7 +280,6 @@
                                     <option value="professional">Professional</option>
                                     <option value="casual">Casual & Friendly</option>
                                     <option value="direct">Direct & Brief</option>
-                                    <option value="consultative">Consultative</option>
                                 </select>
                             </div>
                         </div>

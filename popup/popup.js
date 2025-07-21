@@ -3,15 +3,6 @@ let currentStep = 1;
 let isCollecting = false;
 let collectedProfiles = [];
 let duplicateProfiles = [];
-
-// Wizard elements - global scope
-let step1, step2, step3Search, step3Network, step3Collecting, step4Messaging, duplicatesModal;
-let nextStep1, backToStep1, backToStep2, backToSearch, backToCollecting, nextToMessaging, backToStep2FromNetwork;
-let linkedinSearchOption, salesNavigatorOption, networkOption, csvUploadBtn, csvUploadBtn2, csvFileInput;
-let showFiltersBtn, startCollectingBtn, pauseCollectionBtn, createCampaignFinalBtn;
-let showNetworkFiltersBtn, startNetworkCollectingBtn, browseConnectionsBtn;
-let excludeDuplicatesBtn, cancelDuplicatesBtn;
-let singleMessageRadio, multiStepRadio, followUpConfig;
 let wizardInitialized = false;
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -44,64 +35,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeBtns = document.querySelectorAll('.close');
     const closeProfilesBtn = document.getElementById('close-profiles');
 
-    // Wizard elements are now declared globally
-
     // Initialize wizard elements after DOM is loaded
     function initializeWizardElements() {
         if (wizardInitialized) return;
-
-        console.log('Initializing wizard elements...');
-
-        // Wizard steps
-        step1 = document.getElementById('step-1');
-        step2 = document.getElementById('step-2');
-        step3Search = document.getElementById('step-3-search');
-        step3Network = document.getElementById('step-3-network');
-        step3Collecting = document.getElementById('step-3-collecting');
-        step4Messaging = document.getElementById('step-4-messaging');
-        duplicatesModal = document.getElementById('duplicates-modal');
-
-        // Navigation buttons
-        nextStep1 = document.getElementById('next-step-1');
-        backToStep1 = document.getElementById('back-to-step-1');
-        backToStep2 = document.getElementById('back-to-step-2');
-        backToSearch = document.getElementById('back-to-search');
-        backToStep2FromNetwork = document.getElementById('back-to-step-2-from-network');
-        backToCollecting = document.getElementById('back-to-collecting');
-        nextToMessaging = document.getElementById('next-to-messaging');
-
-        // Option buttons
-        linkedinSearchOption = document.getElementById('linkedin-search-option');
-        salesNavigatorOption = document.getElementById('sales-navigator-option');
-        networkOption = document.getElementById('network-option');
-        csvUploadBtn = document.getElementById('csv-upload-btn');
-        csvUploadBtn2 = document.getElementById('csv-upload-btn-2');
-        csvFileInput = document.getElementById('csv-file-input');
-
-        // Collection buttons
-        showFiltersBtn = document.getElementById('show-filters');
-        startCollectingBtn = document.getElementById('start-collecting');
-        showNetworkFiltersBtn = document.getElementById('show-network-filters');
-        startNetworkCollectingBtn = document.getElementById('start-network-collecting');
-        browseConnectionsBtn = document.getElementById('browse-connections');
-        pauseCollectionBtn = document.getElementById('pause-collection');
-        createCampaignFinalBtn = document.getElementById('create-campaign-final');
-
-        // Duplicate handling
-        excludeDuplicatesBtn = document.getElementById('exclude-duplicates');
-        cancelDuplicatesBtn = document.getElementById('cancel-duplicates');
-
-        // Messaging strategy elements
-        singleMessageRadio = document.getElementById('single-message-radio');
-        multiStepRadio = document.getElementById('multi-step-radio');
-        followUpConfig = document.getElementById('follow-up-config');
-
-        console.log('Wizard elements initialized:', {
-            step1: !!step1,
-            step2: !!step2,
-            nextStep1: !!nextStep1
-        });
-
         wizardInitialized = true;
     }
 
@@ -147,36 +83,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Wizard step navigation - will be initialized when modal opens
     function initializeWizardEventListeners() {
-        console.log('Initializing wizard event listeners...');
-
-        // Remove any existing event listeners first
-        const elements = [nextStep1, backToStep1, backToStep2, backToSearch, backToStep2FromNetwork, backToCollecting, nextToMessaging];
-        elements.forEach(el => {
-            if (el && el.onclick) el.onclick = null;
-        });
-
+        // Next step 1 handler
+        const nextStep1 = document.getElementById('next-step-1');
         if (nextStep1) {
-            console.log('Setting up nextStep1 click handler');
             nextStep1.onclick = (e) => {
                 e.preventDefault();
-                console.log('Next button clicked!');
                 const campaignNameInput = document.getElementById('campaign-name');
-                if (!campaignNameInput) {
-                    console.error('Campaign name input not found');
-                    return;
-                }
-                const campaignName = campaignNameInput.value.trim();
+                const campaignName = campaignNameInput?.value.trim();
                 if (!campaignName) {
                     alert('Please enter a campaign name');
-                    campaignNameInput.focus();
+                    campaignNameInput?.focus();
                     return;
                 }
-                console.log('Campaign name:', campaignName);
                 showStep(2);
             };
-        } else {
-            console.error('nextStep1 button not found!');
         }
+
+        // Navigation buttons
+        const backToStep1 = document.getElementById('back-to-step-1');
+        const backToStep2 = document.getElementById('back-to-step-2');
+        const backToSearch = document.getElementById('back-to-search');
+        const backToStep2FromNetwork = document.getElementById('back-to-step-2-from-network');
+        const backToCollecting = document.getElementById('back-to-collecting');
+        const nextToMessaging = document.getElementById('next-to-messaging');
 
         if (backToStep1) backToStep1.onclick = () => showStep(1);
         if (backToStep2) backToStep2.onclick = () => showStep(2);
@@ -186,126 +115,89 @@ document.addEventListener('DOMContentLoaded', function() {
         if (nextToMessaging) nextToMessaging.onclick = () => showStep(4);
 
         // Option selections
-        if (linkedinSearchOption) {
-            linkedinSearchOption.onclick = () => {
-                showStep(3, 'search');
-            };
-        }
+        const linkedinSearchOption = document.getElementById('linkedin-search-option');
+        const salesNavigatorOption = document.getElementById('sales-navigator-option');
+        const networkOption = document.getElementById('network-option');
 
-        if (salesNavigatorOption) {
-            salesNavigatorOption.onclick = () => {
-                alert('Sales Navigator integration coming soon!');
-            };
-        }
-
-        if (networkOption) {
-            networkOption.onclick = () => {
-                showStep(3, 'network');
-            };
-        }
+        if (linkedinSearchOption) linkedinSearchOption.onclick = () => showStep(3, 'search');
+        if (salesNavigatorOption) salesNavigatorOption.onclick = () => alert('Sales Navigator integration coming soon!');
+        if (networkOption) networkOption.onclick = () => showStep(3, 'network');
 
         // CSV upload handling
-        if (csvUploadBtn) csvUploadBtn.onclick = () => csvFileInput && csvFileInput.click();
-        if (csvUploadBtn2) csvUploadBtn2.onclick = () => csvFileInput && csvFileInput.click();
+        const csvUploadBtn = document.getElementById('csv-upload-btn');
+        const csvUploadBtn2 = document.getElementById('csv-upload-btn-2');
+        const csvFileInput = document.getElementById('csv-file-input');
 
+        if (csvUploadBtn) csvUploadBtn.onclick = () => csvFileInput?.click();
+        if (csvUploadBtn2) csvUploadBtn2.onclick = () => csvFileInput?.click();
         if (csvFileInput) csvFileInput.onchange = handleCSVUpload;
 
         // Collection actions
-        if (showFiltersBtn) {
-            showFiltersBtn.onclick = () => {
-                // Open LinkedIn search in new tab
-                chrome.tabs.create({ url: 'https://www.linkedin.com/search/people/' });
-            };
-        }
+        const showFiltersBtn = document.getElementById('show-filters');
+        const startCollectingBtn = document.getElementById('start-collecting');
+        const showNetworkFiltersBtn = document.getElementById('show-network-filters');
+        const startNetworkCollectingBtn = document.getElementById('start-network-collecting');
+        const browseConnectionsBtn = document.getElementById('browse-connections');
+        const pauseCollectionBtn = document.getElementById('pause-collection');
+        const createCampaignFinalBtn = document.getElementById('create-campaign-final');
 
-        if (startCollectingBtn) {
-            startCollectingBtn.onclick = () => {
-                showStep(3, 'collecting');
-                startCollecting();
-            };
-        }
-
-        if (showNetworkFiltersBtn) {
-            showNetworkFiltersBtn.onclick = () => {
-                openLinkedInNetworkSearch();
-            };
-        }
-
-        if (startNetworkCollectingBtn) {
-            startNetworkCollectingBtn.onclick = () => {
-                showStep(3, 'collecting');
-                startNetworkCollecting();
-            };
-        }
-
-        if (browseConnectionsBtn) {
-            browseConnectionsBtn.onclick = () => {
-                browseConnections();
-            };
-        }
+        if (showFiltersBtn) showFiltersBtn.onclick = () => chrome.tabs.create({ url: 'https://www.linkedin.com/search/people/' });
+        if (startCollectingBtn) startCollectingBtn.onclick = () => { showStep(3, 'collecting'); startCollecting(); };
+        if (showNetworkFiltersBtn) showNetworkFiltersBtn.onclick = () => openLinkedInNetworkSearch();
+        if (startNetworkCollectingBtn) startNetworkCollectingBtn.onclick = () => { showStep(3, 'collecting'); startNetworkCollecting(); };
+        if (browseConnectionsBtn) browseConnectionsBtn.onclick = () => browseConnections();
 
         if (pauseCollectionBtn) {
             pauseCollectionBtn.onclick = () => {
-                isCollecting = false;
-                pauseCollectionBtn.textContent = 'RESUME';
-                pauseCollectionBtn.onclick = () => {
-                    isCollecting = true;
-                    pauseCollectionBtn.textContent = 'PAUSE';
-                    pauseCollectionBtn.onclick = () => pauseCollectionBtn.click();
-                    continueCollecting();
-                };
+                isCollecting = !isCollecting;
+                pauseCollectionBtn.textContent = isCollecting ? 'PAUSE' : 'RESUME';
+                if (isCollecting) continueCollecting();
             };
         }
 
         if (createCampaignFinalBtn) {
             createCampaignFinalBtn.onclick = () => {
-                // Check if we're on step 3 (collecting) or step 4 (messaging)
                 const currentActiveStep = document.querySelector('.wizard-step.active');
-                if (currentActiveStep && currentActiveStep.id === 'step-3-collecting') {
-                    // We're on step 3, go to messaging strategy
+                if (currentActiveStep?.id === 'step-3-collecting') {
                     if (collectedProfiles.length === 0) {
                         alert('Please collect some profiles first');
                         return;
                     }
                     showStep(4);
                 } else {
-                    // We're on step 4, finalize the campaign
                     checkForDuplicates();
                 }
             };
         }
 
         // Duplicate handling
+        const excludeDuplicatesBtn = document.getElementById('exclude-duplicates');
+        const cancelDuplicatesBtn = document.getElementById('cancel-duplicates');
+
         if (excludeDuplicatesBtn) {
             excludeDuplicatesBtn.onclick = () => {
-                // Remove duplicates from collected profiles
                 collectedProfiles = collectedProfiles.filter(profile =>
                     !duplicateProfiles.some(dup => dup.url === profile.url)
                 );
-
-                if (duplicatesModal) duplicatesModal.style.display = 'none';
+                document.getElementById('duplicates-modal').style.display = 'none';
                 finalizeCampaign();
             };
         }
 
         if (cancelDuplicatesBtn) {
             cancelDuplicatesBtn.onclick = () => {
-                if (duplicatesModal) duplicatesModal.style.display = 'none';
+                document.getElementById('duplicates-modal').style.display = 'none';
                 finalizeCampaign();
             };
         }
-        // Messaging strategy event listeners
-        if (singleMessageRadio) {
-            singleMessageRadio.onchange = () => {
-                if (followUpConfig) followUpConfig.style.display = 'none';
-            };
-        }
 
-        if (multiStepRadio) {
-            multiStepRadio.onchange = () => {
-                if (followUpConfig) followUpConfig.style.display = 'block';
-            };
-        }
+        // Messaging strategy event listeners
+        const singleMessageRadio = document.getElementById('single-message-radio');
+        const multiStepRadio = document.getElementById('multi-step-radio');
+        const followUpConfig = document.getElementById('follow-up-config');
+
+        if (singleMessageRadio) singleMessageRadio.onchange = () => followUpConfig.style.display = 'none';
+        if (multiStepRadio) multiStepRadio.onchange = () => followUpConfig.style.display = 'block';
     }
 
     // Event listeners now initialized when modal opens
@@ -635,32 +527,23 @@ function createCampaignFromProfiles() {
 
 // Wizard helper functions
 function showStep(stepNumber, subStep = null) {
-    // Ensure wizard elements are initialized first
-    if (!wizardInitialized) {
-        initializeWizardElements();
-    }
-
     // Hide all steps
     document.querySelectorAll('.wizard-step').forEach(step => {
         step.classList.remove('active');
     });
 
-    // Show current step with null checks
-    if (stepNumber === 1 && step1) {
-        step1.classList.add('active');
-    } else if (stepNumber === 2 && step2) {
-        step2.classList.add('active');
-    } else if (stepNumber === 3) {
-        if (subStep === 'search' && step3Search) {
-            step3Search.classList.add('active');
-        } else if (subStep === 'network' && step3Network) {
-            step3Network.classList.add('active');
-        } else if (subStep === 'collecting' && step3Collecting) {
-            step3Collecting.classList.add('active');
-        }
-    } else if (stepNumber === 4 && step4Messaging) {
-        step4Messaging.classList.add('active');
-    }
+    // Show current step
+    let stepId = '';
+    if (stepNumber === 1) stepId = 'step-1';
+    else if (stepNumber === 2) stepId = 'step-2';
+    else if (stepNumber === 3) {
+        if (subStep === 'search') stepId = 'step-3-search';
+        else if (subStep === 'network') stepId = 'step-3-network';
+        else if (subStep === 'collecting') stepId = 'step-3-collecting';
+    } else if (stepNumber === 4) stepId = 'step-4-messaging';
+
+    const stepElement = document.getElementById(stepId);
+    if (stepElement) stepElement.classList.add('active');
 
     currentStep = stepNumber;
 }
@@ -723,40 +606,38 @@ function handleCSVUpload(event) {
 
 function startCollecting() {
     isCollecting = true;
-    // Simulate collecting profiles from LinkedIn
-    simulateProfileCollection();
+    // Start actual profile collection from LinkedIn
+    collectProfilesFromCurrentPage();
 }
 
 function continueCollecting() {
     if (isCollecting) {
-        simulateProfileCollection();
+        collectProfilesFromCurrentPage();
     }
 }
 
-function simulateProfileCollection() {
-    // This would be replaced with actual LinkedIn scraping
-    const sampleProfiles = [
-        { name: 'Vipin Kothiyalview', url: 'https://linkedin.com/in/vipin-kothiyals', company: 'Tech Corp', title: 'Software Engineer' },
-        { name: 'Love Aggarwalview', url: 'https://linkedin.com/in/love-aggarwals', company: 'Design Studio', title: 'UI Designer' },
-        { name: 'Gursimranpreet Kaurview', url: 'https://linkedin.com/in/gursimra', company: 'Marketing Inc', title: 'Marketing Manager' },
-        { name: 'Abhishek Sharmaview', url: 'https://linkedin.com/in/abhishek-sh', company: 'Sales Co', title: 'Sales Director' },
-        { name: 'Baljinder Kaurview', url: 'https://linkedin.com/in/baljinder-kaurs', company: 'HR Solutions', title: 'HR Manager' }
-    ];
-
-    let collected = 0;
-    const interval = setInterval(() => {
-        if (!isCollecting || collected >= sampleProfiles.length) {
-            clearInterval(interval);
+function collectProfilesFromCurrentPage() {
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        const tab = tabs[0];
+        if (!tab.url.includes('linkedin.com')) {
+            showNotification('Please navigate to a LinkedIn page first', 'error');
             return;
         }
 
-        collectedProfiles.push(sampleProfiles[collected]);
-        collected++;
-
-        const collectedNumber = document.getElementById('collected-number');
-        if (collectedNumber) collectedNumber.textContent = collectedProfiles.length;
-        updateCollectedProfilesList();
-    }, 1000);
+        chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' })
+            .then(response => {
+                if (response?.profiles?.length > 0) {
+                    collectedProfiles.push(...response.profiles);
+                    updateCollectedProfilesList();
+                    document.getElementById('collected-number').textContent = collectedProfiles.length;
+                    showNotification(`Collected ${response.profiles.length} profiles`);
+                }
+            })
+            .catch(error => {
+                console.error('Error collecting profiles:', error);
+                showNotification('Error collecting profiles. Please refresh the page.', 'error');
+            });
+    });
 }
 
 function updateCollectedProfilesList() {
@@ -1050,33 +931,11 @@ function startNetworkSearch(tabId, searchCriteria) {
     });
 }
 
-// Load collected profiles from both local and persistent storage
+// Load collected profiles
 function loadCollectedProfiles() {
     chrome.storage.local.get(['collectedProfiles'], function(result) {
-        const localProfiles = result.collectedProfiles || [];
-
-        // Also load from persistent storage
-        chrome.storage.sync.get(['persistentProfiles', 'lastCollectionDate'], function(syncResult) {
-            const persistentProfiles = syncResult.persistentProfiles || [];
-
-            // Use the larger collection (in case local storage was cleared)
-            if (persistentProfiles.length > localProfiles.length) {
-                collectedProfiles = persistentProfiles;
-                // Update local storage with persistent data
-                chrome.storage.local.set({ collectedProfiles: persistentProfiles });
-            } else {
-                collectedProfiles = localProfiles;
-            }
-
-            // Update UI
-            document.getElementById('profile-count').textContent = collectedProfiles.length;
-
-            // Show last collection date if available
-            if (syncResult.lastCollectionDate) {
-                const lastDate = new Date(syncResult.lastCollectionDate);
-                console.log('Last collection:', lastDate.toLocaleString());
-            }
-        });
+        const profiles = result.collectedProfiles || [];
+        document.getElementById('profile-count').textContent = profiles.length;
     });
 }
 
