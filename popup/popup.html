@@ -342,6 +342,28 @@
         </footer>
     </div>
 
+    <!-- Profile URLs Popup Modal -->
+    <div id="profile-urls-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Collected Profile URLs</h3>
+                <span class="close" id="close-profile-urls">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="profile-urls-container">
+                    <div class="collection-status">
+                        <p>Found <span id="profile-count-display">0</span> profiles</p>
+                        <button class="btn btn-primary" id="add-profiles-to-campaign">Add Selected to Campaign</button>
+                        <button class="btn btn-secondary" id="select-all-profiles">Select All</button>
+                    </div>
+                    <div class="profile-urls-list" id="profile-urls-list">
+                        <!-- Profile URLs will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>

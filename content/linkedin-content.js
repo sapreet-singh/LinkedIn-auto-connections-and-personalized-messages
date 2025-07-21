@@ -63,16 +63,13 @@ class LinkedInAutomation {
             case 'searchNetwork':
                 console.log('Received searchNetwork message:', message);
                 // Handle async response properly
-                (async () => {
-                    try {
-                        const profiles = await this.searchNetwork(message.criteria);
-                        console.log('Sending response with profiles:', profiles);
-                        sendResponse({ profiles: profiles || [] });
-                    } catch (error) {
-                        console.error('Error in searchNetwork:', error);
-                        sendResponse({ profiles: [], error: error.message });
-                    }
-                })();
+                this.searchNetwork(message.criteria).then(profiles => {
+                    console.log('Sending response with profiles:', profiles);
+                    sendResponse({ profiles: profiles || [] });
+                }).catch(error => {
+                    console.error('Error in searchNetwork:', error);
+                    sendResponse({ profiles: [], error: error.message });
+                });
                 return true;
             default:
                 sendResponse({ error: 'Unknown action' });
@@ -316,9 +313,16 @@ class LinkedInAutomation {
     // Collect profiles from current page
     async collectProfiles() {
         console.log('collectProfiles method called');
+        console.log('Current URL:', window.location.href);
         const profiles = [];
 
-        // Find all profile cards on the page using multiple selectors
+        // Check if we're on My Network page
+        if (window.location.href.includes('/mynetwork/')) {
+            console.log('Detected My Network page, using network-specific selectors');
+            return this.collectNetworkProfiles();
+        }
+
+        // Find all profile cards on the page using multiple selectors for search pages
         let profileCards = document.querySelectorAll('.reusable-search__result-container');
 
         if (profileCards.length === 0) {
@@ -349,6 +353,45 @@ class LinkedInAutomation {
         });
 
         console.log(`Returning ${profiles.length} profiles:`, profiles);
+        return profiles;
+    }
+
+    // Collect profiles specifically from My Network page
+    async collectNetworkProfiles() {
+        console.log('collectNetworkProfiles method called for My Network page');
+        const profiles = [];
+
+        // Selectors for My Network page
+        let profileCards = document.querySelectorAll('.discover-entity-type-card');
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.mn-person-card');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('[data-test-id="person-card"]');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.artdeco-entity-lockup');
+        }
+
+        if (profileCards.length === 0) {
+            profileCards = document.querySelectorAll('.discover-person-card');
+        }
+
+        console.log(`Found ${profileCards.length} network profile cards on page`);
+
+        profileCards.forEach((card, index) => {
+            const profile = this.extractNetworkProfileFromCard(card);
+            console.log(`Network Profile ${index + 1}:`, profile);
+            if (profile.name && profile.url) {
+                profiles.push(profile);
+                console.log(`Added network profile: ${profile.name} - ${profile.url}`);
+            }
+        });
+
+        console.log(`Returning ${profiles.length} network profiles:`, profiles);
         return profiles;
     }
 
@@ -413,6 +456,18 @@ class LinkedInAutomation {
             } else {
                 profile.name = nameLink.textContent.trim();
                 profile.url = nameLink.href || '';
+            }
+
+            // Extract profile picture
+            const imgElement = card.querySelector('.entity-result__image img') ||
+                             card.querySelector('.presence-entity__image img') ||
+                             card.querySelector('img[alt*="profile"]') ||
+                             card.querySelector('img[alt*="Photo"]') ||
+                             card.querySelector('.search-result__image img') ||
+                             card.querySelector('img');
+
+            if (imgElement && imgElement.src) {
+                profile.profilePic = imgElement.src;
             }
 
             // Clean and normalize the profile URL
@@ -480,7 +535,127 @@ class LinkedInAutomation {
         }
     }
 
+    // Extract profile information from My Network page cards
+    extractNetworkProfileFromCard(card) {
+        const profile = {
+            name: '',
+            url: '',
+            company: '',
+            title: '',
+            location: '',
+            industry: '',
+            profilePic: ''
+        };
 
+        try {
+            console.log('Processing card HTML:', card.outerHTML.substring(0, 500) + '...');
+
+            // Extract name and profile URL for My Network page
+            let nameLink = card.querySelector('a[href*="/in/"]') ||
+                          card.querySelector('a[href*="linkedin.com/in/"]') ||
+                          card.querySelector('.discover-entity-type-card__link') ||
+                          card.querySelector('.mn-person-card__link') ||
+                          card.querySelector('.artdeco-entity-lockup__title a') ||
+                          card.querySelector('a[data-control-name="people_profile_card"]');
+
+            if (nameLink) {
+                profile.name = nameLink.textContent.trim();
+                profile.url = nameLink.href || '';
+
+                // Clean up the URL
+                if (profile.url.startsWith('/')) {
+                    profile.url = 'https://www.linkedin.com' + profile.url;
+                }
+                if (profile.url.includes('?')) {
+                    profile.url = profile.url.split('?')[0];
+                }
+                profile.url = profile.url.replace(/\/$/, '');
+            }
+
+            // If no name found from link, try other selectors
+            if (!profile.name) {
+                const nameElement = card.querySelector('.discover-entity-type-card__name') ||
+                                  card.querySelector('.mn-person-card__name') ||
+                                  card.querySelector('.artdeco-entity-lockup__title') ||
+                                  card.querySelector('[data-anonymize="person-name"]') ||
+                                  card.querySelector('.t-16.t-black.t-bold') ||
+                                  card.querySelector('span[aria-hidden="true"]');
+
+                if (nameElement) {
+                    profile.name = nameElement.textContent.trim();
+                }
+            }
+
+            // If still no name, try to extract from the full card text
+            if (!profile.name) {
+                const cardText = card.textContent;
+                // Look for pattern: "Name • 1st" or "Name View Name's profile"
+                const nameMatch = cardText.match(/^([^•\n]+?)(?:\s*•|\s*View|\s*\n)/);
+                if (nameMatch) {
+                    profile.name = nameMatch[1].trim();
+                }
+            }
+
+            // Extract profile picture for My Network page - try multiple selectors
+            const imgElement = card.querySelector('img[alt*="profile"]') ||
+                             card.querySelector('img[alt*="Photo"]') ||
+                             card.querySelector('img[alt*="picture"]') ||
+                             card.querySelector('.discover-entity-type-card__image img') ||
+                             card.querySelector('.mn-person-card__picture img') ||
+                             card.querySelector('.artdeco-entity-lockup__image img') ||
+                             card.querySelector('.presence-entity__image img') ||
+                             card.querySelector('.EntityPhoto-circle-3 img') ||
+                             card.querySelector('.lazy-image img') ||
+                             card.querySelector('img[src*="profile-displayphoto"]') ||
+                             card.querySelector('img[src*="media.licdn.com"]') ||
+                             card.querySelector('img');
+
+            if (imgElement) {
+                // Try different image source attributes
+                profile.profilePic = imgElement.src ||
+                                   imgElement.getAttribute('data-delayed-url') ||
+                                   imgElement.getAttribute('data-src') ||
+                                   imgElement.getAttribute('data-ghost-url') ||
+                                   '';
+
+                console.log('Found image element:', imgElement);
+                console.log('Image src:', profile.profilePic);
+                console.log('Image alt:', imgElement.alt);
+                console.log('All image attributes:', imgElement.attributes);
+            } else {
+                console.log('No image element found in card');
+            }
+
+            // Extract title/headline for My Network page
+            const titleElement = card.querySelector('.discover-entity-type-card__occupation') ||
+                               card.querySelector('.mn-person-card__occupation') ||
+                               card.querySelector('.artdeco-entity-lockup__subtitle') ||
+                               card.querySelector('.t-14.t-normal');
+
+            if (titleElement) {
+                profile.title = titleElement.textContent.trim();
+            }
+
+            // For My Network, put the full text in location field (as per your data structure)
+            const fullTextElement = card.querySelector('.discover-entity-type-card__meta-container') ||
+                                  card.querySelector('.mn-person-card__details') ||
+                                  card;
+
+            if (fullTextElement) {
+                profile.location = fullTextElement.textContent.trim();
+            }
+
+            // Add timestamp
+            profile.collectedAt = new Date().toISOString();
+
+            console.log('Extracted network profile:', profile);
+            return profile;
+
+        } catch (error) {
+            console.error('Error extracting network profile data:', error);
+            return null;
+        }
+    }
 
     // Search for people by company name
     async searchByCompany(companyName) {

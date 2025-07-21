@@ -744,3 +744,94 @@ footer {
     color: #666;
     margin-bottom: 15px;
 }
+
+/* Profile URLs Modal Specific Styles */
+#profile-urls-modal .modal-content {
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+}
+
+#profile-urls-modal .profile-urls-container {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+#profile-urls-modal .collection-status {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#profile-urls-modal .collection-status p {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#profile-urls-modal .collection-status .btn {
+    margin: 0 8px;
+    border: 2px solid white;
+    background: transparent;
+    color: white;
+    font-weight: 600;
+}
+
+#profile-urls-modal .collection-status .btn:hover {
+    background: white;
+    color: #667eea;
+}
+
+#profile-urls-modal .profile-item {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: all 0.2s ease;
+    gap: 15px;
+}
+
+#profile-urls-modal .profile-pic {
+    flex-shrink: 0;
+}
+
+#profile-urls-modal .profile-item:hover {
+    background-color: #f8f9fa;
+    transform: translateX(5px);
+}
+
+#profile-urls-modal .profile-checkbox {
+    margin-right: 15px;
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+#profile-urls-modal .profile-info {
+    flex: 1;
+}
+
+#profile-urls-modal .profile-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+#profile-urls-modal .profile-details {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 6px;
+}
+
+#profile-urls-modal .profile-url {
+    font-size: 11px;
+    color: #0073b1;
+    word-break: break-all;
+    font-family: monospace;
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+}

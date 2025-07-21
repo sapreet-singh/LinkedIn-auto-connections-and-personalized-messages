@@ -315,6 +315,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('view-collected').addEventListener('click', viewCollectedProfiles);
     document.getElementById('export-profiles').addEventListener('click', exportProfiles);
     document.getElementById('create-campaign-from-profiles').addEventListener('click', createCampaignFromProfiles);
+
+    // Profile URLs modal
+    document.getElementById('close-profile-urls').addEventListener('click', closeProfileUrlsPopup);
+    document.getElementById('select-all-profiles').addEventListener('click', selectAllProfiles);
+    document.getElementById('add-profiles-to-campaign').addEventListener('click', addSelectedProfilesToCampaign);
     
     // Load saved settings
     loadSettings();
@@ -761,13 +766,32 @@ function updateCollectedProfilesList() {
     listElement.innerHTML = '';
 
     collectedProfiles.forEach(profile => {
+        // Extract clean name - try multiple sources
+        let cleanName = 'Unknown Name';
+
+        // First try the name field directly
+        if (profile.name && profile.name !== 'Status is reachable') {
+            cleanName = profile.name.trim();
+        }
+        // If name field is not useful, try extracting from location
+        else if (profile.location) {
+            // Extract just the name part before "View" or other text
+            const nameMatch = profile.location.match(/^([^V•\n]+?)(?:View|•|\n|$)/);
+            if (nameMatch) {
+                cleanName = nameMatch[1].trim();
+            }
+        }
+
+        // Clean up any remaining artifacts
+        cleanName = cleanName.replace(/\s+/g, ' ').trim();
+
         const profileCard = document.createElement('div');
         profileCard.className = 'profile-card';
         profileCard.innerHTML = `
-            <div class="profile-avatar">${profile.name.charAt(0)}</div>
+            <div class="profile-avatar">${cleanName.charAt(0)}</div>
             <div class="profile-info">
-                <div class="profile-name">${profile.name}</div>
-                <div class="profile-details">${profile.title} at ${profile.company}</div>
+                <div class="profile-name">${cleanName}</div>
+                <div class="profile-details">• 1st degree connection</div>
             </div>
         `;
         listElement.appendChild(profileCard);
@@ -944,34 +968,33 @@ function startNetworkSearch(tabId, searchCriteria) {
             }).then(response => {
                 clearTimeout(messageTimeout);
                 console.log('Received response:', response);
+                console.log('Response type:', typeof response);
+                console.log('Response profiles:', response?.profiles);
 
-                if (response && response.profiles) {
+                if (response && response.profiles && response.profiles.length > 0) {
                     console.log('Received profiles:', response.profiles);
-                    // Add collected profiles
-                    chrome.storage.local.get(['collectedProfiles'], function(result) {
-                        const existing = result.collectedProfiles || [];
-                        const newProfiles = response.profiles.filter(profile =>
-                            !existing.some(existing => existing.url === profile.url)
-                        );
-
-                        const updated = [...existing, ...newProfiles];
-
-                        chrome.storage.local.set({ collectedProfiles: updated }, function() {
-                            collectedProfiles = updated;
-                            updateCollectedProfilesList();
-                            document.getElementById('collected-number').textContent = updated.length;
-                            showNotification(`Collected ${newProfiles.length} profiles from your network`);
-
-                            // Save to persistent storage for static display
-                            chrome.storage.sync.set({
-                                persistentProfiles: updated,
-                                lastCollectionDate: new Date().toISOString()
-                            });
-                        });
-                    });
+                    // Add profiles directly to campaign without approval modal
+                    addProfilesDirectlyToCampaign(response.profiles);
                 } else {
                     console.log('No profiles in response:', response);
-                    showNotification('No profiles found matching your criteria', 'warning');
+                    if (response && response.error) {
+                        showNotification(`Error: ${response.error}`, 'error');
+                    } else {
+                        // Try fallback with collectProfiles
+                        console.log('Trying fallback with collectProfiles...');
+                        chrome.tabs.sendMessage(tabId, { action: 'collectProfiles' }).then(fallbackResponse => {
+                            console.log('Fallback response:', fallbackResponse);
+                            if (fallbackResponse && fallbackResponse.profiles && fallbackResponse.profiles.length > 0) {
+                                console.log('Adding fallback profiles directly to campaign');
+                                addProfilesDirectlyToCampaign(fallbackResponse.profiles);
+                            } else {
+                                showNotification('No profiles found matching your criteria', 'warning');
+                            }
+                        }).catch(fallbackError => {
+                            console.error('Fallback error:', fallbackError);
+                            showNotification('No profiles found matching your criteria', 'warning');
+                        });
+                    }
                 }
             }).catch(error => {
                 clearTimeout(messageTimeout);
@@ -1055,4 +1078,191 @@ function loadCollectedProfiles() {
             }
         });
     });
+}
+
+// Profile URLs Popup Functions
+let selectedProfiles = [];
+
+function showProfileUrlsPopup(profiles) {
+    console.log('Showing profile URLs popup with', profiles.length, 'profiles');
+
+    // Force close any existing modals first
+    const campaignModal = document.getElementById('campaign-modal');
+    if (campaignModal) {
+        campaignModal.style.display = 'none';
+        console.log('Closed campaign modal to show profile URLs popup');
+    }
+
+    // Store profiles for later use
+    selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
+
+    // Update count
+    document.getElementById('profile-count-display').textContent = profiles.length;
+
+    // Populate the list
+    const profilesList = document.getElementById('profile-urls-list');
+    profilesList.innerHTML = '';
+
+    profiles.forEach((profile, index) => {
+        const profileItem = document.createElement('div');
+        profileItem.className = 'profile-item';
+        // Extract clean name - try multiple sources
+        let cleanName = 'Unknown Name';
+
+        // First try the name field directly
+        if (profile.name && profile.name !== 'Status is reachable') {
+            cleanName = profile.name.trim();
+        }
+        // If name field is not useful, try extracting from location
+        else if (profile.location) {
+            // Extract just the name part before "View" or other text
+            const nameMatch = profile.location.match(/^([^V•\n]+?)(?:View|•|\n|$)/);
+            if (nameMatch) {
+                cleanName = nameMatch[1].trim();
+            }
+        }
+
+        // Clean up any remaining artifacts
+        cleanName = cleanName.replace(/\s+/g, ' ').trim();
+
+        const profilePicUrl = profile.profilePic || '';
+        console.log(`Profile ${index}: Name="${cleanName}", PicURL="${profilePicUrl}"`);
+
+        profileItem.innerHTML = `
+            <input type="checkbox" class="profile-checkbox" data-index="${index}" checked>
+            <div class="profile-pic">
+                ${profilePicUrl ?
+                    `<img src="${profilePicUrl}" alt="${cleanName}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #0073b1;">` :
+                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #0073b1; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px;">${cleanName.charAt(0).toUpperCase()}</div>`
+                }
+            </div>
+            <div class="profile-info">
+                <div class="profile-name" style="font-weight: bold; color: #333;">${cleanName}</div>
+                <div class="profile-connection" style="color: #666; font-size: 12px;">• 1st degree connection</div>
+            </div>
+        `;
+        profilesList.appendChild(profileItem);
+    });
+
+    // Add event listeners to checkboxes
+    document.querySelectorAll('.profile-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const index = parseInt(this.getAttribute('data-index'));
+            selectedProfiles[index].selected = this.checked;
+            updateSelectedCount();
+        });
+    });
+
+    // Show the modal with maximum visibility
+    const modal = document.getElementById('profile-urls-modal');
+    if (modal) {
+        // Force show with all possible overrides
+        modal.style.cssText = `
+            display: block !important;
+            position: fixed !important;
+            z-index: 999999 !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: rgba(0,0,0,0.5) !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        `;
+        console.log('Profile URLs modal displayed with force styling');
+
+        // Also ensure modal content is visible
+        const modalContent = modal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.style.cssText = `
+                background: white !important;
+                margin: 5% auto !important;
+                padding: 20px !important;
+                border-radius: 8px !important;
+                width: 90% !important;
+                max-width: 800px !important;
+                max-height: 80% !important;
+                overflow-y: auto !important;
+                position: relative !important;
+                z-index: 1000000 !important;
+            `;
+        }
+    } else {
+        console.error('Profile URLs modal not found!');
+    }
+    updateSelectedCount();
+}
+
+function closeProfileUrlsPopup() {
+    document.getElementById('profile-urls-modal').style.display = 'none';
+    selectedProfiles = [];
+}
+
+function selectAllProfiles() {
+    const checkboxes = document.querySelectorAll('.profile-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+    checkboxes.forEach((checkbox, index) => {
+        checkbox.checked = !allChecked;
+        selectedProfiles[index].selected = !allChecked;
+    });
+
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const selectedCount = selectedProfiles.filter(p => p.selected).length;
+    const button = document.getElementById('add-profiles-to-campaign');
+    button.textContent = `Add Selected to Campaign (${selectedCount})`;
+    button.disabled = selectedCount === 0;
+}
+
+function addProfilesDirectlyToCampaign(profiles) {
+    console.log('Adding profiles directly to campaign:', profiles.length);
+
+    // Add all profiles to collected profiles for the campaign
+    collectedProfiles.push(...profiles);
+
+    // Update the campaign wizard
+    updateCollectedProfilesList();
+    document.getElementById('collected-number').textContent = collectedProfiles.length;
+
+    // Show success message
+    showNotification(`Added ${profiles.length} profiles to campaign automatically`, 'success');
+
+    // Ensure campaign modal is visible and show step 3
+    const campaignModal = document.getElementById('campaign-modal');
+    if (campaignModal) {
+        campaignModal.style.display = 'block';
+        showStep(3, 'collecting');
+    }
+}
+
+function addSelectedProfilesToCampaign() {
+    const profilesToAdd = selectedProfiles.filter(p => p.selected);
+
+    if (profilesToAdd.length === 0) {
+        showNotification('Please select at least one profile', 'warning');
+        return;
+    }
+
+    // Add to collected profiles for the campaign
+    collectedProfiles.push(...profilesToAdd);
+
+    // Update the campaign wizard
+    updateCollectedProfilesList();
+    document.getElementById('collected-number').textContent = collectedProfiles.length;
+
+    // Close the popup
+    closeProfileUrlsPopup();
+
+    // Show success message
+    showNotification(`Added ${profilesToAdd.length} profiles to campaign`, 'success');
+
+    // Reopen campaign modal and show step 3
+    const campaignModal = document.getElementById('campaign-modal');
+    if (campaignModal) {
+        campaignModal.style.display = 'block';
+        showStep(3, 'collecting');
+    }
 }
