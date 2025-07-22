@@ -14,14 +14,22 @@ const CONSTANTS = {
 };
 
 const AppState = {
-    currentStep: 1, isCollecting: false, collectedProfiles: [], duplicateProfiles: [],
+    currentStep: 1, isAutoCollectionEnabled: true, collectedProfiles: [], duplicateProfiles: [],
     wizardInitialized: false, selectedProfiles: []
 };
 
 const DOMCache = {
     elements: new Map(),
-    get(id) { return this.elements.get(id) || this.cache(id); },
-    cache(id) { const el = document.getElementById(id); this.elements.set(id, el); return el; },
+    get(id) {
+        const cached = this.elements.get(id);
+        if (cached) return cached;
+        return this.cache(id);
+    },
+    cache(id) {
+        const el = document.getElementById(id);
+        this.elements.set(id, el);
+        return el;
+    },
     getAll(selector) { return document.querySelectorAll(selector); }
 };
 
@@ -31,6 +39,13 @@ const Utils = {
         status.textContent = message;
         status.className = `status ${type}`;
         setTimeout(() => { status.textContent = 'Ready'; status.className = 'status'; }, 3000);
+    },
+
+    updateCollectedCount: (count) => {
+        const collectedNumber = DOMCache.get('collected-number');
+        const mainCollectedNumber = DOMCache.get('main-collected-number');
+        if (collectedNumber) collectedNumber.textContent = count;
+        if (mainCollectedNumber) mainCollectedNumber.textContent = count;
     },
 
     extractCleanName: (profile) => {
@@ -228,7 +243,6 @@ const WizardManager = {
         AppState.currentStep = 1;
         AppState.collectedProfiles = [];
         AppState.duplicateProfiles = [];
-        AppState.isCollecting = false;
         const campaignNameInput = DOMCache.get('campaign-name');
         if (campaignNameInput) campaignNameInput.value = '';
         const elements = ['collected-number', 'collected-profiles-list'];
@@ -270,7 +284,6 @@ const WizardManager = {
             'show-network-filters': () => NetworkManager.openSearch(),
             'start-network-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startCollecting(); },
             'browse-connections': () => NetworkManager.browseConnections(),
-            'pause-collection': () => ProfileCollector.togglePause(),
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
             'cancel-duplicates': () => DuplicateManager.cancel(),
@@ -407,7 +420,7 @@ const RealTimeProfileHandler = {
     },
 
     handleRealTimeProfiles(profiles) {
-        if (!AppState.isCollecting) {
+        if (!AppState.isAutoCollectionEnabled) {
             return;
         }
 
@@ -475,12 +488,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         'select-all-profiles': ProfileURLModal.selectAll,
         'add-profiles-to-campaign': ProfileURLModal.addSelected,
         'save-settings': StorageAPI.saveSettings,
-        'save-messages': StorageAPI.saveMessages
+        'save-messages': StorageAPI.saveMessages,
+        'pause-collection': ProfileCollector.toggleAutoCollection,
+        'main-pause-collection': ProfileCollector.toggleAutoCollection
     };
 
     Object.entries(eventMap).forEach(([id, handler]) => {
         const element = DOMCache.get(id);
-        if (element) element.addEventListener('click', handler);
+        if (element) {
+            element.addEventListener('click', handler);
+        }
     });
 
     await Promise.all([
@@ -490,12 +507,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         ProfileManager.loadCount()
     ]);
 
-    AppState.isCollecting = false;
+    AppState.isAutoCollectionEnabled = true;
+
+    // Setup both auto collection buttons
     const pauseBtn = DOMCache.get('pause-collection');
-    if (pauseBtn) {
-        pauseBtn.textContent = 'START';
-        pauseBtn.className = 'btn btn-primary';
-    }
+    const mainPauseBtn = DOMCache.get('main-pause-collection');
+
+    [pauseBtn, mainPauseBtn].forEach((btn) => {
+        if (btn) {
+            btn.textContent = 'AUTO ON';
+            btn.className = 'btn btn-success';
+        }
+    });
 
     AutoCollectionHandler.hideAutoIndicator();
 });
@@ -624,43 +647,42 @@ const AutoCollectionHandler = {
     },
 
     handleAutoCollectionStarted() {
-        Utils.showNotification('🔄 Auto-detection started! Profiles will appear automatically.', 'success');
-
-        AppState.isCollecting = true;
-        const indicator = DOMCache.get('auto-detection-indicator');
-        if (indicator) {
-            indicator.style.display = 'flex';
-        }
-
+        // Only show modal if user is actively creating a campaign
         const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) {
-            campaignModal.style.display = 'block';
+        if (campaignModal && campaignModal.style.display === 'block') {
             WizardManager.showStep(3, 'collecting');
         }
-        const pauseBtn = DOMCache.get('pause-collection');
-        if (pauseBtn) {
-            pauseBtn.textContent = 'PAUSE';
-            pauseBtn.className = 'btn btn-warning';
-        }
 
+        // Initialize profile list if empty
         if (AppState.collectedProfiles.length === 0) {
             AppState.collectedProfiles = [];
             ProfileManager.updateList();
-            DOMCache.get('collected-number').textContent = '0';
+            Utils.updateCollectedCount('0');
         }
+
+        // Show that auto collection is working
+        Utils.showNotification('🔄 Auto-collecting profiles from this page...', 'info');
     },
 
     hideAutoIndicator() {
         const indicator = DOMCache.get('auto-detection-indicator');
+        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
         if (indicator) {
             indicator.style.display = 'none';
+        }
+        if (mainIndicator) {
+            mainIndicator.style.display = 'none';
         }
     },
 
     showAutoIndicator() {
         const indicator = DOMCache.get('auto-detection-indicator');
+        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
         if (indicator) {
             indicator.style.display = 'flex';
+        }
+        if (mainIndicator) {
+            mainIndicator.style.display = 'flex';
         }
     }
 };
@@ -710,15 +732,21 @@ const ProfileCollector = {
     },
 
     start() {
-        AppState.isCollecting = true;
+        AppState.isAutoCollectionEnabled = true;
 
         const pauseBtn = DOMCache.get('pause-collection');
-        if (pauseBtn) {
-            pauseBtn.textContent = 'PAUSE';
-            pauseBtn.className = 'btn btn-warning';
-        }
+        const mainPauseBtn = DOMCache.get('main-pause-collection');
+
+        [pauseBtn, mainPauseBtn].forEach((btn) => {
+            if (btn) {
+                btn.textContent = 'AUTO ON';
+                btn.className = 'btn btn-success';
+            }
+        });
+
+        AutoCollectionHandler.showAutoIndicator();
         this.startRealTimeCollection();
-        Utils.showNotification('🔄 Collection started! Navigate to LinkedIn and profiles will appear.', 'info');
+        Utils.showNotification('🔄 Auto collection enabled! Profiles will be collected automatically.', 'info');
     },
 
     async startRealTimeCollection() {
@@ -750,36 +778,55 @@ const ProfileCollector = {
         }
     },
 
-    togglePause() {
+    toggleAutoCollection() {
         const pauseBtn = DOMCache.get('pause-collection');
+        const mainPauseBtn = DOMCache.get('main-pause-collection');
 
-        if (!AppState.isCollecting) {
-            AppState.isCollecting = true;
-            pauseBtn.textContent = 'PAUSE';
-            pauseBtn.className = 'btn btn-warning';
-            AutoCollectionHandler.showAutoIndicator();
+        if (AppState.isAutoCollectionEnabled) {
+            // Disable auto collection
+            AppState.isAutoCollectionEnabled = false;
 
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'startRealTimeCollection' });
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'startAutoCollection' });
-                }
-            });
+            // Update both buttons
+            if (pauseBtn) {
+                pauseBtn.textContent = 'AUTO OFF';
+                pauseBtn.className = 'btn btn-secondary';
+            }
+            if (mainPauseBtn) {
+                mainPauseBtn.textContent = 'AUTO OFF';
+                mainPauseBtn.className = 'btn btn-secondary';
+            }
 
-            Utils.showNotification('🔄 Collection started! Profiles will appear automatically.', 'success');
-        } else {
-            AppState.isCollecting = false;
-            pauseBtn.textContent = 'START';
-            pauseBtn.className = 'btn btn-primary';
             AutoCollectionHandler.hideAutoIndicator();
 
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'stopRealTimeCollection' });
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'stopAutoCollection' });
+                    chrome.tabs.sendMessage(tabs[0].id, { action: 'disableAutoCollection' });
                 }
             });
-            Utils.showNotification('⏸️ Collection paused. Click START to continue.', 'info');
+
+            Utils.showNotification('🔴 Auto collection disabled. Profiles will not be collected automatically.', 'info');
+        } else {
+            // Enable auto collection
+            AppState.isAutoCollectionEnabled = true;
+
+            // Update both buttons
+            if (pauseBtn) {
+                pauseBtn.textContent = 'AUTO ON';
+                pauseBtn.className = 'btn btn-success';
+            }
+            if (mainPauseBtn) {
+                mainPauseBtn.textContent = 'AUTO ON';
+                mainPauseBtn.className = 'btn btn-success';
+            }
+
+            AutoCollectionHandler.showAutoIndicator();
+
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]) {
+                    chrome.tabs.sendMessage(tabs[0].id, { action: 'enableAutoCollection' });
+                }
+            });
+            Utils.showNotification('🟢 Auto collection enabled! Profiles will be collected automatically on LinkedIn pages.', 'success');
         }
     },
 

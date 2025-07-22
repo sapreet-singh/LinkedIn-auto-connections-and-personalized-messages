@@ -166,6 +166,24 @@ textarea {
     background-color: #c82333;
 }
 
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+}
+
 .empty-state {
     padding: 20px;
     text-align: center;
@@ -461,6 +479,33 @@ footer {
     margin-bottom: 20px;
     padding-bottom: 10px;
     border-bottom: 1px solid #e0e0e0;
+}
+
+.collection-status-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.collection-controls {
+    margin: 10px 0;
+}
+
+.auto-collection-info {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #e8f4fd;
+    border-radius: 4px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.auto-collection-info small {
+    color: #666;
+    line-height: 1.4;
 }
 
 .collected-profiles {

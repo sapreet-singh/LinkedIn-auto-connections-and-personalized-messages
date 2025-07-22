@@ -10,7 +10,14 @@ class LinkedInAutomation {
         this.actionDelay = 30000; // 30 seconds default
         this.dailyLimit = 50;
         this.todayCount = 0;
-        
+        this.isRealTimeMode = false;
+        this.isAutoCollecting = false;
+        this.isAutoCollectionEnabled = true; // Auto collection enabled by default
+        this.currentPageCollected = false;
+        this.autoProfileObserver = null;
+        this.autoCollectionTimeout = null;
+        this.processedProfiles = new Set();
+
         this.init();
     }
     
@@ -31,7 +38,7 @@ class LinkedInAutomation {
     }
 
     setupAutoDetection() {
-        if (this.isProfilePage()) {
+        if (this.isProfilePage() && this.isAutoCollectionEnabled) {
             setTimeout(() => {
                 this.startAutoCollection();
             }, 2000);
@@ -55,7 +62,7 @@ class LinkedInAutomation {
             if (window.location.href !== currentUrl) {
                 currentUrl = window.location.href;
                 setTimeout(() => {
-                    if (this.isProfilePage() && !this.isAutoCollecting) {
+                    if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
                         this.startAutoCollection();
                     }
                 }, 2000);
@@ -69,7 +76,7 @@ class LinkedInAutomation {
 
         window.addEventListener('popstate', () => {
             setTimeout(() => {
-                if (this.isProfilePage() && !this.isAutoCollecting) {
+                if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
                     this.startAutoCollection();
                 }
             }, 2000);
@@ -229,9 +236,21 @@ class LinkedInAutomation {
                 sendResponse({ success: true });
                 return true;
             case 'startAutoCollection':
-                if (!this.isAutoCollecting) {
+                if (!this.isAutoCollecting && this.isAutoCollectionEnabled) {
                     this.startAutoCollection();
                 }
+                sendResponse({ success: true });
+                return true;
+            case 'enableAutoCollection':
+                this.isAutoCollectionEnabled = true;
+                if (this.isProfilePage() && !this.isAutoCollecting) {
+                    this.startAutoCollection();
+                }
+                sendResponse({ success: true });
+                return true;
+            case 'disableAutoCollection':
+                this.isAutoCollectionEnabled = false;
+                this.stopAutoCollection();
                 sendResponse({ success: true });
                 return true;
             case 'searchByCompany':
@@ -529,6 +548,10 @@ class LinkedInAutomation {
     }
 
     sendProfilesRealTime(profiles) {
+        if (!this.isAutoCollectionEnabled) {
+            return;
+        }
+
         if (profiles.length > 0) {
             if (!chrome.runtime?.id) {
                 this.storeProfilesForPopup(profiles);

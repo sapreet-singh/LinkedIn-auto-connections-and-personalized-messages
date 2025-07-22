@@ -34,6 +34,23 @@
                 <button class="btn btn-secondary" id="collect-profiles">Collect Profiles from Current Page</button>
                 <button class="btn btn-secondary" id="view-collected">View Collected Profiles (<span id="profile-count">0</span>)</button>
             </div>
+
+            <div class="section">
+                <h3>Auto Profile Collection</h3>
+                <div class="collection-controls">
+                    <div class="auto-detection-indicator" id="main-auto-detection-indicator">
+                        <span class="indicator-dot"></span>
+                        <span>🔄 Auto-collecting profiles on LinkedIn pages...</span>
+                    </div>
+                    <div class="collection-status-main">
+                        <span>Collected: <span id="main-collected-number">0</span></span>
+                        <button class="btn btn-success" id="main-pause-collection">AUTO ON</button>
+                    </div>
+                    <div class="auto-collection-info">
+                        <small>Profiles are automatically collected when you visit LinkedIn search pages, connections, or network pages. Toggle to disable.</small>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Messages Tab -->
@@ -201,7 +218,7 @@
                     <div class="collection-status">
                         <div class="auto-detection-indicator" id="auto-detection-indicator" style="display: none;">
                             <span class="indicator-dot"></span>
-                            <span>🔄 Auto-detecting profiles...</span>
+                            <span>🔄 Auto-collecting profiles...</span>
                         </div>
                         <div class="collected-count">
                             <span>Collected: <span id="collected-number">0</span></span>
