@@ -19,14 +19,17 @@ class LinkedInAutomation {
     
     init() {
         console.log('LinkedIn Automation initialized');
-        
+
         // Listen for messages from background script
         chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             this.handleMessage(message, sendResponse);
         });
-        
+
         // Load settings
         this.loadSettings();
+
+        // Auto-detect and start collection when on LinkedIn pages
+        this.setupAutoDetection();
     }
     
     loadSettings() {
@@ -36,8 +39,203 @@ class LinkedInAutomation {
             this.todayCount = result.todayCount || 0;
         });
     }
+
+    setupAutoDetection() {
+        console.log('🔥 AUTO-DETECT: Setting up automatic profile detection...');
+
+        // Check if we're on a LinkedIn page that has profiles
+        if (this.isProfilePage()) {
+            console.log('🔥 AUTO-DETECT: Profile page detected, starting auto-collection...');
+
+            // Wait a moment for page to fully load
+            setTimeout(() => {
+                this.startAutoCollection();
+            }, 2000);
+        }
+
+        // Monitor for page changes (SPA navigation)
+        this.setupPageChangeMonitoring();
+    }
+
+    isProfilePage() {
+        const url = window.location.href;
+        return url.includes('linkedin.com/search/results/people') ||
+               url.includes('linkedin.com/search/people') ||
+               url.includes('linkedin.com/mynetwork') ||
+               url.includes('linkedin.com/connections') ||
+               (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result'));
+    }
+
+    setupPageChangeMonitoring() {
+        // Monitor URL changes for SPA navigation
+        let currentUrl = window.location.href;
+
+        const urlObserver = new MutationObserver(() => {
+            if (window.location.href !== currentUrl) {
+                currentUrl = window.location.href;
+                console.log('🔥 AUTO-DETECT: Page changed to:', currentUrl);
+
+                // Check if new page has profiles
+                setTimeout(() => {
+                    if (this.isProfilePage() && !this.isAutoCollecting) {
+                        console.log('🔥 AUTO-DETECT: New profile page detected, starting auto-collection...');
+                        this.startAutoCollection();
+                    }
+                }, 2000);
+            }
+        });
+
+        urlObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Also listen for popstate events
+        window.addEventListener('popstate', () => {
+            setTimeout(() => {
+                if (this.isProfilePage() && !this.isAutoCollecting) {
+                    console.log('🔥 AUTO-DETECT: Profile page detected via popstate, starting auto-collection...');
+                    this.startAutoCollection();
+                }
+            }, 2000);
+        });
+    }
+
+    async startAutoCollection() {
+        if (this.isAutoCollecting) {
+            console.log('🔥 AUTO-DETECT: Auto-collection already running, skipping...');
+            return;
+        }
+
+        this.isAutoCollecting = true;
+        console.log('🔥 AUTO-DETECT: Starting automatic profile collection...');
+
+        // Notify popup that auto-collection started
+        try {
+            chrome.runtime.sendMessage({
+                action: 'autoCollectionStarted',
+                url: window.location.href
+            });
+        } catch (error) {
+            console.log('🔥 AUTO-DETECT: Could not notify popup:', error);
+        }
+
+        // Start collecting profiles immediately
+        this.collectAndSendProfiles();
+
+        // Set up continuous monitoring for new profiles
+        this.setupContinuousMonitoring();
+    }
+
+    async collectAndSendProfiles() {
+        console.log('🔥 AUTO-COLLECT: Collecting profiles from current page...');
+
+        const profiles = await this.collectCurrentPageOnly();
+
+        if (profiles.length > 0) {
+            console.log(`🔥 AUTO-COLLECT: Found ${profiles.length} profiles, sending to popup...`);
+            this.sendProfilesRealTime(profiles);
+        } else {
+            console.log('🔥 AUTO-COLLECT: No profiles found on current page');
+        }
+    }
+
+    setupContinuousMonitoring() {
+        console.log('🔥 AUTO-MONITOR: Setting up continuous profile monitoring...');
+
+        // Set up observer to watch for new profiles being loaded
+        const observer = new MutationObserver((mutations) => {
+            let hasNewProfiles = false;
+
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Check if new profile cards were added
+                            const newProfileCards = node.querySelectorAll ?
+                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
+
+                            if (newProfileCards.length > 0) {
+                                hasNewProfiles = true;
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (hasNewProfiles) {
+                // Debounce the collection to avoid too many calls
+                clearTimeout(this.autoCollectionTimeout);
+                this.autoCollectionTimeout = setTimeout(() => {
+                    this.collectNewProfilesAuto();
+                }, 1500);
+            }
+        });
+
+        // Start observing
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Store observer reference for cleanup
+        this.autoProfileObserver = observer;
+    }
+
+    async collectNewProfilesAuto() {
+        if (!this.isAutoCollecting) return;
+
+        console.log('🔥 AUTO-MONITOR: Collecting new profiles...');
+
+        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
+        const newProfiles = [];
+
+        profileCards.forEach((card) => {
+            // Skip if already processed
+            if (card.dataset.autoProcessed) return;
+
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                newProfiles.push(profile);
+                card.dataset.autoProcessed = 'true'; // Mark as processed
+            }
+        });
+
+        if (newProfiles.length > 0) {
+            console.log(`🔥 AUTO-MONITOR: Found ${newProfiles.length} new profiles`);
+            this.sendProfilesRealTime(newProfiles);
+        }
+    }
+
+    stopAutoCollection() {
+        console.log('🔥 AUTO-COLLECT: Stopping auto-collection...');
+
+        this.isAutoCollecting = false;
+
+        // Clean up observers
+        if (this.autoProfileObserver) {
+            this.autoProfileObserver.disconnect();
+            this.autoProfileObserver = null;
+        }
+
+        // Clear timeouts
+        if (this.autoCollectionTimeout) {
+            clearTimeout(this.autoCollectionTimeout);
+            this.autoCollectionTimeout = null;
+        }
+
+        console.log('🔥 AUTO-COLLECT: Auto-collection stopped');
+    }
     
     handleMessage(message, sendResponse) {
+        console.log('🚀 CONTENT: Received message:', message);
+
+        if (!message || !message.action) {
+            console.log('🚀 CONTENT: Invalid message format');
+            sendResponse({ error: 'Invalid message format' });
+            return;
+        }
+
         switch (message.action) {
             case 'startAutomation':
                 this.startAutomation(message.campaign);
@@ -55,6 +253,52 @@ class LinkedInAutomation {
                     sendResponse({ profiles });
                 });
                 return true; // Keep message channel open for async response
+            case 'startRealTimeCollection':
+                console.log('🚀 CONTENT: Starting real-time collection mode');
+                this.isRealTimeMode = true;
+                this.currentPageCollected = false;
+
+                // Wait a moment for page to load, then collect
+                setTimeout(() => {
+                    this.collectCurrentPageOnly().then(profiles => {
+                        console.log('🚀 CONTENT: Current page collection found:', profiles.length, 'profiles');
+                        if (profiles.length > 0) {
+                            this.sendProfilesRealTime(profiles);
+                            this.currentPageCollected = true;
+                        } else {
+                            console.log('🚀 CONTENT: No profiles found on current page, trying alternative methods...');
+                            // Try alternative collection methods
+                            const alternativeProfiles = this.extractProfilesAlternative();
+                            if (alternativeProfiles.length > 0) {
+                                console.log('🚀 CONTENT: Alternative method found:', alternativeProfiles.length, 'profiles');
+                                this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
+                            }
+                        }
+                    }).catch(error => {
+                        console.error('🚀 CONTENT: Error in real-time collection:', error);
+                    });
+                }, 1000);
+
+                sendResponse({ success: true });
+                return true;
+            case 'stopRealTimeCollection':
+                console.log('🚀 CONTENT: Stopping real-time collection mode');
+                this.isRealTimeMode = false;
+                this.currentPageCollected = false;
+                sendResponse({ success: true });
+                return true;
+            case 'stopAutoCollection':
+                console.log('🔥 AUTO-COLLECT: Stopping auto-collection mode');
+                this.stopAutoCollection();
+                sendResponse({ success: true });
+                return true;
+            case 'startAutoCollection':
+                console.log('🔥 AUTO-COLLECT: Starting auto-collection mode via message');
+                if (!this.isAutoCollecting) {
+                    this.startAutoCollection();
+                }
+                sendResponse({ success: true });
+                return true;
             case 'searchByCompany':
                 this.searchByCompany(message.companyName).then(result => {
                     sendResponse(result);
@@ -72,7 +316,8 @@ class LinkedInAutomation {
                 });
                 return true;
             default:
-                sendResponse({ error: 'Unknown action' });
+                console.log('🚀 CONTENT: Received unknown action:', message.action);
+                sendResponse({ error: 'Unknown action: ' + message.action });
         }
     }
     
@@ -327,10 +572,330 @@ class LinkedInAutomation {
             if (profileCards.length > 0) break;
         }
 
-        profileCards.forEach(card => {
+        profileCards.forEach((card) => {
             const profile = this.extractProfileFromCard(card);
             if (profile?.name && profile?.url) {
                 profiles.push(profile);
+                // Note: Real-time sending is handled separately in collectCurrentPageOnly()
+            }
+        });
+
+        // If no profiles found with main selectors, try alternative approach
+        if (profiles.length === 0) {
+            console.log('No profiles found with main selectors, trying alternative approach...');
+            const alternativeProfiles = this.extractProfilesAlternative();
+            profiles.push(...alternativeProfiles);
+            // Note: Real-time sending is handled separately in collectCurrentPageOnly()
+        }
+
+        return profiles;
+    }
+
+    // Collect only current page profiles (max 10) - for page-by-page collection
+    async collectCurrentPageOnly() {
+        console.log('🚀 CONTENT: Collecting current page only (max 10 profiles)...');
+        console.log('🚀 CONTENT: Current URL:', window.location.href);
+
+        const profiles = [];
+
+        // Check if we're on My Network page
+        if (window.location.href.includes('/mynetwork/')) {
+            console.log('🚀 CONTENT: Detected My Network page');
+            const networkProfiles = await this.collectNetworkProfiles();
+            return networkProfiles.slice(0, 10); // Limit to 10
+        }
+
+        // Find profile cards using common selectors
+        const selectors = [
+            '.reusable-search__result-container',
+            '[data-chameleon-result-urn]',
+            '.search-result',
+            '.entity-result',
+            'li[data-reusable-search-result]',
+            '.search-results-container li'
+        ];
+
+        let profileCards = [];
+        for (const selector of selectors) {
+            profileCards = document.querySelectorAll(selector);
+            console.log(`🚀 CONTENT: Selector "${selector}" found ${profileCards.length} elements`);
+            if (profileCards.length > 0) break;
+        }
+
+        // If no cards found with main selectors, try to find any elements with profile links
+        if (profileCards.length === 0) {
+            console.log('🚀 CONTENT: No cards found with main selectors, trying profile links...');
+            const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+            console.log(`🚀 CONTENT: Found ${profileLinks.length} profile links`);
+
+            // Group profile links by their parent containers
+            const containers = new Set();
+            profileLinks.forEach(link => {
+                const container = link.closest('li, div[class*="result"], article');
+                if (container) containers.add(container);
+            });
+            profileCards = Array.from(containers);
+            console.log(`🚀 CONTENT: Grouped into ${profileCards.length} containers`);
+        }
+
+        // Limit to 10 profiles per page (LinkedIn's standard)
+        const maxProfiles = Math.min(profileCards.length, 10);
+        console.log(`🚀 CONTENT: Found ${profileCards.length} cards, limiting to ${maxProfiles}`);
+
+        for (let i = 0; i < maxProfiles; i++) {
+            const card = profileCards[i];
+            console.log(`🚀 CONTENT: Processing card ${i + 1}/${maxProfiles}`);
+
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                console.log(`🚀 CONTENT: Successfully extracted profile: ${profile.name}`);
+                profiles.push(profile);
+
+                // Send each profile immediately for real-time updates
+                this.sendProfilesRealTime([profile]);
+            } else {
+                console.log(`🚀 CONTENT: Failed to extract profile from card ${i + 1}`);
+            }
+        }
+
+        console.log(`🚀 CONTENT: Collected ${profiles.length} profiles from current page`);
+        return profiles;
+    }
+
+    // Send profiles to popup in real-time
+    sendProfilesRealTime(profiles) {
+        if (profiles.length > 0) {
+            console.log('🚀 CONTENT: Sending profiles in real-time:', profiles.length);
+            console.log('🚀 CONTENT: Profile sample:', profiles[0]);
+
+            // Send message to popup to add profiles immediately
+            try {
+                chrome.runtime.sendMessage({
+                    action: 'addProfilesRealTime',
+                    profiles: profiles
+                }).then(response => {
+                    console.log('🚀 CONTENT: Popup responded successfully:', response);
+                }).catch(error => {
+                    console.log('🚀 CONTENT: Could not send real-time update to popup:', error);
+                    // Try alternative method - store in local storage for popup to pick up
+                    this.storeProfilesForPopup(profiles);
+                });
+            } catch (error) {
+                console.error('🚀 CONTENT: Error sending message:', error);
+                this.storeProfilesForPopup(profiles);
+            }
+        }
+    }
+
+    // Alternative method to communicate with popup via storage
+    storeProfilesForPopup(profiles) {
+        try {
+            chrome.storage.local.get(['realTimeProfiles'], (result) => {
+                const existingProfiles = result.realTimeProfiles || [];
+                const updatedProfiles = [...existingProfiles, ...profiles];
+                chrome.storage.local.set({
+                    realTimeProfiles: updatedProfiles,
+                    lastProfileUpdate: Date.now()
+                });
+                console.log('🚀 CONTENT: Stored profiles in local storage as fallback');
+            });
+        } catch (error) {
+            console.error('🚀 CONTENT: Error storing profiles:', error);
+        }
+    }
+
+    // Start continuous profile collection (monitors page changes)
+    startContinuousCollection() {
+        console.log('Starting continuous profile collection...');
+
+        // Set up observer to watch for new profiles being loaded
+        const observer = new MutationObserver((mutations) => {
+            let hasNewProfiles = false;
+
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Check if new profile cards were added
+                            const newProfileCards = node.querySelectorAll ?
+                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
+
+                            if (newProfileCards.length > 0) {
+                                hasNewProfiles = true;
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (hasNewProfiles) {
+                // Debounce the collection to avoid too many calls
+                clearTimeout(this.collectionTimeout);
+                this.collectionTimeout = setTimeout(() => {
+                    this.collectNewProfiles();
+                }, 1000);
+            }
+        });
+
+        // Start observing
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Store observer reference for cleanup
+        this.profileObserver = observer;
+    }
+
+    // Collect only new profiles that haven't been processed
+    async collectNewProfiles() {
+        console.log('Collecting new profiles...');
+
+        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
+        const newProfiles = [];
+
+        profileCards.forEach((card) => {
+            // Skip if already processed
+            if (card.dataset.processed) return;
+
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                newProfiles.push(profile);
+                card.dataset.processed = 'true'; // Mark as processed
+            }
+        });
+
+        if (newProfiles.length > 0) {
+            console.log(`Found ${newProfiles.length} new profiles`);
+            this.sendProfilesRealTime(newProfiles);
+        }
+    }
+
+    // Fix profile data by extracting correct information from mixed fields
+    fixProfileData(profile) {
+        // If name is "Status is offline" or similar, try to extract from location
+        if (!profile.name ||
+            profile.name.includes('Status is') ||
+            profile.name.includes('offline') ||
+            profile.name.includes('reachable') ||
+            profile.name.length < 3) {
+
+            // Try to extract name from location field
+            if (profile.location) {
+                // Look for pattern: "Name View Name's profile"
+                const nameMatch = profile.location.match(/^([A-Za-z\s]+?)(?:View|•|\n)/);
+                if (nameMatch && nameMatch[1].trim().length > 2) {
+                    profile.name = nameMatch[1].trim();
+                }
+
+                // Extract title if it's in the location field
+                const titleMatch = profile.location.match(/Full Stack Developer|Software Engineer|Developer|Engineer|Manager|Director|CEO|CTO|VP|President/i);
+                if (titleMatch && !profile.title) {
+                    profile.title = titleMatch[0];
+                }
+
+                // Extract location (city, country) from the mixed content
+                const locationMatch = profile.location.match(/([A-Za-z\s]+,\s*[A-Za-z\s]+)(?:\n|$)/);
+                if (locationMatch) {
+                    const cleanLocation = locationMatch[1].trim();
+                    // Only update if it looks like a real location
+                    if (cleanLocation.includes(',') && !cleanLocation.includes('View')) {
+                        profile.location = cleanLocation;
+                    }
+                }
+            }
+        }
+
+        // Clean up title field if it contains connection info
+        if (profile.title && profile.title.includes('degree connection')) {
+            // Try to find actual title in the location field
+            if (profile.location) {
+                const titleMatch = profile.location.match(/\n\s*([A-Za-z\s]+(?:Developer|Engineer|Manager|Director|CEO|CTO|VP|President|Analyst|Consultant|Specialist)[A-Za-z\s]*)/i);
+                if (titleMatch) {
+                    profile.title = titleMatch[1].trim();
+                } else {
+                    profile.title = ''; // Clear invalid title
+                }
+            } else {
+                profile.title = ''; // Clear invalid title
+            }
+        }
+
+        // Extract company from title if format is "Title at Company"
+        if (profile.title && profile.title.includes(' at ') && !profile.company) {
+            const parts = profile.title.split(' at ');
+            if (parts.length === 2) {
+                profile.title = parts[0].trim();
+                profile.company = parts[1].trim();
+            }
+        }
+    }
+
+    // Alternative profile extraction method when main selectors fail
+    extractProfilesAlternative() {
+        const profiles = [];
+
+        // Look for any links that contain LinkedIn profile URLs
+        const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+        console.log(`Found ${profileLinks.length} profile links using alternative method`);
+
+        profileLinks.forEach(link => {
+            // Skip if this link is already processed or doesn't look like a profile link
+            if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
+                return;
+            }
+
+            // Mark as processed to avoid duplicates
+            link.classList.add('processed');
+
+            const profile = {
+                name: '',
+                url: link.href,
+                company: '',
+                title: '',
+                location: '',
+                industry: '',
+                profilePic: '',
+                collectedAt: new Date().toISOString()
+            };
+
+            // Extract name from link text or nearby elements
+            let nameText = link.textContent.trim();
+            if (!nameText || nameText.includes('View') || nameText.includes('Status') || nameText.length < 3) {
+                // Look for name in parent or sibling elements
+                const parent = link.closest('li, div, article');
+                if (parent) {
+                    const nameElements = parent.querySelectorAll('span, h3, h4, .name, [data-anonymize="person-name"]');
+                    for (const el of nameElements) {
+                        const text = el.textContent.trim();
+                        if (text && text.length > 2 && !text.includes('Status') && !text.includes('View') && text.split(' ').length >= 2) {
+                            nameText = text;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (nameText && nameText.length > 2) {
+                profile.name = nameText;
+
+                // Clean URL
+                if (profile.url.includes('?')) {
+                    profile.url = profile.url.split('?')[0];
+                }
+                profile.url = profile.url.replace(/\/$/, '');
+
+                // Try to find profile picture
+                const parent = link.closest('li, div, article');
+                if (parent) {
+                    const img = parent.querySelector('img[src*="http"]');
+                    if (img && img.src && !img.src.includes('data:image')) {
+                        profile.profilePic = img.src;
+                    }
+                }
+
+                profiles.push(profile);
+                console.log('Alternative extraction found profile:', profile.name);
             }
         });
 
@@ -400,18 +965,63 @@ class LinkedInAutomation {
             }
 
             if (nameLink) {
-                profile.name = nameLink.textContent.trim();
+                let nameText = nameLink.textContent.trim();
+
+                // Clean the name text - remove unwanted parts
+                if (nameText.includes('View') && nameText.includes('profile')) {
+                    // Extract name before "View" text
+                    const match = nameText.match(/^(.+?)(?:View|•|\n)/);
+                    if (match) {
+                        nameText = match[1].trim();
+                    }
+                }
+
+                profile.name = nameText;
                 profile.url = nameLink.href || '';
             } else {
-                // Fallback: look for name in span elements
-                const nameSpan = card.querySelector('span[aria-hidden="true"]') ||
-                               card.querySelector('.t-16.t-black.t-bold') ||
-                               card.querySelector('[data-anonymize="person-name"] span');
+                // Fallback: look for name in span elements with better selectors
+                const nameSelectors = [
+                    'span[aria-hidden="true"]',
+                    '.t-16.t-black.t-bold',
+                    '[data-anonymize="person-name"] span',
+                    '.entity-result__title-text span',
+                    '.search-result__result-link span',
+                    '.artdeco-entity-lockup__title span',
+                    'span.t-16',
+                    'span.t-bold'
+                ];
+
+                let nameSpan = null;
+                for (const selector of nameSelectors) {
+                    nameSpan = card.querySelector(selector);
+                    if (nameSpan && nameSpan.textContent.trim() &&
+                        !nameSpan.textContent.includes('Status') &&
+                        !nameSpan.textContent.includes('View') &&
+                        nameSpan.textContent.length > 2) {
+                        break;
+                    }
+                    nameSpan = null;
+                }
 
                 if (nameSpan) {
                     profile.name = nameSpan.textContent.trim();
                     const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
                     if (parentLink) profile.url = parentLink.href;
+                } else {
+                    // Last resort: try to find any text that looks like a name
+                    const allLinks = card.querySelectorAll('a[href*="/in/"]');
+                    for (const link of allLinks) {
+                        const text = link.textContent.trim();
+                        if (text && text.length > 2 &&
+                            !text.includes('Status') &&
+                            !text.includes('View') &&
+                            !text.includes('•') &&
+                            text.split(' ').length >= 2) {
+                            profile.name = text;
+                            profile.url = link.href;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -426,18 +1036,26 @@ class LinkedInAutomation {
                 profile.url = profile.url.replace(/\/$/, '');
             }
 
-            // Extract profile picture
+            // Extract profile picture with better selectors
             const imgSelectors = [
                 '.entity-result__image img',
                 '.presence-entity__image img',
+                '.discover-entity-type-card__image img',
+                '.mn-person-card__picture img',
+                '.artdeco-entity-lockup__image img',
                 'img[alt*="profile"]',
                 'img[alt*="Photo"]',
+                'img[data-ghost-classes]',
+                'img[src*="profile"]',
                 'img'
             ];
 
             for (const selector of imgSelectors) {
                 const imgElement = card.querySelector(selector);
-                if (imgElement?.src) {
+                if (imgElement?.src &&
+                    !imgElement.src.includes('data:image') &&
+                    !imgElement.src.includes('ghost') &&
+                    imgElement.src.includes('http')) {
                     profile.profilePic = imgElement.src;
                     break;
                 }
@@ -484,8 +1102,22 @@ class LinkedInAutomation {
                 }
             }
 
+            // Post-process and fix the extracted data
+            this.fixProfileData(profile);
+
+            // Debug logging
+            console.log('Extracted profile data:', {
+                name: profile.name,
+                url: profile.url,
+                title: profile.title,
+                company: profile.company,
+                location: profile.location ? profile.location.substring(0, 100) + '...' : '',
+                profilePic: profile.profilePic ? 'Yes' : 'No'
+            });
+
             // Validate profile
             if (!profile.name || !profile.url || !profile.url.includes('/in/')) {
+                console.log('Profile validation failed:', { name: profile.name, url: profile.url });
                 return null;
             }
 
@@ -519,7 +1151,7 @@ class LinkedInAutomation {
 
 
 
-    // Search network connections with auto-scrolling
+    // Search network connections with auto-scrolling and real-time updates
     async searchNetwork(criteria) {
         try {
             console.log('Searching network with criteria:', criteria);
@@ -528,6 +1160,9 @@ class LinkedInAutomation {
             const profiles = [];
             let scrollAttempts = 0;
             const maxScrollAttempts = 5;
+
+            // Start continuous collection for real-time updates
+            this.startContinuousCollection();
 
             if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
                 console.log('Processing search results page...');
@@ -640,11 +1275,16 @@ class LinkedInAutomation {
                 }
 
                 connectionCards.forEach((card, index) => {
-                    if (index < 10) { // Only process first 10 to avoid overwhelming
+                    if (index < 20) { // Process more profiles for better real-time experience
                         const profile = this.extractProfileFromCard(card, true); // Use unified extraction
                         if (profile?.name && profile?.url) {
                             profile.source = 'connections';
                             profiles.push(profile);
+
+                            // Send profiles in real-time (every 2 profiles or immediately for first few)
+                            if (profiles.length <= 3 || profiles.length % 2 === 0) {
+                                this.sendProfilesRealTime([profile]);
+                            }
                         }
                     }
                 });
@@ -689,15 +1329,27 @@ class LinkedInAutomation {
 }
 
 // Initialize the automation when the page loads
-console.log('LinkedIn content script loading...');
+console.log('🚀 CONTENT: LinkedIn content script loading...');
+
+// Suppress permission policy violation errors (these are normal LinkedIn security restrictions)
+const originalError = console.error;
+console.error = function(...args) {
+    const message = args.join(' ');
+    if (message.includes('Permissions policy violation') ||
+        message.includes('unload is not allowed')) {
+        // Suppress these specific LinkedIn security errors
+        return;
+    }
+    originalError.apply(console, args);
+};
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOM loaded, initializing LinkedIn automation...');
+        console.log('🚀 CONTENT: DOM loaded, initializing LinkedIn automation...');
         window.linkedInAutomation = new LinkedInAutomation();
     });
 } else {
-    console.log('DOM already loaded, initializing LinkedIn automation...');
+    console.log('🚀 CONTENT: DOM already loaded, initializing LinkedIn automation...');
     window.linkedInAutomation = new LinkedInAutomation();
 }
 
