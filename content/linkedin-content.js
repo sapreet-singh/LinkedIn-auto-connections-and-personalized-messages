@@ -30,11 +30,10 @@ class LinkedInAutomation {
     }
     
     loadSettings() {
-        chrome.storage.local.get(['actionDelay', 'dailyLimit', 'todayCount'], (result) => {
-            this.actionDelay = (result.actionDelay || 30) * 1000;
-            this.dailyLimit = result.dailyLimit || 50;
-            this.todayCount = result.todayCount || 0;
-        });
+        // Use default settings without storage
+        this.actionDelay = 30 * 1000; // 30 seconds
+        this.dailyLimit = 50;
+        this.todayCount = 0;
     }
 
     setupAutoDetection() {
@@ -305,7 +304,6 @@ class LinkedInAutomation {
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-                chrome.storage.local.set({ todayCount: this.todayCount });
                 if (i < connectButtons.length - 1) {
                     await this.delay(this.actionDelay);
                 }
@@ -401,33 +399,32 @@ class LinkedInAutomation {
     
     async sendCustomMessage(personInfo, resolve, reject) {
         try {
-            chrome.storage.local.get(['connectionMessage'], async (result) => {
-                const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
-                const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
+            // Use default message template without storage
+            const messageTemplate = 'Hi {firstName}, I\'d love to connect with you!';
+            const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
 
-                const messageTextarea = document.querySelector('#custom-message') ||
-                                       document.querySelector('textarea[name="message"]') ||
-                                       document.querySelector('.send-invite__custom-message textarea');
+            const messageTextarea = document.querySelector('#custom-message') ||
+                                   document.querySelector('textarea[name="message"]') ||
+                                   document.querySelector('.send-invite__custom-message textarea');
 
-                if (messageTextarea) {
-                    messageTextarea.value = personalizedMessage;
-                    messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            if (messageTextarea) {
+                messageTextarea.value = personalizedMessage;
+                messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-                    setTimeout(() => {
-                        const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
-                                         document.querySelector('.send-invite__actions button[aria-label*="Send"]');
+                setTimeout(() => {
+                    const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
+                                     document.querySelector('.send-invite__actions button[aria-label*="Send"]');
 
-                        if (sendButton) {
-                            sendButton.click();
-                            resolve();
-                        } else {
-                            reject(new Error('Could not find send button for custom message'));
-                        }
-                    }, 500);
-                } else {
-                    reject(new Error('Could not find message textarea'));
-                }
-            });
+                    if (sendButton) {
+                        sendButton.click();
+                        resolve();
+                    } else {
+                        reject(new Error('Could not find send button for custom message'));
+                    }
+                }, 500);
+            } else {
+                reject(new Error('Could not find message textarea'));
+            }
         } catch (error) {
             reject(error);
         }
@@ -539,18 +536,8 @@ class LinkedInAutomation {
     }
 
     storeProfilesForPopup(profiles) {
-        try {
-            chrome.storage.local.get(['realTimeProfiles'], (result) => {
-                const existingProfiles = result.realTimeProfiles || [];
-                const updatedProfiles = [...existingProfiles, ...profiles];
-                chrome.storage.local.set({
-                    realTimeProfiles: updatedProfiles,
-                    lastProfileUpdate: Date.now()
-                });
-            });
-        } catch (error) {
-            console.error('Error storing profiles:', error);
-        }
+        // Storage removed - profiles are handled in memory only
+        console.log('Profiles collected:', profiles.length);
     }
 
     // Removed duplicate startContinuousCollection() and collectNewProfiles() - functionality exists in setupContinuousMonitoring() and collectNewProfilesAuto()

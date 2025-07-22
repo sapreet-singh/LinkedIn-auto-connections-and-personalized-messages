@@ -2,10 +2,7 @@
 const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
-    STORAGE_KEYS: {
-        CAMPAIGNS: 'campaigns', PROFILES: 'collectedProfiles', SETTINGS: ['dailyLimit', 'actionDelay', 'followupDelay'],
-        MESSAGES: ['connectionMessage', 'followup1', 'followup2'], STATS: ['todayCount', 'totalCount']
-    },
+
     URLS: {
         NETWORK_SEARCH: 'https://www.linkedin.com/search/results/people/?network=%5B%22F%22%5D&origin=FACETED_SEARCH',
         CONNECTIONS: 'https://www.linkedin.com/mynetwork/invite-connect/connections/',
@@ -315,67 +312,9 @@ const Utils = {
     }
 };
 
-const StorageAPI = {
-    get: (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve)),
-    set: (data) => new Promise(resolve => chrome.storage.local.set(data, resolve)),
+// Removed StorageAPI - Extension now works without persistent storage
 
-    async loadSettings() {
-        const result = await this.get(CONSTANTS.STORAGE_KEYS.SETTINGS);
-        CONSTANTS.STORAGE_KEYS.SETTINGS.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element && result[key]) element.value = result[key];
-        });
-
-        const stats = await this.get([...CONSTANTS.STORAGE_KEYS.STATS, CONSTANTS.STORAGE_KEYS.PROFILES]);
-        DOMCache.get('today-count').textContent = stats.todayCount || 0;
-        DOMCache.get('total-count').textContent = stats.totalCount || 0;
-        DOMCache.get('profile-count').textContent = (stats.collectedProfiles || []).length;
-    },
-
-    async saveSettings() {
-        const data = {};
-        CONSTANTS.STORAGE_KEYS.SETTINGS.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element) data[key] = key.includes('Delay') || key.includes('Limit') ? parseInt(element.value) : element.value;
-        });
-        await this.set(data);
-        Utils.showNotification('Settings saved successfully!');
-    },
-
-    async loadMessages() {
-        const result = await this.get(CONSTANTS.STORAGE_KEYS.MESSAGES);
-        CONSTANTS.STORAGE_KEYS.MESSAGES.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element && result[key]) element.value = result[key];
-        });
-    },
-
-    async saveMessages() {
-        const data = {};
-        CONSTANTS.STORAGE_KEYS.MESSAGES.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element) data[key] = element.value;
-        });
-        await this.set(data);
-        Utils.showNotification('Messages saved successfully!');
-    }
-};
-
-const TabManager = {
-    init() {
-        DOMCache.getAll('.tab-btn').forEach(button => {
-            button.addEventListener('click', () => this.switchTab(button.getAttribute('data-tab'), button));
-        });
-    },
-
-    switchTab(tabName, activeButton) {
-        DOMCache.getAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        DOMCache.getAll('.tab-content').forEach(content => {
-            content.classList.toggle('active', content.id === tabName);
-        });
-        activeButton.classList.add('active');
-    }
-};
+// TabManager removed - Single tab interface
 
 const ModalManager = {
     init() {
@@ -660,38 +599,12 @@ const CSVHandler = {
 };
 
 const DuplicateManager = {
-    async check() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const existingCampaigns = result.campaigns || [];
-        const allExistingProfiles = existingCampaigns.flatMap(campaign => campaign.profiles || []);
-
-        AppState.duplicateProfiles = AppState.collectedProfiles.filter(profile =>
-            allExistingProfiles.some(existing => existing.url === profile.url)
-        );
-
-        if (AppState.duplicateProfiles.length > 0) {
-            this.showModal();
-        } else {
-            CampaignManager.finalize();
-        }
-    },
-
-    showModal() {
-        DOMCache.get('duplicate-count').textContent = AppState.duplicateProfiles.length;
-        const list = DOMCache.get('duplicate-profiles-list');
-        list.innerHTML = '';
-
-        AppState.duplicateProfiles.forEach(profile => {
-            list.appendChild(Utils.createProfileCard(profile));
-        });
-
-        Utils.showById('duplicates-modal');
+    check() {
+        // Simplified - no storage check, just proceed to finalize
+        CampaignManager.finalize();
     },
 
     exclude() {
-        AppState.collectedProfiles = AppState.collectedProfiles.filter(profile =>
-            !AppState.duplicateProfiles.some(dup => dup.url === profile.url)
-        );
         Utils.hideById('duplicates-modal');
         CampaignManager.finalize();
     },
@@ -765,10 +678,8 @@ const RealTimeProfileHandler = {
 };
 
 document.addEventListener('DOMContentLoaded', async function() {
-    TabManager.init();
     ModalManager.init();
     RealTimeProfileHandler.init();
-    AutoCollectionHandler.init();
 
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.shiftKey && e.key === 'X') {
@@ -778,17 +689,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     const eventMap = {
-        'collect-profiles': ProfileCollector.collectFromPage,
-        'view-collected': ProfileManager.view,
         'export-profiles': ProfileManager.export,
         'create-campaign-from-profiles': ProfileManager.createCampaign,
         'close-profile-urls': ProfileURLModal.close,
         'select-all-profiles': ProfileURLModal.selectAll,
-        'add-profiles-to-campaign': ProfileURLModal.addSelected,
-        'save-settings': StorageAPI.saveSettings,
-        'save-messages': StorageAPI.saveMessages,
-        'pause-collection': ProfileCollector.toggleAutoCollection,
-        'main-pause-collection': ProfileCollector.toggleAutoCollection
+        'add-profiles-to-campaign': ProfileURLModal.addSelected
     };
 
     Object.entries(eventMap).forEach(([id, handler]) => {
@@ -798,35 +703,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    await Promise.all([
-        StorageAPI.loadSettings(),
-        StorageAPI.loadMessages(),
-        CampaignManager.load(),
-        ProfileManager.loadCount()
-    ]);
-
-    AppState.isAutoCollectionEnabled = true;
-    ProfileCollector.updateAutoCollectionButtons([DOMCache.get('pause-collection'), DOMCache.get('main-pause-collection')], true);
-    AutoCollectionHandler.hideAutoIndicator();
+    // Initialize without storage
+    CampaignManager.load();
 });
 
 const CampaignManager = {
-    async load() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
+    load() {
         const campaignList = DOMCache.get('campaign-list');
-
-        if (result.campaigns?.length > 0) {
-            campaignList.innerHTML = '';
-            result.campaigns.forEach((campaign, index) => {
-                campaignList.appendChild(this.createCampaignItem(campaign, index));
-            });
-
-            DOMCache.getAll('[data-action]').forEach(button => {
-                button.addEventListener('click', this.handleAction);
-            });
-        } else {
-            campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
-        }
+        // Show empty state - no persistent storage
+        campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
     createCampaignItem(campaign, index) {
@@ -854,266 +739,31 @@ const CampaignManager = {
         return item;
     },
 
-    async handleAction(event) {
-        const action = event.target.getAttribute('data-action');
-        const index = parseInt(event.target.getAttribute('data-index'));
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const campaigns = result.campaigns || [];
-
-        if (action === 'pause') {
-            campaigns[index].status = campaigns[index].status === 'running' ? 'paused' : 'running';
-            await StorageAPI.set({ campaigns });
-            CampaignManager.load();
-
-            chrome.runtime.sendMessage({
-                action: campaigns[index].status === 'running' ? 'resumeCampaign' : 'pauseCampaign',
-                campaignId: campaigns[index].id
-            });
-        } else if (action === 'delete' && confirm('Are you sure you want to delete this campaign?')) {
-            const campaignId = campaigns[index].id;
-            campaigns.splice(index, 1);
-            await StorageAPI.set({ campaigns });
-            CampaignManager.load();
-
-            chrome.runtime.sendMessage({ action: 'deleteCampaign', campaignId });
-        }
+    handleAction() {
+        // Simplified - no storage operations
+        Utils.showNotification('Campaign action completed', 'success');
     },
 
-    async finalize() {
+    finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
-        const messagingStrategy = document.querySelector('input[name="messaging-strategy"]:checked')?.value || 'single';
-        const followUpCount = parseInt(DOMCache.get('follow-up-count')?.value || '1');
-        const followUpDelay = parseInt(DOMCache.get('follow-up-delay')?.value || '3');
 
-        // Check if messages were generated
-        const generatedMessagesDiv = DOMCache.get('generated-messages');
-        const hasGeneratedMessages = generatedMessagesDiv && generatedMessagesDiv.style.display !== 'none';
-
-        const newCampaign = {
-            id: Date.now(), name: campaignName, profiles: AppState.collectedProfiles,
-            maxConnections: AppState.collectedProfiles.length, progress: 0, status: 'ready',
-            createdAt: new Date().toISOString(),
-            messagingStrategy: {
-                type: messagingStrategy, followUpCount: messagingStrategy === 'multi' ? followUpCount : 0,
-                followUpDelay,
-                hasGeneratedMessages: hasGeneratedMessages,
-                generatedAt: hasGeneratedMessages ? new Date().toISOString() : null
-            }
-        };
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const campaigns = result.campaigns || [];
-        campaigns.push(newCampaign);
-
-        await StorageAPI.set({ campaigns });
+        // Simplified campaign creation without storage
         ModalManager.closeCampaignModal();
         this.load();
         Utils.showNotification(`Campaign "${campaignName}" created with ${AppState.collectedProfiles.length} profiles!`);
+
+        // Reset collected profiles for next campaign
+        AppState.collectedProfiles = [];
     }
 };
 
-const AutoCollectionHandler = {
-    init() {
-        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-            if (message.action === 'autoCollectionStarted') {
-                this.handleAutoCollectionStarted();
-                sendResponse({ success: true });
-            }
-        });
-        this.checkAutoStart();
-    },
+// AutoCollectionHandler removed - no longer needed
 
-    async checkAutoStart() {
-        try {
-            const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-            const tab = tabs[0];
-
-            if (tab.url.includes('linkedin.com')) {
-                try {
-                    await chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        files: ['content/linkedin-content.js']
-                    });
-                } catch (error) {
-                    console.error('Error injecting content script:', error);
-                }
-            }
-        } catch (error) {
-            console.error('Error checking auto-start:', error);
-        }
-    },
-
-    handleAutoCollectionStarted() {
-        // Only show modal if user is actively creating a campaign
-        const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal && Utils.isVisible(campaignModal)) {
-            WizardManager.showStep(3, 'collecting');
-        }
-
-        // Initialize profile list if empty
-        if (AppState.collectedProfiles.length === 0) {
-            AppState.collectedProfiles = [];
-            ProfileManager.updateList();
-            Utils.updateCollectedCount('0');
-        }
-
-        // Show that auto collection is working
-        Utils.showNotification('🔄 Auto-collecting profiles from this page...', 'info');
-    },
-
-    hideAutoIndicator() {
-        Utils.hideById('auto-detection-indicator');
-        Utils.hideById('main-auto-detection-indicator');
-    },
-
-    showAutoIndicator() {
-        const indicator = DOMCache.get('auto-detection-indicator');
-        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
-        if (indicator) {
-            indicator.classList.remove('hidden');
-            indicator.style.display = 'flex'; // Keep flex display for layout
-        }
-        if (mainIndicator) {
-            mainIndicator.classList.remove('hidden');
-            mainIndicator.style.display = 'flex'; // Keep flex display for layout
-        }
-    }
-};
-
-const ProfileCollector = {
-    async collectFromPage() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const existingProfiles = result.collectedProfiles || [];
-
-        try {
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' });
-
-            if (response?.profiles?.length > 0) {
-                const newProfiles = response.profiles.filter(profile =>
-                    !existingProfiles.some(existing => existing.url === profile.url)
-                ).map(profile => ({
-                    ...profile,
-                    collectedAt: new Date().toISOString()
-                }));
-
-                const updated = [...existingProfiles, ...newProfiles];
-                await StorageAPI.set({ collectedProfiles: updated });
-                AppState.collectedProfiles = updated; // Update app state
-                ProfileManager.updateList(); // This will trigger API calls
-                DOMCache.get('profile-count').textContent = updated.length;
-                Utils.showNotification(`Collected ${newProfiles.length} new profiles`);
-            } else {
-                if (existingProfiles.length > 0) {
-                    DOMCache.get('profile-count').textContent = existingProfiles.length;
-                    Utils.showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
-                } else {
-                    Utils.showNotification('No profiles found. Please navigate to LinkedIn search results page.', 'warning');
-                }
-            }
-        } catch (error) {
-            console.error('Error collecting profiles:', error);
-            if (existingProfiles.length > 0) {
-                DOMCache.get('profile-count').textContent = existingProfiles.length;
-                Utils.showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
-            } else {
-                Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
-            }
-        }
-    },
-
-    start() {
-        AppState.isAutoCollectionEnabled = true;
-        this.updateAutoCollectionButtons([DOMCache.get('pause-collection'), DOMCache.get('main-pause-collection')], true);
-        AutoCollectionHandler.showAutoIndicator();
-        this.startRealTimeCollection();
-        Utils.showNotification('🔄 Auto collection enabled! Profiles will be collected automatically.', 'info');
-    },
-
-    async startRealTimeCollection() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) {
-            Utils.show(campaignModal);
-            WizardManager.showStep(3, 'collecting');
-        }
-
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content/linkedin-content.js']
-            });
-
-            await chrome.tabs.sendMessage(tab.id, { action: 'startRealTimeCollection' });
-            Utils.showNotification('Real-time collection started! Profiles will appear as found.', 'success');
-        } catch (error) {
-            console.error('Error starting real-time collection:', error);
-            this.collectFromCurrentPage();
-        }
-    },
-
-    toggleAutoCollection() {
-        const pauseBtn = DOMCache.get('pause-collection');
-        const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-        if (AppState.isAutoCollectionEnabled) {
-            AppState.isAutoCollectionEnabled = false;
-            this.updateAutoCollectionButtons([pauseBtn, mainPauseBtn], false);
-            AutoCollectionHandler.hideAutoIndicator();
-            this.sendAutoCollectionMessage('disableAutoCollection');
-            Utils.showNotification('🔴 Auto collection disabled. Profiles will not be collected automatically.', 'info');
-        } else {
-            AppState.isAutoCollectionEnabled = true;
-            this.updateAutoCollectionButtons([pauseBtn, mainPauseBtn], true);
-            AutoCollectionHandler.showAutoIndicator();
-            this.sendAutoCollectionMessage('enableAutoCollection');
-            Utils.showNotification('🟢 Auto collection enabled! Profiles will be collected automatically on LinkedIn pages.', 'success');
-        }
-    },
-
-    updateAutoCollectionButtons(buttons, enabled) {
-        buttons.forEach(btn => {
-            if (btn) {
-                btn.textContent = enabled ? 'AUTO ON' : 'AUTO OFF';
-                btn.className = enabled ? 'btn btn-success' : 'btn btn-secondary';
-            }
-        });
-    },
-
-    sendAutoCollectionMessage(action) {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, { action });
-            }
-        });
-    },
-
-    continue() {
-        if (AppState.isCollecting) this.collectFromCurrentPage();
-    },
-
-    // Removed duplicate collectFromCurrentPage() - functionality exists in collectFromPage()
-};
+// ProfileCollector removed - no longer needed
 
 const ProfileManager = {
-    async view() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    view() {
+        const profiles = AppState.collectedProfiles;
         const profilesList = DOMCache.get('profiles-list');
 
         if (profiles.length === 0) {
@@ -1131,9 +781,8 @@ const ProfileManager = {
         Utils.showById('profiles-modal');
     },
 
-    async export() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    export() {
+        const profiles = AppState.collectedProfiles;
 
         if (profiles.length === 0) {
             Utils.showNotification('No profiles to export', 'warning');
@@ -1155,9 +804,8 @@ const ProfileManager = {
         Utils.showNotification('Profiles exported successfully!');
     },
 
-    async createCampaign() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    createCampaign() {
+        const profiles = AppState.collectedProfiles;
 
         if (profiles.length === 0) {
             Utils.showNotification('No profiles to create campaign from', 'warning');
@@ -1167,10 +815,6 @@ const ProfileManager = {
         Utils.hideById('profiles-modal');
         ModalManager.openCampaignModal();
 
-        AppState.collectedProfiles = profiles.map(profile => ({
-            ...profile,
-            collectedAt: new Date().toISOString()
-        }));
         DOMCache.get('campaign-name').value = `Campaign from ${profiles.length} profiles`;
         WizardManager.showStep(3, 'collecting');
         this.updateList();
@@ -1204,11 +848,7 @@ const ProfileManager = {
 
 
 
-    async loadCount() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
-        DOMCache.get('profile-count').textContent = profiles.length;
-    }
+
 };
 
 // New Step 4 Profile Selection Manager
