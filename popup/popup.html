@@ -72,18 +72,7 @@
                     <label>Follow-up Delay (days):</label>
                     <input type="number" id="followup-delay" value="3" min="1" max="14">
                 </div>
-                <div class="form-group">
-                    <label>OpenAI API Key (optional):</label>
-                    <input type="password" id="openai-key" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>Message Style:</label>
-                    <select id="message-style">
-                        <option value="professional">Professional</option>
-                        <option value="friendly">Friendly</option>
-                        <option value="casual">Casual</option>
-                    </select>
-                </div>
+
                 <button class="btn btn-primary" id="save-settings">Save Settings</button>
             </div>
         </div>
@@ -270,23 +259,7 @@
                             </div>
                         </div>
 
-                        <div class="ai-analysis-config">
-                            <h4>Message Configuration</h4>
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="analyze-profile" checked>
-                                    Use profile information for personalization
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>Message style:</label>
-                                <select id="message-style">
-                                    <option value="professional">Professional</option>
-                                    <option value="casual">Casual & Friendly</option>
-                                    <option value="direct">Direct & Brief</option>
-                                </select>
-                            </div>
-                        </div>
+
 
                         <button class="btn btn-primary" id="create-campaign-final">CREATE CAMPAIGN</button>
                     </div>

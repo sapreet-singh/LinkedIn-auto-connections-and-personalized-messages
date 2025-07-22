@@ -5,7 +5,6 @@ A Chrome extension that automates LinkedIn connection requests and follow-up mes
 ## Features
 
 - 🤝 **Auto Connection Requests** - Automatically send personalized connection requests
-- 🤖 **AI-Powered Messages** - Generate personalized messages using OpenAI GPT
 - 🏢 **Company-Based Targeting** - Search and connect with employees from specific companies
 - 📋 **Profile Collection** - Automatically collect and store LinkedIn profile data
 - 💬 **Follow-up Messages** - Send automated follow-up message sequences

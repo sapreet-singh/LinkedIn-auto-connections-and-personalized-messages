@@ -5,7 +5,7 @@ const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
     STORAGE_KEYS: {
-        CAMPAIGNS: 'campaigns', PROFILES: 'collectedProfiles', SETTINGS: ['dailyLimit', 'actionDelay', 'followupDelay', 'openaiKey', 'messageStyle'],
+        CAMPAIGNS: 'campaigns', PROFILES: 'collectedProfiles', SETTINGS: ['dailyLimit', 'actionDelay', 'followupDelay'],
         MESSAGES: ['connectionMessage', 'followup1', 'followup2'], STATS: ['todayCount', 'totalCount']
     },
     URLS: {
@@ -39,7 +39,6 @@ const Utils = {
     },
 
     extractCleanName: (profile) => {
-        console.log('Extracting clean name from profile:', { name: profile.name, location: profile.location?.substring(0, 50) });
 
         // First, try extracting from location field if name is invalid
         if ((!profile.name ||
@@ -54,7 +53,7 @@ const Utils = {
             const nameMatch = profile.location.match(/^([A-Za-z\s]+?)(?:View|•|\n)/);
             if (nameMatch && nameMatch[1].trim().length > 2) {
                 const extractedName = nameMatch[1].trim();
-                console.log('Extracted name from location:', extractedName);
+
                 return extractedName;
             }
         }
@@ -81,7 +80,7 @@ const Utils = {
             const urlMatch = profile.url.match(/\/in\/([^\/\?]+)/);
             if (urlMatch) {
                 const nameFromUrl = urlMatch[1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                console.log('Extracted name from URL:', nameFromUrl);
+
                 return nameFromUrl;
             }
         }
@@ -199,7 +198,7 @@ const ModalManager = {
 
             // Optional: Add confirmation dialog for outside clicks
             if (e.target === campaignModal || e.target === profilesModal) {
-                console.log('Clicked outside modal - modal will remain open');
+
                 // if (confirm('Are you sure you want to close this modal?')) {
                 //     if (e.target === campaignModal) this.closeCampaignModal();
                 //     if (e.target === profilesModal) this.closeModal('profiles-modal');
@@ -225,7 +224,7 @@ const ModalManager = {
         e.stopPropagation();
 
         // Show a notification to the user
-        console.log('Close button clicked - popup will remain open');
+
         Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
 
         // You can add a confirmation dialog here if needed:
@@ -248,7 +247,7 @@ const ModalManager = {
 
     // Method to force close all modals (can be called from console if needed)
     forceCloseAll() {
-        console.log('Force closing all modals...');
+
         DOMCache.get('campaign-modal').style.display = 'none';
         DOMCache.get('profiles-modal').style.display = 'none';
         DOMCache.get('profile-urls-modal').style.display = 'none';
@@ -444,14 +443,12 @@ const DuplicateManager = {
 // === REAL-TIME PROFILE HANDLER ===
 const RealTimeProfileHandler = {
     init() {
-        console.log('🔥 POPUP: Initializing real-time profile handler');
 
         // Listen for real-time profile updates from content script
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            console.log('🔥 POPUP: Received message:', message);
 
             if (message.action === 'addProfilesRealTime' && message.profiles) {
-                console.log('🔥 POPUP: Processing real-time profiles');
+
                 this.handleRealTimeProfiles(message.profiles);
                 sendResponse({ success: true });
                 return true; // Keep message channel open
@@ -460,8 +457,6 @@ const RealTimeProfileHandler = {
     },
 
     handleRealTimeProfiles(profiles) {
-        console.log('🔥 REAL-TIME: Received profiles in popup:', profiles.length);
-        console.log('🔥 REAL-TIME: Profile data sample:', profiles[0]);
 
         // Filter and validate profiles
         const validProfiles = profiles.filter(profile => {
@@ -470,17 +465,8 @@ const RealTimeProfileHandler = {
                            profile.name !== 'Unknown Name';
             const hasUrl = profile.url && profile.url.includes('/in/');
 
-            console.log('🔥 REAL-TIME: Validating profile:', {
-                name: profile.name,
-                hasName,
-                hasUrl,
-                valid: hasName && hasUrl
-            });
-
             return hasName && hasUrl;
         });
-
-        console.log('🔥 REAL-TIME: Valid profiles after filtering:', validProfiles.length);
 
         if (validProfiles.length > 0) {
             // Filter out duplicates before adding
@@ -490,17 +476,14 @@ const RealTimeProfileHandler = {
                 );
             });
 
-            console.log('🔥 REAL-TIME: New profiles after duplicate filtering:', newProfiles.length);
-
             if (newProfiles.length > 0) {
                 // Add only new profiles to campaign
                 AppState.collectedProfiles.push(...newProfiles);
-                console.log('🔥 REAL-TIME: Total collected profiles now:', AppState.collectedProfiles.length);
 
                 // Ensure campaign modal is visible FIRST
                 const campaignModal = DOMCache.get('campaign-modal');
                 if (campaignModal && campaignModal.style.display !== 'block') {
-                    console.log('🔥 REAL-TIME: Opening campaign modal');
+
                     campaignModal.style.display = 'block';
                     WizardManager.showStep(3, 'collecting');
 
@@ -512,16 +495,13 @@ const RealTimeProfileHandler = {
                     // Modal already open, update immediately
                     this.updateUIAfterModalOpen(newProfiles.length);
                 }
-            } else {
-                console.log('🔥 REAL-TIME: No new profiles to add (all were duplicates)');
             }
         } else {
-            console.log('🔥 REAL-TIME: No valid profiles to add');
+
         }
     },
 
     updateUIAfterModalOpen(newProfileCount) {
-        console.log('🔥 REAL-TIME: Updating UI after modal is open');
 
         // Update UI in real-time
         ProfileManager.updateList();
@@ -530,9 +510,9 @@ const RealTimeProfileHandler = {
         const counterElement = DOMCache.get('collected-number');
         if (counterElement) {
             counterElement.textContent = AppState.collectedProfiles.length;
-            console.log('🔥 REAL-TIME: Updated counter to:', AppState.collectedProfiles.length);
+
         } else {
-            console.log('🔥 REAL-TIME: Counter element not found!');
+
         }
 
         // Show notification for new profiles
@@ -664,17 +644,14 @@ const CampaignManager = {
         const messagingStrategy = document.querySelector('input[name="messaging-strategy"]:checked')?.value || 'single';
         const followUpCount = parseInt(DOMCache.get('follow-up-count')?.value || '1');
         const followUpDelay = parseInt(DOMCache.get('follow-up-delay')?.value || '3');
-        const analyzeProfile = DOMCache.get('analyze-profile')?.checked || true;
-        const analyzePosts = DOMCache.get('analyze-posts')?.checked || true;
-        const messageStyle = DOMCache.get('message-style')?.value || 'professional';
 
         const newCampaign = {
             id: Date.now(), name: campaignName, profiles: AppState.collectedProfiles,
             maxConnections: AppState.collectedProfiles.length, progress: 0, status: 'ready',
-            createdAt: new Date().toISOString(), useAI: true,
+            createdAt: new Date().toISOString(),
             messagingStrategy: {
                 type: messagingStrategy, followUpCount: messagingStrategy === 'multi' ? followUpCount : 0,
-                followUpDelay, analyzeProfile, analyzePosts, messageStyle
+                followUpDelay
             }
         };
 
@@ -692,7 +669,6 @@ const CampaignManager = {
 // === AUTO COLLECTION HANDLER ===
 const AutoCollectionHandler = {
     init() {
-        console.log('🔥 AUTO-HANDLER: Initializing auto-collection handler...');
 
         // Listen for messages from content script
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -712,7 +688,6 @@ const AutoCollectionHandler = {
             const tab = tabs[0];
 
             if (tab.url.includes('linkedin.com')) {
-                console.log('🔥 AUTO-HANDLER: LinkedIn tab detected, checking for profiles...');
 
                 // Inject content script to enable auto-detection
                 try {
@@ -721,19 +696,16 @@ const AutoCollectionHandler = {
                         files: ['content/linkedin-content.js']
                     });
 
-                    console.log('🔥 AUTO-HANDLER: Content script injected for auto-detection');
                 } catch (error) {
-                    console.log('🔥 AUTO-HANDLER: Content script already injected or error:', error);
+
                 }
             }
         } catch (error) {
-            console.log('🔥 AUTO-HANDLER: Error in auto-start check:', error);
+
         }
     },
 
     handleAutoCollectionStarted(message, sender) {
-        console.log('🔥 AUTO-HANDLER: Auto-collection started on tab:', sender.tab.id);
-        console.log('🔥 AUTO-HANDLER: URL:', message.url);
 
         // Show notification that auto-collection started
         Utils.showNotification('🔄 Auto-detection started! Profiles will appear automatically.', 'success');
@@ -855,7 +827,7 @@ const ProfileCollector = {
         }
 
         // Open campaign modal immediately
-        console.log('🔥 POPUP: Opening campaign modal for real-time collection');
+
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
             campaignModal.style.display = 'block';
@@ -896,7 +868,7 @@ const ProfileCollector = {
             AutoCollectionHandler.showAutoIndicator();
 
             // Clear existing profiles to avoid duplicate detection issues
-            console.log('🔄 CLEARING: Clearing existing profiles before starting new collection');
+
             AppState.collectedProfiles = [];
             ProfileManager.updateList();
             DOMCache.get('collected-number').textContent = '0';
@@ -1023,23 +995,20 @@ const ProfileManager = {
     },
 
     updateList() {
-        console.log('🔥 POPUP: Updating profile list, total profiles:', AppState.collectedProfiles.length);
 
         const listElement = DOMCache.get('collected-profiles-list');
         if (!listElement) {
-            console.log('🔥 POPUP: collected-profiles-list element not found!');
+
             return;
         }
 
-        console.log('🔥 POPUP: Found list element, clearing and adding profiles');
         listElement.innerHTML = '';
 
         AppState.collectedProfiles.forEach((profile, index) => {
-            console.log(`🔥 POPUP: Adding profile ${index + 1}:`, profile.name);
+
             listElement.appendChild(Utils.createProfileCard(profile));
         });
 
-        console.log('🔥 POPUP: Profile list updated successfully');
     },
 
     async loadCount() {
@@ -1105,7 +1074,6 @@ const NetworkManager = {
             // Start real-time monitoring (but don't collect existing profiles immediately)
             setTimeout(async () => {
                 try {
-                    console.log('🔥 POPUP: Initializing real-time profile handler');
 
                     // Start continuous real-time collection (without immediate collection)
                     chrome.tabs.sendMessage(tabId, {
@@ -1127,8 +1095,6 @@ const NetworkManager = {
     },
 
     addProfilesDirectly(profiles) {
-        console.log('Adding profiles directly to campaign:', profiles.length);
-        console.log('Profile data sample:', profiles.slice(0, 2));
 
         // Filter and clean profiles before adding
         const validProfiles = profiles.filter(profile => {
@@ -1138,13 +1104,11 @@ const NetworkManager = {
             const hasUrl = profile.url && profile.url.includes('/in/');
 
             if (!hasName || !hasUrl) {
-                console.log('Filtering out invalid profile:', { name: profile.name, url: profile.url });
+
                 return false;
             }
             return true;
         });
-
-        console.log(`Filtered ${validProfiles.length} valid profiles from ${profiles.length} total`);
 
         // Add valid profiles to collected profiles for the campaign
         AppState.collectedProfiles.push(...validProfiles);
@@ -1170,7 +1134,6 @@ const NetworkManager = {
 // === PROFILE URL MODAL ===
 const ProfileURLModal = {
     show(profiles) {
-        console.log('Showing profile URLs popup with', profiles.length, 'profiles');
 
         // Force close any existing modals first
         const campaignModal = DOMCache.get('campaign-modal');
@@ -1247,7 +1210,7 @@ const ProfileURLModal = {
 
     close() {
         // Prevent automatic closing - just show a message or do nothing
-        console.log('Profile URLs modal close button clicked - modal will remain open');
+
         Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
 
         // Optional: Show a message to user about how to close
@@ -1309,20 +1272,18 @@ const ProfileURLModal = {
 };
 
 function startNetworkSearch(tabId, searchCriteria) {
-    console.log('Starting network search with criteria:', searchCriteria);
 
     // First ensure content script is injected (Manifest V3 way)
     chrome.scripting.executeScript({
         target: { tabId: tabId },
         files: ['content/linkedin-content.js']
     }).then(() => {
-        console.log('Content script injected successfully');
 
         // Wait a moment for script to initialize
         setTimeout(() => {
             // Send message with timeout handling
             const messageTimeout = setTimeout(() => {
-                console.log('Message timeout, trying fallback approach');
+
                 showNotification('Collecting profiles... This may take a moment.', 'info');
             }, 5000);
 
@@ -1331,25 +1292,22 @@ function startNetworkSearch(tabId, searchCriteria) {
                 criteria: searchCriteria
             }).then(response => {
                 clearTimeout(messageTimeout);
-                console.log('Received response:', response);
-                console.log('Response type:', typeof response);
-                console.log('Response profiles:', response?.profiles);
 
                 if (response && response.profiles && response.profiles.length > 0) {
-                    console.log('Received profiles:', response.profiles);
+
                     // Add profiles directly to campaign without approval modal
                     NetworkManager.addProfilesDirectly(response.profiles);
                 } else {
-                    console.log('No profiles in response:', response);
+
                     if (response && response.error) {
                         Utils.showNotification(`Error: ${response.error}`, 'error');
                     } else {
                         // Try fallback with collectProfiles
-                        console.log('Trying fallback with collectProfiles...');
+
                         chrome.tabs.sendMessage(tabId, { action: 'collectProfiles' }).then(fallbackResponse => {
-                            console.log('Fallback response:', fallbackResponse);
+
                             if (fallbackResponse && fallbackResponse.profiles && fallbackResponse.profiles.length > 0) {
-                                console.log('Adding fallback profiles directly to campaign');
+
                                 NetworkManager.addProfilesDirectly(fallbackResponse.profiles);
                             } else {
                                 Utils.showNotification('No profiles found matching your criteria', 'warning');
@@ -1389,7 +1347,7 @@ function startNetworkSearch(tabId, searchCriteria) {
             }
 
             if (response && response.profiles) {
-                console.log('Received profiles:', response.profiles);
+
                 // Add collected profiles
                 chrome.storage.local.get(['collectedProfiles'], function(result) {
                     const existing = result.collectedProfiles || [];
@@ -1407,7 +1365,7 @@ function startNetworkSearch(tabId, searchCriteria) {
                     });
                 });
             } else {
-                console.log('No profiles in response:', response);
+
                 showNotification('No profiles found. Try scrolling down to load more results.', 'warning');
             }
         });
@@ -1426,13 +1384,12 @@ function loadCollectedProfiles() {
 let selectedProfiles = [];
 
 function showProfileUrlsPopup(profiles) {
-    console.log('Showing profile URLs popup with', profiles.length, 'profiles');
 
     // Force close any existing modals first
     const campaignModal = document.getElementById('campaign-modal');
     if (campaignModal) {
         campaignModal.style.display = 'none';
-        console.log('Closed campaign modal to show profile URLs popup');
+
     }
 
     // Store profiles for later use
@@ -1468,7 +1425,6 @@ function showProfileUrlsPopup(profiles) {
         cleanName = cleanName.replace(/\s+/g, ' ').trim();
 
         const profilePicUrl = profile.profilePic || '';
-        console.log(`Profile ${index}: Name="${cleanName}", PicURL="${profilePicUrl}"`);
 
         profileItem.innerHTML = `
             <input type="checkbox" class="profile-checkbox" data-index="${index}" checked>
@@ -1511,7 +1467,6 @@ function showProfileUrlsPopup(profiles) {
             visibility: visible !important;
             opacity: 1 !important;
         `;
-        console.log('Profile URLs modal displayed with force styling');
 
         // Also ensure modal content is visible
         const modalContent = modal.querySelector('.modal-content');
@@ -1537,7 +1492,6 @@ function showProfileUrlsPopup(profiles) {
 
 function closeProfileUrlsPopup() {
     // Prevent automatic closing - just show a message or do nothing
-    console.log('Legacy close function called - modal will remain open');
 
     // Optional: Show a message to user about how to close
     // You can add a confirmation dialog here if needed:

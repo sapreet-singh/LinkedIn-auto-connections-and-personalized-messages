@@ -6,8 +6,7 @@ class LinkedInAutomationBackground {
     }
     
     init() {
-        console.log('LinkedIn Automation Background Service Worker initialized');
-        
+
         // Listen for extension installation
         chrome.runtime.onInstalled.addListener(() => {
             this.onInstalled();
@@ -18,9 +17,7 @@ class LinkedInAutomationBackground {
             this.handleMessage(message, sender, sendResponse);
             return true; // Keep the message channel open for async responses
         });
-        
 
-        
         // Load existing campaigns after a short delay to ensure storage is ready
         setTimeout(() => {
             this.loadCampaigns();
@@ -141,7 +138,7 @@ class LinkedInAutomationBackground {
             if (chrome.runtime.lastError) {
                 console.error('Error communicating with content script:', chrome.runtime.lastError);
             } else {
-                console.log('Automation started:', response);
+
             }
         });
     }
@@ -253,13 +250,12 @@ class LinkedInAutomationBackground {
 
                 // Initialize campaigns array if it doesn't exist
                 if (!result.hasOwnProperty('campaigns')) {
-                    console.log('Campaigns not found in storage, initializing empty array');
+
                     chrome.storage.local.set({ campaigns: [] });
                     return;
                 }
 
                 const campaigns = result.campaigns || [];
-                console.log('Loaded campaigns:', campaigns);
 
                 // Ensure campaigns is an array
                 if (!Array.isArray(campaigns)) {
@@ -282,7 +278,7 @@ class LinkedInAutomationBackground {
                     if (chrome.runtime.lastError) {
                         console.error('Error saving campaigns:', chrome.runtime.lastError);
                     } else {
-                        console.log('Campaigns updated successfully');
+
                     }
                 });
             });
@@ -292,7 +288,6 @@ class LinkedInAutomationBackground {
             chrome.storage.local.set({ campaigns: [] });
         }
     }
-    
 
 }
 
