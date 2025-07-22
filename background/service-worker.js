@@ -1,30 +1,26 @@
-// Background Service Worker for LinkedIn Automation Extension
+// LinkedIn Automation Background Service Worker
 class LinkedInAutomationBackground {
     constructor() {
         this.activeCampaigns = new Map();
         this.init();
     }
-    
+
     init() {
-        // Listen for extension installation
         chrome.runtime.onInstalled.addListener(() => {
             this.onInstalled();
         });
-        
-        // Listen for messages from popup and content scripts
+
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             this.handleMessage(message, sender, sendResponse);
-            return true; // Keep the message channel open for async responses
+            return true;
         });
 
-        // Load existing campaigns after a short delay to ensure storage is ready
         setTimeout(() => {
             this.loadCampaigns();
         }, 100);
     }
-    
+
     onInstalled() {
-        // Initialize default settings
         chrome.storage.local.set({
             dailyLimit: 50,
             actionDelay: 30,
@@ -145,12 +141,9 @@ class LinkedInAutomationBackground {
         
         if (campaign) {
             campaign.status = 'paused';
-            
-            // Send message to content script to stop
             chrome.tabs.sendMessage(campaign.tabId, {
                 action: 'stopAutomation'
             });
-            
             sendResponse({ success: true });
         } else {
             sendResponse({ error: 'Campaign not found' });
@@ -173,12 +166,9 @@ class LinkedInAutomationBackground {
         const campaign = this.activeCampaigns.get(campaignId);
         
         if (campaign) {
-            // Stop automation
             chrome.tabs.sendMessage(campaign.tabId, {
                 action: 'stopAutomation'
             });
-            
-            // Remove from active campaigns
             this.activeCampaigns.delete(campaignId);
         }
         
@@ -233,57 +223,35 @@ class LinkedInAutomationBackground {
     loadCampaigns() {
         try {
             chrome.storage.local.get(['campaigns'], (result) => {
-                // Add error handling and debugging
                 if (chrome.runtime.lastError) {
                     console.error('Chrome storage error:', chrome.runtime.lastError);
                     return;
                 }
 
-                if (!result) {
-                    console.error('Storage result is undefined, initializing empty campaigns');
-                    chrome.storage.local.set({ campaigns: [] });
-                    return;
-                }
-
-                // Initialize campaigns array if it doesn't exist
-                if (!result.hasOwnProperty('campaigns')) {
+                if (!result || !result.hasOwnProperty('campaigns')) {
                     chrome.storage.local.set({ campaigns: [] });
                     return;
                 }
 
                 const campaigns = result.campaigns || [];
-
-                // Ensure campaigns is an array
                 if (!Array.isArray(campaigns)) {
-                    console.error('Campaigns is not an array, resetting to empty array');
                     chrome.storage.local.set({ campaigns: [] });
                     return;
                 }
 
-                // Restore running campaigns (if any)
                 campaigns.forEach(campaign => {
                     if (campaign && campaign.status === 'running') {
-                        // Note: We don't auto-restart campaigns on extension reload
-                        // User needs to manually restart them for safety
                         campaign.status = 'paused';
                     }
                 });
 
-                // Update storage with corrected statuses
-                chrome.storage.local.set({ campaigns }, () => {
-                    if (chrome.runtime.lastError) {
-                        console.error('Error saving campaigns:', chrome.runtime.lastError);
-                    }
-                });
+                chrome.storage.local.set({ campaigns });
             });
         } catch (error) {
-            console.error('Unexpected error in loadCampaigns:', error);
-            // Initialize empty campaigns array as fallback
             chrome.storage.local.set({ campaigns: [] });
         }
     }
 
 }
 
-// Initialize the background service
 new LinkedInAutomationBackground();
