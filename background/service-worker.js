@@ -6,7 +6,6 @@ class LinkedInAutomationBackground {
     }
     
     init() {
-
         // Listen for extension installation
         chrome.runtime.onInstalled.addListener(() => {
             this.onInstalled();
@@ -137,8 +136,6 @@ class LinkedInAutomationBackground {
         }, (response) => {
             if (chrome.runtime.lastError) {
                 console.error('Error communicating with content script:', chrome.runtime.lastError);
-            } else {
-
             }
         });
     }
@@ -250,7 +247,6 @@ class LinkedInAutomationBackground {
 
                 // Initialize campaigns array if it doesn't exist
                 if (!result.hasOwnProperty('campaigns')) {
-
                     chrome.storage.local.set({ campaigns: [] });
                     return;
                 }
@@ -277,8 +273,6 @@ class LinkedInAutomationBackground {
                 chrome.storage.local.set({ campaigns }, () => {
                     if (chrome.runtime.lastError) {
                         console.error('Error saving campaigns:', chrome.runtime.lastError);
-                    } else {
-
                     }
                 });
             });

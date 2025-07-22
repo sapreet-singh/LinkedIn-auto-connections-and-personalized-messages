@@ -39,7 +39,6 @@ const Utils = {
     },
 
     extractCleanName: (profile) => {
-
         // First, try extracting from location field if name is invalid
         if ((!profile.name ||
              profile.name === 'Status is reachable' ||
@@ -48,12 +47,10 @@ const Utils = {
              profile.name.includes('View') ||
              profile.name.includes('•')) &&
             profile.location) {
-
             // Extract name from location field pattern: "Name View Name's profile"
             const nameMatch = profile.location.match(/^([A-Za-z\s]+?)(?:View|•|\n)/);
             if (nameMatch && nameMatch[1].trim().length > 2) {
                 const extractedName = nameMatch[1].trim();
-
                 return extractedName;
             }
         }
@@ -80,7 +77,6 @@ const Utils = {
             const urlMatch = profile.url.match(/\/in\/([^\/\?]+)/);
             if (urlMatch) {
                 const nameFromUrl = urlMatch[1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
                 return nameFromUrl;
             }
         }
@@ -198,7 +194,6 @@ const ModalManager = {
 
             // Optional: Add confirmation dialog for outside clicks
             if (e.target === campaignModal || e.target === profilesModal) {
-
                 // if (confirm('Are you sure you want to close this modal?')) {
                 //     if (e.target === campaignModal) this.closeCampaignModal();
                 //     if (e.target === profilesModal) this.closeModal('profiles-modal');
@@ -222,9 +217,7 @@ const ModalManager = {
         // Prevent automatic closing - just show a message or do nothing
         e.preventDefault();
         e.stopPropagation();
-
         // Show a notification to the user
-
         Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
 
         // You can add a confirmation dialog here if needed:
@@ -247,7 +240,6 @@ const ModalManager = {
 
     // Method to force close all modals (can be called from console if needed)
     forceCloseAll() {
-
         DOMCache.get('campaign-modal').style.display = 'none';
         DOMCache.get('profiles-modal').style.display = 'none';
         DOMCache.get('profile-urls-modal').style.display = 'none';
@@ -270,10 +262,8 @@ const WizardManager = {
         AppState.collectedProfiles = [];
         AppState.duplicateProfiles = [];
         AppState.isCollecting = false;
-
         const campaignNameInput = DOMCache.get('campaign-name');
         if (campaignNameInput) campaignNameInput.value = '';
-
         const elements = ['collected-number', 'collected-profiles-list'];
         elements.forEach(id => {
             const el = DOMCache.get(id);
@@ -443,12 +433,9 @@ const DuplicateManager = {
 // === REAL-TIME PROFILE HANDLER ===
 const RealTimeProfileHandler = {
     init() {
-
         // Listen for real-time profile updates from content script
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-
+        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             if (message.action === 'addProfilesRealTime' && message.profiles) {
-
                 this.handleRealTimeProfiles(message.profiles);
                 sendResponse({ success: true });
                 return true; // Keep message channel open
@@ -457,7 +444,6 @@ const RealTimeProfileHandler = {
     },
 
     handleRealTimeProfiles(profiles) {
-
         // Filter and validate profiles
         const validProfiles = profiles.filter(profile => {
             const hasName = profile.name && profile.name.trim() &&
@@ -479,14 +465,11 @@ const RealTimeProfileHandler = {
             if (newProfiles.length > 0) {
                 // Add only new profiles to campaign
                 AppState.collectedProfiles.push(...newProfiles);
-
                 // Ensure campaign modal is visible FIRST
                 const campaignModal = DOMCache.get('campaign-modal');
                 if (campaignModal && campaignModal.style.display !== 'block') {
-
                     campaignModal.style.display = 'block';
                     WizardManager.showStep(3, 'collecting');
-
                     // Wait a moment for DOM to update
                     setTimeout(() => {
                         this.updateUIAfterModalOpen(newProfiles.length);
@@ -496,28 +479,19 @@ const RealTimeProfileHandler = {
                     this.updateUIAfterModalOpen(newProfiles.length);
                 }
             }
-        } else {
-
         }
     },
 
     updateUIAfterModalOpen(newProfileCount) {
-
         // Update UI in real-time
         ProfileManager.updateList();
-
         // Update counter
         const counterElement = DOMCache.get('collected-number');
         if (counterElement) {
             counterElement.textContent = AppState.collectedProfiles.length;
-
-        } else {
-
         }
-
         // Show notification for new profiles
         Utils.showNotification(`✅ Added ${newProfileCount} new profiles (Total: ${AppState.collectedProfiles.length})`, 'success');
-
         // Keep collection active - user can manually pause if needed
     }
 };
@@ -671,13 +645,12 @@ const AutoCollectionHandler = {
     init() {
 
         // Listen for messages from content script
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             if (message.action === 'autoCollectionStarted') {
-                this.handleAutoCollectionStarted(message, sender);
+                this.handleAutoCollectionStarted();
                 sendResponse({ success: true });
             }
         });
-
         // Check if we should auto-start when popup opens
         this.checkAutoStart();
     },
@@ -688,25 +661,22 @@ const AutoCollectionHandler = {
             const tab = tabs[0];
 
             if (tab.url.includes('linkedin.com')) {
-
                 // Inject content script to enable auto-detection
                 try {
                     await chrome.scripting.executeScript({
                         target: { tabId: tab.id },
                         files: ['content/linkedin-content.js']
                     });
-
                 } catch (error) {
-
+                    console.error('Error injecting content script:', error);
                 }
             }
         } catch (error) {
-
+            console.error('Error checking auto-start:', error);
         }
     },
 
-    handleAutoCollectionStarted(message, sender) {
-
+    handleAutoCollectionStarted() {
         // Show notification that auto-collection started
         Utils.showNotification('🔄 Auto-detection started! Profiles will appear automatically.', 'success');
 
@@ -724,17 +694,14 @@ const AutoCollectionHandler = {
             campaignModal.style.display = 'block';
             WizardManager.showStep(3, 'collecting');
         }
-
         // Update button state to show collection is active
         const pauseBtn = DOMCache.get('pause-collection');
         if (pauseBtn) {
             pauseBtn.textContent = 'PAUSE';
             pauseBtn.className = 'btn btn-secondary';
         }
-
         // Set app state
         AppState.isCollecting = true;
-
         // Clear existing profiles to start fresh
         AppState.collectedProfiles = [];
         ProfileManager.updateList();
@@ -810,10 +777,8 @@ const ProfileCollector = {
             pauseBtn.textContent = 'PAUSE';
             pauseBtn.className = 'btn btn-secondary';
         }
-
         // Start immediate collection and real-time monitoring
         this.startRealTimeCollection();
-
         Utils.showNotification('🔄 Collection started! Navigate to LinkedIn and profiles will appear.', 'info');
     },
 
@@ -827,7 +792,6 @@ const ProfileCollector = {
         }
 
         // Open campaign modal immediately
-
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
             campaignModal.style.display = 'block';
@@ -843,9 +807,7 @@ const ProfileCollector = {
 
             // Start real-time collection
             await chrome.tabs.sendMessage(tab.id, { action: 'startRealTimeCollection' });
-
             Utils.showNotification('Real-time collection started! Profiles will appear as found.', 'success');
-
         } catch (error) {
             console.error('Error starting real-time collection:', error);
             // Fallback to regular collection
@@ -859,16 +821,12 @@ const ProfileCollector = {
         if (!AppState.isCollecting) {
             // Currently stopped, start collecting
             AppState.isCollecting = true;
-
             // Change button to PAUSE (gray)
             pauseBtn.textContent = 'PAUSE';
             pauseBtn.className = 'btn btn-secondary';
-
             // Show auto-detection indicator when starting
             AutoCollectionHandler.showAutoIndicator();
-
             // Clear existing profiles to avoid duplicate detection issues
-
             AppState.collectedProfiles = [];
             ProfileManager.updateList();
             DOMCache.get('collected-number').textContent = '0';
@@ -883,20 +841,16 @@ const ProfileCollector = {
         } else {
             // Currently collecting, pause it
             AppState.isCollecting = false;
-
             // Change button to STOP (red)
             pauseBtn.textContent = 'STOP';
             pauseBtn.className = 'btn btn-danger';
-
             // Hide auto-detection indicator when stopping
             AutoCollectionHandler.hideAutoIndicator();
-
             // Stop collection (including auto-collection)
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'stopRealTimeCollection' });
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'stopAutoCollection' });
             });
-
             Utils.showNotification('⏸️ Auto-detection stopped. Click STOP to resume.', 'info');
         }
     },
@@ -995,20 +949,14 @@ const ProfileManager = {
     },
 
     updateList() {
-
         const listElement = DOMCache.get('collected-profiles-list');
         if (!listElement) {
-
             return;
         }
-
         listElement.innerHTML = '';
-
-        AppState.collectedProfiles.forEach((profile, index) => {
-
+        AppState.collectedProfiles.forEach((profile) => {
             listElement.appendChild(Utils.createProfileCard(profile));
         });
-
     },
 
     async loadCount() {
@@ -1051,7 +999,6 @@ const NetworkManager = {
                 campaignModal.style.display = 'block';
                 WizardManager.showStep(3, 'collecting');
             }
-
             Utils.showNotification('Starting real-time profile collection...', 'info');
 
             if (tab.url.includes('search/results/people') && tab.url.includes('network')) {
@@ -1074,15 +1021,12 @@ const NetworkManager = {
             // Start real-time monitoring (but don't collect existing profiles immediately)
             setTimeout(async () => {
                 try {
-
                     // Start continuous real-time collection (without immediate collection)
                     chrome.tabs.sendMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
-
                     Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
-
                 } catch (error) {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
@@ -1095,7 +1039,6 @@ const NetworkManager = {
     },
 
     addProfilesDirectly(profiles) {
-
         // Filter and clean profiles before adding
         const validProfiles = profiles.filter(profile => {
             const hasName = profile.name && profile.name.trim() &&
@@ -1104,29 +1047,23 @@ const NetworkManager = {
             const hasUrl = profile.url && profile.url.includes('/in/');
 
             if (!hasName || !hasUrl) {
-
                 return false;
             }
             return true;
         });
-
         // Add valid profiles to collected profiles for the campaign
         AppState.collectedProfiles.push(...validProfiles);
-
         // Update the campaign wizard
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
-
         // Show success message
         Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');
-
         // Ensure campaign modal is visible and show step 3
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
             campaignModal.style.display = 'block';
             WizardManager.showStep(3, 'collecting');
         }
-
         // Keep collection active - user can manually pause if needed
     }
 };
@@ -1134,14 +1071,11 @@ const NetworkManager = {
 // === PROFILE URL MODAL ===
 const ProfileURLModal = {
     show(profiles) {
-
         // Force close any existing modals first
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) campaignModal.style.display = 'none';
-
         // Store profiles for later use
         AppState.selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
-
         // Update count and populate list
         DOMCache.get('profile-count-display').textContent = profiles.length;
         this.populateList(profiles);
@@ -1210,16 +1144,13 @@ const ProfileURLModal = {
 
     close() {
         // Prevent automatic closing - just show a message or do nothing
-
         Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
-
         // Optional: Show a message to user about how to close
         // You can add a confirmation dialog here if needed:
         // if (confirm('Are you sure you want to close this modal?')) {
         //     DOMCache.get('profile-urls-modal').style.display = 'none';
         //     AppState.selectedProfiles = [];
         // }
-
         // For now, we just prevent the default close behavior
         return false;
     },
@@ -1259,10 +1190,8 @@ const ProfileURLModal = {
         AppState.collectedProfiles.push(...profilesToAdd);
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
-
         this.forceClose();
         Utils.showNotification(`Added ${profilesToAdd.length} profiles to campaign`, 'success');
-
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
             campaignModal.style.display = 'block';
@@ -1272,42 +1201,32 @@ const ProfileURLModal = {
 };
 
 function startNetworkSearch(tabId, searchCriteria) {
-
     // First ensure content script is injected (Manifest V3 way)
     chrome.scripting.executeScript({
         target: { tabId: tabId },
         files: ['content/linkedin-content.js']
     }).then(() => {
-
         // Wait a moment for script to initialize
         setTimeout(() => {
             // Send message with timeout handling
             const messageTimeout = setTimeout(() => {
-
                 showNotification('Collecting profiles... This may take a moment.', 'info');
             }, 5000);
-
             chrome.tabs.sendMessage(tabId, {
                 action: 'searchNetwork',
                 criteria: searchCriteria
             }).then(response => {
                 clearTimeout(messageTimeout);
-
                 if (response && response.profiles && response.profiles.length > 0) {
-
                     // Add profiles directly to campaign without approval modal
                     NetworkManager.addProfilesDirectly(response.profiles);
                 } else {
-
                     if (response && response.error) {
                         Utils.showNotification(`Error: ${response.error}`, 'error');
                     } else {
                         // Try fallback with collectProfiles
-
                         chrome.tabs.sendMessage(tabId, { action: 'collectProfiles' }).then(fallbackResponse => {
-
                             if (fallbackResponse && fallbackResponse.profiles && fallbackResponse.profiles.length > 0) {
-
                                 NetworkManager.addProfilesDirectly(fallbackResponse.profiles);
                             } else {
                                 Utils.showNotification('No profiles found matching your criteria', 'warning');
@@ -1322,7 +1241,6 @@ function startNetworkSearch(tabId, searchCriteria) {
                 clearTimeout(messageTimeout);
                 console.error('Message sending error:', error);
                 showNotification('Profiles collected! Check the list below.', 'success');
-
                 // Try to get any profiles that might have been collected
                 chrome.storage.local.get(['collectedProfiles'], function(result) {
                     if (result.collectedProfiles && result.collectedProfiles.length > 0) {
@@ -1347,14 +1265,12 @@ function startNetworkSearch(tabId, searchCriteria) {
             }
 
             if (response && response.profiles) {
-
                 // Add collected profiles
                 chrome.storage.local.get(['collectedProfiles'], function(result) {
                     const existing = result.collectedProfiles || [];
                     const newProfiles = response.profiles.filter(profile =>
                         !existing.some(existing => existing.url === profile.url)
                     );
-
                     const updated = [...existing, ...newProfiles];
 
                     chrome.storage.local.set({ collectedProfiles: updated }, function() {
@@ -1365,7 +1281,6 @@ function startNetworkSearch(tabId, searchCriteria) {
                     });
                 });
             } else {
-
                 showNotification('No profiles found. Try scrolling down to load more results.', 'warning');
             }
         });
@@ -1384,20 +1299,15 @@ function loadCollectedProfiles() {
 let selectedProfiles = [];
 
 function showProfileUrlsPopup(profiles) {
-
     // Force close any existing modals first
     const campaignModal = document.getElementById('campaign-modal');
     if (campaignModal) {
         campaignModal.style.display = 'none';
-
     }
-
     // Store profiles for later use
     selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
-
     // Update count
     document.getElementById('profile-count-display').textContent = profiles.length;
-
     // Populate the list
     const profilesList = document.getElementById('profile-urls-list');
     profilesList.innerHTML = '';
@@ -1492,14 +1402,12 @@ function showProfileUrlsPopup(profiles) {
 
 function closeProfileUrlsPopup() {
     // Prevent automatic closing - just show a message or do nothing
-
     // Optional: Show a message to user about how to close
     // You can add a confirmation dialog here if needed:
     // if (confirm('Are you sure you want to close this modal?')) {
     //     document.getElementById('profile-urls-modal').style.display = 'none';
     //     selectedProfiles = [];
     // }
-
     // For now, we just prevent the default close behavior
     return false;
 }
@@ -1518,7 +1426,6 @@ function selectAllProfiles() {
         checkbox.checked = !allChecked;
         selectedProfiles[index].selected = !allChecked;
     });
-
     updateSelectedCount();
 }
 

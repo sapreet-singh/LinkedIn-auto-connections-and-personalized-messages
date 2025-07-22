@@ -71,7 +71,6 @@ class LinkedInAutomation {
                 // Check if new page has profiles
                 setTimeout(() => {
                     if (this.isProfilePage() && !this.isAutoCollecting) {
-
                         this.startAutoCollection();
                     }
                 }, 2000);
@@ -87,7 +86,6 @@ class LinkedInAutomation {
         window.addEventListener('popstate', () => {
             setTimeout(() => {
                 if (this.isProfilePage() && !this.isAutoCollecting) {
-
                     this.startAutoCollection();
                 }
             }, 2000);
@@ -187,13 +185,11 @@ class LinkedInAutomation {
         });
 
         if (newProfiles.length > 0) {
-
             this.sendProfilesRealTime(newProfiles);
         }
     }
 
     stopAutoCollection() {
-
         this.isAutoCollecting = false;
 
         // Clean up observers
@@ -207,13 +203,10 @@ class LinkedInAutomation {
             clearTimeout(this.autoCollectionTimeout);
             this.autoCollectionTimeout = null;
         }
-
     }
     
     handleMessage(message, sendResponse) {
-
         if (!message || !message.action) {
-
             sendResponse({ error: 'Invalid message format' });
             return;
         }
@@ -236,23 +229,18 @@ class LinkedInAutomation {
                 });
                 return true; // Keep message channel open for async response
             case 'startRealTimeCollection':
-
                 this.isRealTimeMode = true;
                 this.currentPageCollected = false;
-
                 // Wait a moment for page to load, then collect
                 setTimeout(() => {
                     this.collectCurrentPageOnly().then(profiles => {
-
                         if (profiles.length > 0) {
                             this.sendProfilesRealTime(profiles);
                             this.currentPageCollected = true;
                         } else {
-
                             // Try alternative collection methods
                             const alternativeProfiles = this.extractProfilesAlternative();
                             if (alternativeProfiles.length > 0) {
-
                                 this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
                             }
                         }
@@ -264,18 +252,15 @@ class LinkedInAutomation {
                 sendResponse({ success: true });
                 return true;
             case 'stopRealTimeCollection':
-
                 this.isRealTimeMode = false;
                 this.currentPageCollected = false;
                 sendResponse({ success: true });
                 return true;
             case 'stopAutoCollection':
-
                 this.stopAutoCollection();
                 sendResponse({ success: true });
                 return true;
             case 'startAutoCollection':
-
                 if (!this.isAutoCollecting) {
                     this.startAutoCollection();
                 }
@@ -287,10 +272,8 @@ class LinkedInAutomation {
                 });
                 return true;
             case 'searchNetwork':
-
                 // Handle async response properly
                 this.searchNetwork(message.criteria).then(profiles => {
-
                     sendResponse({ profiles: profiles || [] });
                 }).catch(error => {
                     console.error('Error in searchNetwork:', error);
@@ -298,7 +281,6 @@ class LinkedInAutomation {
                 });
                 return true;
             default:
-
                 sendResponse({ error: 'Unknown action: ' + message.action });
         }
     }
@@ -310,12 +292,9 @@ class LinkedInAutomation {
     
     startAutomationFromPage() {
         if (this.todayCount >= this.dailyLimit) {
-
             return;
         }
-
         this.isRunning = true;
-
         this.processConnections();
     }
     
@@ -325,14 +304,12 @@ class LinkedInAutomation {
         const connectButtons = this.findConnectButtons();
         
         if (connectButtons.length === 0) {
-
             this.stopAutomation();
             return;
         }
 
         for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
             if (this.todayCount >= this.dailyLimit) {
-
                 break;
             }
 
@@ -342,7 +319,6 @@ class LinkedInAutomation {
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-
                 // Update storage
                 chrome.storage.local.set({ todayCount: this.todayCount });
 
@@ -352,7 +328,6 @@ class LinkedInAutomation {
                 }
             } catch (error) {
                 console.error('Error sending connection request:', error);
-
             }
         }
 
@@ -500,14 +475,12 @@ class LinkedInAutomation {
     
     // Start automation with campaign data (called from popup)
     startAutomation(campaign) {
-
         this.currentCampaign = campaign;
         this.startAutomationFromPage();
     }
 
     stopAutomation() {
         this.isRunning = false;
-
     }
 
     delay(ms) {
@@ -556,7 +529,6 @@ class LinkedInAutomation {
 
         // If no profiles found with main selectors, try alternative approach
         if (profiles.length === 0) {
-
             const alternativeProfiles = this.extractProfilesAlternative();
             profiles.push(...alternativeProfiles);
             // Note: Real-time sending is handled separately in collectCurrentPageOnly()
@@ -567,12 +539,9 @@ class LinkedInAutomation {
 
     // Collect only current page profiles (max 10) - for page-by-page collection
     async collectCurrentPageOnly() {
-
         const profiles = [];
-
         // Check if we're on My Network page
         if (window.location.href.includes('/mynetwork/')) {
-
             const networkProfiles = await this.collectNetworkProfiles();
             return networkProfiles.slice(0, 10); // Limit to 10
         }
@@ -590,15 +559,11 @@ class LinkedInAutomation {
         let profileCards = [];
         for (const selector of selectors) {
             profileCards = document.querySelectorAll(selector);
-
             if (profileCards.length > 0) break;
         }
-
         // If no cards found with main selectors, try to find any elements with profile links
         if (profileCards.length === 0) {
-
             const profileLinks = document.querySelectorAll('a[href*="/in/"]');
-
             // Group profile links by their parent containers
             const containers = new Set();
             profileLinks.forEach(link => {
@@ -606,7 +571,6 @@ class LinkedInAutomation {
                 if (container) containers.add(container);
             });
             profileCards = Array.from(containers);
-
         }
 
         // Limit to 10 profiles per page (LinkedIn's standard)
@@ -614,16 +578,11 @@ class LinkedInAutomation {
 
         for (let i = 0; i < maxProfiles; i++) {
             const card = profileCards[i];
-
             const profile = this.extractProfileFromCard(card);
             if (profile?.name && profile?.url) {
-
                 profiles.push(profile);
-
                 // Send each profile immediately for real-time updates
                 this.sendProfilesRealTime([profile]);
-            } else {
-
             }
         }
 
@@ -633,27 +592,22 @@ class LinkedInAutomation {
     // Send profiles to popup in real-time
     sendProfilesRealTime(profiles) {
         if (profiles.length > 0) {
-
             // Check if extension context is still valid
             if (!chrome.runtime?.id) {
-
                 this.storeProfilesForPopup(profiles);
                 return;
             }
-
             // Send message to popup to add profiles immediately
             try {
                 chrome.runtime.sendMessage({
                     action: 'addProfilesRealTime',
                     profiles: profiles
-                }).then(response => {
-
                 }).catch(error => {
                     if (error.message?.includes('Extension context invalidated') ||
                         error.message?.includes('message port closed')) {
-
+                        // Extension context lost, use storage fallback
                     } else {
-
+                        console.error('Error sending profiles:', error);
                     }
                     // Try alternative method - store in local storage for popup to pick up
                     this.storeProfilesForPopup(profiles);
@@ -661,9 +615,9 @@ class LinkedInAutomation {
             } catch (error) {
                 if (error.message?.includes('Extension context invalidated') ||
                     error.message?.includes('message port closed')) {
-
+                    // Extension context lost, use storage fallback
                 } else {
-
+                    console.error('Error sending profiles:', error);
                 }
                 this.storeProfilesForPopup(profiles);
             }
@@ -680,7 +634,6 @@ class LinkedInAutomation {
                     realTimeProfiles: updatedProfiles,
                     lastProfileUpdate: Date.now()
                 });
-
             });
         } catch (error) {
             console.error('🚀 CONTENT: Error storing profiles:', error);
@@ -689,7 +642,6 @@ class LinkedInAutomation {
 
     // Start continuous profile collection (monitors page changes)
     startContinuousCollection() {
-
         // Set up observer to watch for new profiles being loaded
         const observer = new MutationObserver((mutations) => {
             let hasNewProfiles = false;
@@ -731,7 +683,6 @@ class LinkedInAutomation {
 
     // Collect only new profiles that haven't been processed
     async collectNewProfiles() {
-
         const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
         const newProfiles = [];
 
@@ -747,7 +698,6 @@ class LinkedInAutomation {
         });
 
         if (newProfiles.length > 0) {
-
             this.sendProfilesRealTime(newProfiles);
         }
     }
