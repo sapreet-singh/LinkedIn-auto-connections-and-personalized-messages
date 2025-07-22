@@ -1,6 +1,20 @@
 # LinkedIn Auto Connect & Message Extension
 
-A Chrome extension that automates LinkedIn connection requests and follow-up messages, similar to InTouch Tool.
+A Chrome extension for automating LinkedIn connections and personalized messages with AI-powered message generation.
+
+## 🚀 New Features
+
+### AI-Powered Message Generation
+- **Profile Analysis**: Automatically analyze LinkedIn profiles for personalized messaging
+- **API Integration**: Connect to Node.js backend for AI message generation
+- **Multi-Strategy Messaging**: Support for single messages and multi-step follow-ups
+- **Message Preview**: Review generated messages before campaign creation
+- **Confidence Scoring**: AI confidence ratings for message quality
+
+### Enhanced Campaign Management
+- **Messaging Strategy Display**: View campaign messaging strategies in dashboard
+- **Generated Message Tracking**: Track which campaigns use AI-generated messages
+- **Profile Limit**: Generate messages for up to 10 profiles per campaign
 
 ## Features
 
@@ -16,11 +30,28 @@ A Chrome extension that automates LinkedIn connection requests and follow-up mes
 
 ## Installation
 
-1. Download or clone this repository
-2. Open Chrome and go to `chrome://extensions/`
+### Extension Setup
+1. Clone this repository
+2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extension folder
-5. The extension icon should appear in your Chrome toolbar
+4. Click "Load unpacked" and select the extension directory
+5. The extension icon will appear in your Chrome toolbar
+
+### API Server Setup
+1. Navigate to the server directory:
+   ```bash
+   cd server
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the server:
+   ```bash
+   npm start
+   ```
+
+The API server will run on `http://localhost:7007`
 
 ## How to Use
 
@@ -54,7 +85,15 @@ A Chrome extension that automates LinkedIn connection requests and follow-up mes
 - View and export collected profiles
 - Create campaigns from collected profiles
 
-### 5. Start Automation
+### 5. Generate AI Messages (New Feature)
+- Collect profiles (up to 10 for AI generation)
+- Configure messaging strategy:
+  - **Single Message**: One-time connection request
+  - **Multi-Step Follow-Up**: Connection request + 1-2 scheduled follow-ups
+- Click "🤖 ANALYZE & GENERATE MESSAGES" to create personalized messages
+- Review generated messages and create campaign
+
+### 6. Start Automation
 - Navigate to a LinkedIn search results page (or let the extension navigate for company campaigns)
 - The extension will show a floating panel
 - Click "Start Auto Connect" to begin automation
