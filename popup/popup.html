@@ -100,7 +100,7 @@
                 <!-- Step 1: Campaign Name -->
                 <div class="wizard-step active" id="step-1">
                     <div class="wizard-header">
-                        <button class="back-btn" style="display: none;">&larr;</button>
+                        <button class="back-btn hidden">&larr;</button>
                         <h3>Campaign name</h3>
                         <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
@@ -142,7 +142,7 @@
                         <div class="csv-upload-area">
                             <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
                             <button class="upload-btn" id="csv-upload-btn">Click to import the file</button>
-                            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                            <input type="file" id="csv-file-input" accept=".csv" class="hidden">
                             <div class="upload-hint">or drop it here</div>
                         </div>
                     </div>
@@ -216,7 +216,7 @@
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
                     <div class="collection-status">
-                        <div class="auto-detection-indicator" id="auto-detection-indicator" style="display: none;">
+                        <div class="auto-detection-indicator hidden" id="auto-detection-indicator">
                             <span class="indicator-dot"></span>
                             <span>🔄 Auto-collecting profiles...</span>
                         </div>
@@ -229,7 +229,7 @@
                             <!-- Profiles will be added here dynamically -->
                         </div>
 
-                        <button class="btn btn-primary" id="next-to-messaging" style="display: none;">NEXT</button>
+                        <button class="btn btn-primary hidden" id="next-to-messaging">NEXT</button>
                     </div>
                 </div>
 
@@ -263,7 +263,7 @@
                         </div>
 
                         <!-- Message Generation Results -->
-                        <div class="message-results" id="message-results" style="display: none;">
+                        <div class="message-results hidden" id="message-results">
                             <h4>Generated Messages:</h4>
                             <div class="messages-container" id="messages-container">
                                 <!-- Generated messages will appear here -->
@@ -281,7 +281,7 @@
                 </div>
 
                 <!-- Duplicates Modal -->
-                <div class="duplicates-overlay" id="duplicates-modal" style="display: none;">
+                <div class="duplicates-overlay hidden" id="duplicates-modal">
                     <div class="duplicates-content">
                         <h3><span id="duplicate-count">0</span> duplicates found</h3>
                         <p>The following people already appeared in one of your campaigns or you contacted them before.</p>
@@ -322,7 +322,7 @@
     </div>
 
     <!-- Profile URLs Popup Modal -->
-    <div id="profile-urls-modal" class="modal" style="display: none;">
+    <div id="profile-urls-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Collected Profile URLs</h3>

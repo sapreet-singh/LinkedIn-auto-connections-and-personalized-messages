@@ -503,48 +503,16 @@ class LinkedInAutomation {
     }
 
     async collectCurrentPageOnly() {
-        const profiles = [];
-        if (window.location.href.includes('/mynetwork/')) {
-            const networkProfiles = await this.collectNetworkProfiles();
-            return networkProfiles.slice(0, 10);
-        }
+        // Use existing collectProfiles method but limit results and send real-time
+        const allProfiles = await this.collectProfiles();
+        const limitedProfiles = allProfiles.slice(0, 10);
 
-        const selectors = [
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            '.search-result',
-            '.entity-result',
-            'li[data-reusable-search-result]',
-            '.search-results-container li'
-        ];
+        // Send profiles in real-time as they're collected
+        limitedProfiles.forEach(profile => {
+            this.sendProfilesRealTime([profile]);
+        });
 
-        let profileCards = [];
-        for (const selector of selectors) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) break;
-        }
-        if (profileCards.length === 0) {
-            const profileLinks = document.querySelectorAll('a[href*="/in/"]');
-            const containers = new Set();
-            profileLinks.forEach(link => {
-                const container = link.closest('li, div[class*="result"], article');
-                if (container) containers.add(container);
-            });
-            profileCards = Array.from(containers);
-        }
-
-        const maxProfiles = Math.min(profileCards.length, 10);
-
-        for (let i = 0; i < maxProfiles; i++) {
-            const card = profileCards[i];
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-                this.sendProfilesRealTime([profile]);
-            }
-        }
-
-        return profiles;
+        return limitedProfiles;
     }
 
     sendProfilesRealTime(profiles) {
@@ -585,59 +553,7 @@ class LinkedInAutomation {
         }
     }
 
-    startContinuousCollection() {
-        const observer = new MutationObserver((mutations) => {
-            let hasNewProfiles = false;
-
-            mutations.forEach((mutation) => {
-                if (mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const newProfileCards = node.querySelectorAll ?
-                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
-
-                            if (newProfileCards.length > 0) {
-                                hasNewProfiles = true;
-                            }
-                        }
-                    });
-                }
-            });
-
-            if (hasNewProfiles) {
-                clearTimeout(this.collectionTimeout);
-                this.collectionTimeout = setTimeout(() => {
-                    this.collectNewProfiles();
-                }, 1000);
-            }
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        this.profileObserver = observer;
-    }
-
-    async collectNewProfiles() {
-        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
-        const newProfiles = [];
-
-        profileCards.forEach((card) => {
-            if (card.dataset.processed) return;
-
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                newProfiles.push(profile);
-                card.dataset.processed = 'true';
-            }
-        });
-
-        if (newProfiles.length > 0) {
-            this.sendProfilesRealTime(newProfiles);
-        }
-    }
+    // Removed duplicate startContinuousCollection() and collectNewProfiles() - functionality exists in setupContinuousMonitoring() and collectNewProfilesAuto()
 
     fixProfileData(profile) {
         if (!profile.name ||
@@ -692,61 +608,27 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
+        // Simplified alternative extraction using existing extractProfileFromCard method
         const profiles = [];
-
         const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+        const containers = new Set();
 
         profileLinks.forEach(link => {
             if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
                 return;
             }
 
-            link.classList.add('processed');
-
-            const profile = {
-                name: '',
-                url: link.href,
-                company: '',
-                title: '',
-                location: '',
-                industry: '',
-                profilePic: '',
-                collectedAt: new Date().toISOString()
-            };
-
-            let nameText = link.textContent.trim();
-            if (!nameText || nameText.includes('View') || nameText.includes('Status') || nameText.length < 3) {
-                const parent = link.closest('li, div, article');
-                if (parent) {
-                    const nameElements = parent.querySelectorAll('span, h3, h4, .name, [data-anonymize="person-name"]');
-                    for (const el of nameElements) {
-                        const text = el.textContent.trim();
-                        if (text && text.length > 2 && !text.includes('Status') && !text.includes('View') && text.split(' ').length >= 2) {
-                            nameText = text;
-                            break;
-                        }
-                    }
-                }
+            const container = link.closest('li, div, article');
+            if (container && !container.classList.contains('processed')) {
+                container.classList.add('processed');
+                containers.add(container);
             }
+        });
 
-            if (nameText && nameText.length > 2) {
-                profile.name = nameText;
-
-                if (profile.url.includes('?')) {
-                    profile.url = profile.url.split('?')[0];
-                }
-                profile.url = profile.url.replace(/\/$/, '');
-
-                const parent = link.closest('li, div, article');
-                if (parent) {
-                    const img = parent.querySelector('img[src*="http"]');
-                    if (img && img.src && !img.src.includes('data:image')) {
-                        profile.profilePic = img.src;
-                    }
-                }
-
+        Array.from(containers).forEach(container => {
+            const profile = this.extractProfileFromCard(container);
+            if (profile?.name && profile?.url) {
                 profiles.push(profile);
-
             }
         });
 
@@ -974,7 +856,7 @@ class LinkedInAutomation {
             let scrollAttempts = 0;
             const maxScrollAttempts = 5;
 
-            this.startContinuousCollection();
+            this.setupContinuousMonitoring();
 
             if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
 
@@ -1098,7 +980,16 @@ class LinkedInAutomation {
 
 }
 
-new LinkedInAutomation();
+// Initialize LinkedInAutomation once
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.linkedInAutomation = new LinkedInAutomation();
+    });
+} else {
+    window.linkedInAutomation = new LinkedInAutomation();
+}
+
+// Suppress common extension-related console errors
 const originalError = console.error;
 console.error = function(...args) {
     const message = args.join(' ');
@@ -1107,20 +998,9 @@ console.error = function(...args) {
         message.includes('Extension context invalidated') ||
         message.includes('message port closed') ||
         message.includes('Could not establish connection')) {
-
         return;
     }
     originalError.apply(console, args);
 };
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-
-        window.linkedInAutomation = new LinkedInAutomation();
-    });
-} else {
-
-    window.linkedInAutomation = new LinkedInAutomation();
-}
 
 } // End of injection guard

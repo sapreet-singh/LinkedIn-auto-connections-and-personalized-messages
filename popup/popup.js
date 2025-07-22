@@ -193,10 +193,56 @@ const Utils = {
     },
 
     updateCollectedCount: (count) => {
-        const collectedNumber = DOMCache.get('collected-number');
-        const mainCollectedNumber = DOMCache.get('main-collected-number');
-        if (collectedNumber) collectedNumber.textContent = count;
-        if (mainCollectedNumber) mainCollectedNumber.textContent = count;
+        ['collected-number', 'main-collected-number'].forEach(id => {
+            const element = DOMCache.get(id);
+            if (element) element.textContent = count;
+        });
+    },
+
+    show: (element) => {
+        if (element) {
+            element.classList.remove('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        }
+    },
+
+    hide: (element) => {
+        if (element) {
+            element.classList.add('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'none';
+            }
+        }
+    },
+
+    showById: (id) => {
+        const element = DOMCache.get(id);
+        if (element) {
+            element.classList.remove('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        }
+    },
+
+    hideById: (id) => {
+        const element = DOMCache.get(id);
+        if (element) {
+            element.classList.add('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'none';
+            }
+        }
+    },
+
+    isVisible: (element) => {
+        return element && !element.classList.contains('hidden');
     },
 
     extractCleanName: (profile) => {
@@ -336,7 +382,18 @@ const ModalManager = {
         const campaignModal = DOMCache.get('campaign-modal');
         const profilesModal = DOMCache.get('profiles-modal');
 
-        DOMCache.get('create-campaign')?.addEventListener('click', () => this.openCampaignModal());
+        const createCampaignBtn = DOMCache.get('create-campaign');
+        console.log('ModalManager.init - create-campaign button found:', createCampaignBtn);
+
+        if (createCampaignBtn) {
+            createCampaignBtn.addEventListener('click', () => {
+                console.log('🚀 Create Campaign button clicked!');
+                this.openCampaignModal();
+            });
+        } else {
+            console.error('❌ create-campaign button not found!');
+        }
+
         DOMCache.getAll('.close').forEach(btn => btn.addEventListener('click', (e) => this.handleCloseClick(e)));
         DOMCache.get('close-profiles')?.addEventListener('click', () => this.closeModal('profiles-modal'));
 
@@ -347,13 +404,30 @@ const ModalManager = {
     },
 
     openCampaignModal() {
-        DOMCache.get('campaign-modal').style.display = 'block';
+        console.log('openCampaignModal called');
+        const modal = DOMCache.get('campaign-modal');
+        console.log('Campaign modal element:', modal);
+
+        if (modal) {
+            // Remove hidden class and set display to block for modal
+            modal.classList.remove('hidden');
+            modal.style.display = 'block';
+            console.log('Modal display set to block and hidden class removed');
+        }
+
         WizardManager.initialize();
+        console.log('WizardManager initialized');
+
         WizardManager.showStep(CONSTANTS.STEPS.CAMPAIGN_NAME);
+        console.log('Showing step:', CONSTANTS.STEPS.CAMPAIGN_NAME);
     },
 
     closeCampaignModal() {
-        DOMCache.get('campaign-modal').style.display = 'none';
+        const modal = DOMCache.get('campaign-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
         WizardManager.reset();
     },
 
@@ -368,15 +442,23 @@ const ModalManager = {
         const modalId = typeof modalIdOrEvent === 'string' ? modalIdOrEvent :
                        modalIdOrEvent.target.closest('#campaign-modal') ? 'campaign-modal' : null;
         if (modalId) {
-            DOMCache.get(modalId).style.display = 'none';
+            const modal = DOMCache.get(modalId);
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
             if (modalId === 'campaign-modal') WizardManager.reset();
         }
     },
 
     forceCloseAll() {
-        DOMCache.get('campaign-modal').style.display = 'none';
-        DOMCache.get('profiles-modal').style.display = 'none';
-        DOMCache.get('profile-urls-modal').style.display = 'none';
+        ['campaign-modal', 'profiles-modal', 'profile-urls-modal'].forEach(modalId => {
+            const modal = DOMCache.get(modalId);
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
+        });
         WizardManager.reset();
         AppState.selectedProfiles = [];
         Utils.showNotification('All modals have been closed.', 'success');
@@ -385,15 +467,22 @@ const ModalManager = {
 
 const WizardManager = {
     initialize() {
-        if (AppState.wizardInitialized) return;
+        console.log('WizardManager.initialize called, wizardInitialized:', AppState.wizardInitialized);
+        if (AppState.wizardInitialized) {
+            console.log('Wizard already initialized, skipping');
+            return;
+        }
         AppState.wizardInitialized = true;
+        console.log('Setting up wizard event listeners');
         this.setupEventListeners();
     },
 
     reset() {
+        console.log('WizardManager.reset called');
         AppState.currentStep = 1;
         AppState.collectedProfiles = [];
         AppState.duplicateProfiles = [];
+        AppState.wizardInitialized = false; // Reset initialization flag
         const campaignNameInput = DOMCache.get('campaign-name');
         if (campaignNameInput) campaignNameInput.value = '';
         const elements = ['collected-number', 'collected-profiles-list'];
@@ -404,17 +493,36 @@ const WizardManager = {
     },
 
     showStep(stepNumber, subStep = null) {
-        console.log(`Showing step ${stepNumber}, subStep: ${subStep}`);
-        DOMCache.getAll('.wizard-step').forEach(step => step.classList.remove('active'));
+        console.log(`🔄 Showing step ${stepNumber}, subStep: ${subStep}`);
+
+        // Get all wizard steps and log them
+        const allSteps = DOMCache.getAll('.wizard-step');
+        console.log('All wizard steps found:', allSteps.length, Array.from(allSteps).map(s => s.id));
+
+        // Remove active class from all steps
+        allSteps.forEach(step => {
+            console.log(`Removing active from step: ${step.id}`);
+            step.classList.remove('active');
+        });
 
         const stepMap = {
             1: 'step-1', 2: 'step-2', 4: 'step-4-messaging',
             3: subStep ? `step-3-${subStep}` : 'step-3-collecting'
         };
 
-        const stepElement = DOMCache.get(stepMap[stepNumber]);
-        console.log(`Step element for ${stepNumber}:`, stepElement);
-        if (stepElement) stepElement.classList.add('active');
+        const targetStepId = stepMap[stepNumber];
+        console.log(`Target step ID: ${targetStepId}`);
+
+        const stepElement = DOMCache.get(targetStepId);
+        console.log(`Step element for ${stepNumber} (${targetStepId}):`, stepElement);
+
+        if (stepElement) {
+            stepElement.classList.add('active');
+            console.log(`✅ Added active class to step: ${targetStepId}`);
+        } else {
+            console.error(`❌ Step element not found: ${targetStepId}`);
+        }
+
         AppState.currentStep = stepNumber;
 
         // Initialize Step 4 when showing it
@@ -450,28 +558,47 @@ const WizardManager = {
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
             'cancel-duplicates': () => DuplicateManager.cancel(),
-            'single-message-radio': () => DOMCache.get('follow-up-config').style.display = 'none',
-            'multi-step-radio': () => DOMCache.get('follow-up-config').style.display = 'block',
+            'single-message-radio': () => Utils.hideById('follow-up-config'),
+            'multi-step-radio': () => Utils.showById('follow-up-config'),
             'generate-messages': () => MessageGenerator.generateMessages()
         };
 
+        console.log('🔧 Setting up wizard event listeners');
         Object.entries(eventMap).forEach(([id, handler]) => {
             const element = DOMCache.get(id);
-            if (element) element.onclick = handler;
+            if (element) {
+                console.log(`✅ Adding event listener for: ${id}`);
+                element.addEventListener('click', handler);
+            } else {
+                console.log(`❌ Element not found for: ${id}`);
+            }
         });
 
         const csvInput = DOMCache.get('csv-file-input');
-        if (csvInput) csvInput.onchange = CSVHandler.upload;
+        if (csvInput) {
+            console.log('✅ Adding CSV input change listener');
+            csvInput.addEventListener('change', CSVHandler.upload);
+        } else {
+            console.log('❌ CSV input not found');
+        }
     },
 
     validateAndProceed() {
+        console.log('🔍 validateAndProceed called');
         const campaignNameInput = DOMCache.get('campaign-name');
+        console.log('Campaign name input element:', campaignNameInput);
+
         const campaignName = campaignNameInput?.value.trim();
+        console.log('Campaign name value:', campaignName);
+
         if (!campaignName) {
+            console.log('❌ No campaign name provided');
             Utils.showNotification('Please enter a campaign name', 'error');
             campaignNameInput?.focus();
             return;
         }
+
+        console.log('✅ Campaign name valid, proceeding to step 2');
         this.showStep(2);
     },
 
@@ -558,19 +685,19 @@ const DuplicateManager = {
             list.appendChild(Utils.createProfileCard(profile));
         });
 
-        DOMCache.get('duplicates-modal').style.display = 'block';
+        Utils.showById('duplicates-modal');
     },
 
     exclude() {
         AppState.collectedProfiles = AppState.collectedProfiles.filter(profile =>
             !AppState.duplicateProfiles.some(dup => dup.url === profile.url)
         );
-        DOMCache.get('duplicates-modal').style.display = 'none';
+        Utils.hideById('duplicates-modal');
         CampaignManager.finalize();
     },
 
     cancel() {
-        DOMCache.get('duplicates-modal').style.display = 'none';
+        Utils.hideById('duplicates-modal');
         CampaignManager.finalize();
     }
 };
@@ -614,8 +741,8 @@ const RealTimeProfileHandler = {
                 }));
                 AppState.collectedProfiles.push(...processedProfiles);
                 const campaignModal = DOMCache.get('campaign-modal');
-                if (campaignModal && campaignModal.style.display !== 'block') {
-                    campaignModal.style.display = 'block';
+                if (campaignModal && !Utils.isVisible(campaignModal)) {
+                    Utils.show(campaignModal);
                     WizardManager.showStep(3, 'collecting');
                     setTimeout(() => {
                         this.updateUIAfterModalOpen(newProfiles.length);
@@ -679,18 +806,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     ]);
 
     AppState.isAutoCollectionEnabled = true;
-
-    // Setup both auto collection buttons
-    const pauseBtn = DOMCache.get('pause-collection');
-    const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-    [pauseBtn, mainPauseBtn].forEach((btn) => {
-        if (btn) {
-            btn.textContent = 'AUTO ON';
-            btn.className = 'btn btn-success';
-        }
-    });
-
+    ProfileCollector.updateAutoCollectionButtons([DOMCache.get('pause-collection'), DOMCache.get('main-pause-collection')], true);
     AutoCollectionHandler.hideAutoIndicator();
 });
 
@@ -831,7 +947,7 @@ const AutoCollectionHandler = {
     handleAutoCollectionStarted() {
         // Only show modal if user is actively creating a campaign
         const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal && campaignModal.style.display === 'block') {
+        if (campaignModal && Utils.isVisible(campaignModal)) {
             WizardManager.showStep(3, 'collecting');
         }
 
@@ -847,24 +963,20 @@ const AutoCollectionHandler = {
     },
 
     hideAutoIndicator() {
-        const indicator = DOMCache.get('auto-detection-indicator');
-        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
-        if (indicator) {
-            indicator.style.display = 'none';
-        }
-        if (mainIndicator) {
-            mainIndicator.style.display = 'none';
-        }
+        Utils.hideById('auto-detection-indicator');
+        Utils.hideById('main-auto-detection-indicator');
     },
 
     showAutoIndicator() {
         const indicator = DOMCache.get('auto-detection-indicator');
         const mainIndicator = DOMCache.get('main-auto-detection-indicator');
         if (indicator) {
-            indicator.style.display = 'flex';
+            indicator.classList.remove('hidden');
+            indicator.style.display = 'flex'; // Keep flex display for layout
         }
         if (mainIndicator) {
-            mainIndicator.style.display = 'flex';
+            mainIndicator.classList.remove('hidden');
+            mainIndicator.style.display = 'flex'; // Keep flex display for layout
         }
     }
 };
@@ -920,17 +1032,7 @@ const ProfileCollector = {
 
     start() {
         AppState.isAutoCollectionEnabled = true;
-
-        const pauseBtn = DOMCache.get('pause-collection');
-        const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-        [pauseBtn, mainPauseBtn].forEach((btn) => {
-            if (btn) {
-                btn.textContent = 'AUTO ON';
-                btn.className = 'btn btn-success';
-            }
-        });
-
+        this.updateAutoCollectionButtons([DOMCache.get('pause-collection'), DOMCache.get('main-pause-collection')], true);
         AutoCollectionHandler.showAutoIndicator();
         this.startRealTimeCollection();
         Utils.showNotification('🔄 Auto collection enabled! Profiles will be collected automatically.', 'info');
@@ -947,7 +1049,7 @@ const ProfileCollector = {
 
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
-            campaignModal.style.display = 'block';
+            Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
 
@@ -970,83 +1072,42 @@ const ProfileCollector = {
         const mainPauseBtn = DOMCache.get('main-pause-collection');
 
         if (AppState.isAutoCollectionEnabled) {
-            // Disable auto collection
             AppState.isAutoCollectionEnabled = false;
-
-            // Update both buttons
-            if (pauseBtn) {
-                pauseBtn.textContent = 'AUTO OFF';
-                pauseBtn.className = 'btn btn-secondary';
-            }
-            if (mainPauseBtn) {
-                mainPauseBtn.textContent = 'AUTO OFF';
-                mainPauseBtn.className = 'btn btn-secondary';
-            }
-
+            this.updateAutoCollectionButtons([pauseBtn, mainPauseBtn], false);
             AutoCollectionHandler.hideAutoIndicator();
-
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'disableAutoCollection' });
-                }
-            });
-
+            this.sendAutoCollectionMessage('disableAutoCollection');
             Utils.showNotification('🔴 Auto collection disabled. Profiles will not be collected automatically.', 'info');
         } else {
-            // Enable auto collection
             AppState.isAutoCollectionEnabled = true;
-
-            // Update both buttons
-            if (pauseBtn) {
-                pauseBtn.textContent = 'AUTO ON';
-                pauseBtn.className = 'btn btn-success';
-            }
-            if (mainPauseBtn) {
-                mainPauseBtn.textContent = 'AUTO ON';
-                mainPauseBtn.className = 'btn btn-success';
-            }
-
+            this.updateAutoCollectionButtons([pauseBtn, mainPauseBtn], true);
             AutoCollectionHandler.showAutoIndicator();
-
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'enableAutoCollection' });
-                }
-            });
+            this.sendAutoCollectionMessage('enableAutoCollection');
             Utils.showNotification('🟢 Auto collection enabled! Profiles will be collected automatically on LinkedIn pages.', 'success');
         }
+    },
+
+    updateAutoCollectionButtons(buttons, enabled) {
+        buttons.forEach(btn => {
+            if (btn) {
+                btn.textContent = enabled ? 'AUTO ON' : 'AUTO OFF';
+                btn.className = enabled ? 'btn btn-success' : 'btn btn-secondary';
+            }
+        });
+    },
+
+    sendAutoCollectionMessage(action) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+                chrome.tabs.sendMessage(tabs[0].id, { action });
+            }
+        });
     },
 
     continue() {
         if (AppState.isCollecting) this.collectFromCurrentPage();
     },
 
-    async collectFromCurrentPage() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        try {
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' });
-            if (response?.profiles?.length > 0) {
-                const newProfiles = response.profiles.map(profile => ({
-                    ...profile,
-                    collectedAt: new Date().toISOString()
-                }));
-                AppState.collectedProfiles.push(...newProfiles);
-                ProfileManager.updateList();
-                DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
-                Utils.showNotification(`Collected ${response.profiles.length} profiles`);
-            }
-        } catch (error) {
-            console.error('Error collecting profiles:', error);
-            Utils.showNotification('Error collecting profiles. Please refresh the page.', 'error');
-        }
-    }
+    // Removed duplicate collectFromCurrentPage() - functionality exists in collectFromPage()
 };
 
 const ProfileManager = {
@@ -1067,7 +1128,7 @@ const ProfileManager = {
             `).join('');
         }
 
-        DOMCache.get('profiles-modal').style.display = 'block';
+        Utils.showById('profiles-modal');
     },
 
     async export() {
@@ -1103,7 +1164,7 @@ const ProfileManager = {
             return;
         }
 
-        DOMCache.get('profiles-modal').style.display = 'none';
+        Utils.hideById('profiles-modal');
         ModalManager.openCampaignModal();
 
         AppState.collectedProfiles = profiles.map(profile => ({
@@ -1131,11 +1192,11 @@ const ProfileManager = {
         console.log('UpdateList called, profiles:', AppState.collectedProfiles.length, 'nextButton:', nextButton);
         if (nextButton) {
             if (AppState.collectedProfiles.length > 0) {
-                nextButton.style.display = 'block';
+                Utils.show(nextButton);
                 nextButton.disabled = false;
                 console.log('NEXT button shown');
             } else {
-                nextButton.style.display = 'none';
+                Utils.hide(nextButton);
                 console.log('NEXT button hidden');
             }
         }
@@ -1166,11 +1227,11 @@ const Step4Manager = {
         const useMessagesBtn = DOMCache.get('use-selected-messages');
         const regenerateBtn = DOMCache.get('regenerate-messages');
 
-        if (selectAllBtn) selectAllBtn.onclick = () => this.selectAll();
-        if (deselectAllBtn) deselectAllBtn.onclick = () => this.deselectAll();
-        if (generateBtn) generateBtn.onclick = () => this.generateMessages();
-        if (useMessagesBtn) useMessagesBtn.onclick = () => this.useSelectedMessages();
-        if (regenerateBtn) regenerateBtn.onclick = () => this.regenerateMessages();
+        if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAll());
+        if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => this.deselectAll());
+        if (generateBtn) generateBtn.addEventListener('click', () => this.generateMessages());
+        if (useMessagesBtn) useMessagesBtn.addEventListener('click', () => this.useSelectedMessages());
+        if (regenerateBtn) regenerateBtn.addEventListener('click', () => this.regenerateMessages());
     },
 
     showProfileSelection() {
@@ -1192,7 +1253,7 @@ const Step4Manager = {
             `;
 
             const checkbox = item.querySelector('input[type="checkbox"]');
-            checkbox.onchange = () => this.toggleProfile(index, checkbox.checked);
+            checkbox.addEventListener('change', () => this.toggleProfile(index, checkbox.checked));
 
             container.appendChild(item);
         });
@@ -1381,14 +1442,14 @@ const Step4Manager = {
                 // Add event listeners for radio buttons
                 const radioButtons = profileDiv.querySelectorAll('input[type="radio"]');
                 radioButtons.forEach(radio => {
-                    radio.onchange = () => {
+                    radio.addEventListener('change', () => {
                         if (radio.checked) {
                             const selectedMessageIndex = parseInt(radio.value);
                             item.selectedMessage = messages[selectedMessageIndex];
                             item.selectedMessageIndex = selectedMessageIndex;
                             console.log(`Selected message ${selectedMessageIndex + 1} for ${item.profile.name}:`, item.selectedMessage);
                         }
-                    };
+                    });
                 });
 
                 // Set default selected message (first one)
@@ -1415,7 +1476,10 @@ const Step4Manager = {
 
         // Add a test message to verify the container is working
         if (messagesContainer.children.length === 0) {
-            messagesContainer.innerHTML = '<div style="padding: 20px; background: #f0f0f0; margin: 10px 0; border: 2px solid blue;">No messages generated or parsing failed</div>';
+            const noMessagesDiv = document.createElement('div');
+            noMessagesDiv.className = 'no-messages-placeholder';
+            noMessagesDiv.textContent = 'No messages generated or parsing failed';
+            messagesContainer.appendChild(noMessagesDiv);
         }
     },
 
@@ -1683,7 +1747,7 @@ const Step4Manager = {
         const createBtn = DOMCache.get('create-campaign-final');
         if (createBtn) {
             createBtn.disabled = false;
-            createBtn.style.display = 'block';
+            Utils.show(createBtn);
         }
     },
 
@@ -1720,7 +1784,7 @@ const NetworkManager = {
 
             const campaignModal = DOMCache.get('campaign-modal');
             if (campaignModal) {
-                campaignModal.style.display = 'block';
+                Utils.show(campaignModal);
                 WizardManager.showStep(3, 'collecting');
             }
             Utils.showNotification('Starting real-time profile collection...', 'info');
@@ -1782,7 +1846,7 @@ const NetworkManager = {
         Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
-            campaignModal.style.display = 'block';
+            Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
     }
@@ -1791,7 +1855,7 @@ const NetworkManager = {
 const ProfileURLModal = {
     show(profiles) {
         const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) campaignModal.style.display = 'none';
+        if (campaignModal) Utils.hide(campaignModal);
         AppState.selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
         DOMCache.get('profile-count-display').textContent = profiles.length;
         this.populateList(profiles);
@@ -1864,7 +1928,7 @@ const ProfileURLModal = {
     },
 
     forceClose() {
-        DOMCache.get('profile-urls-modal').style.display = 'none';
+        Utils.hideById('profile-urls-modal');
         AppState.selectedProfiles = [];
     },
 
@@ -1905,220 +1969,8 @@ const ProfileURLModal = {
         Utils.showNotification(`Added ${profilesToAdd.length} profiles to campaign`, 'success');
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
-            campaignModal.style.display = 'block';
+            Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
     }
 };
-
-function startNetworkSearch(tabId, searchCriteria) {
-    chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['content/linkedin-content.js']
-    }).then(() => {
-        setTimeout(() => {
-            const messageTimeout = setTimeout(() => {
-                showNotification('Collecting profiles... This may take a moment.', 'info');
-            }, 5000);
-            chrome.tabs.sendMessage(tabId, {
-                action: 'searchNetwork',
-                criteria: searchCriteria
-            }).then(response => {
-                clearTimeout(messageTimeout);
-                if (response && response.profiles && response.profiles.length > 0) {
-                    NetworkManager.addProfilesDirectly(response.profiles);
-                } else {
-                    if (response && response.error) {
-                        Utils.showNotification(`Error: ${response.error}`, 'error');
-                    } else {
-                        chrome.tabs.sendMessage(tabId, { action: 'collectProfiles' }).then(fallbackResponse => {
-                            if (fallbackResponse && fallbackResponse.profiles && fallbackResponse.profiles.length > 0) {
-                                NetworkManager.addProfilesDirectly(fallbackResponse.profiles);
-                            } else {
-                                Utils.showNotification('No profiles found matching your criteria', 'warning');
-                            }
-                        }).catch(fallbackError => {
-                            console.error('Fallback error:', fallbackError);
-                            Utils.showNotification('No profiles found matching your criteria', 'warning');
-                        });
-                    }
-                }
-            }).catch(error => {
-                clearTimeout(messageTimeout);
-                console.error('Message sending error:', error);
-                showNotification('Profiles collected! Check the list below.', 'success');
-                chrome.storage.local.get(['collectedProfiles'], function(result) {
-                    if (result.collectedProfiles && result.collectedProfiles.length > 0) {
-                        collectedProfiles = result.collectedProfiles;
-                        updateCollectedProfilesList();
-                        document.getElementById('collected-number').textContent = result.collectedProfiles.length;
-                    }
-                });
-            });
-        }, 1000);
-    }).catch(error => {
-        console.error('Script injection error:', error);
-        chrome.tabs.sendMessage(tabId, {
-            action: 'searchNetwork',
-            criteria: searchCriteria
-        }, function(response) {
-            if (chrome.runtime.lastError) {
-                console.error('Message sending error:', chrome.runtime.lastError);
-                showNotification('Please refresh the LinkedIn page and try again.', 'error');
-                return;
-            }
-
-            if (response && response.profiles) {
-                chrome.storage.local.get(['collectedProfiles'], function(result) {
-                    const existing = result.collectedProfiles || [];
-                    const newProfiles = response.profiles.filter(profile =>
-                        !existing.some(existing => existing.url === profile.url)
-                    );
-                    const updated = [...existing, ...newProfiles];
-
-                    chrome.storage.local.set({ collectedProfiles: updated }, function() {
-                        collectedProfiles = updated;
-                        updateCollectedProfilesList();
-                        document.getElementById('collected-number').textContent = updated.length;
-                        showNotification(`Collected ${newProfiles.length} profiles from your network`);
-                    });
-                });
-            } else {
-                showNotification('No profiles found. Try scrolling down to load more results.', 'warning');
-            }
-        });
-    });
-}
-
-function loadCollectedProfiles() {
-    chrome.storage.local.get(['collectedProfiles'], function(result) {
-        const profiles = result.collectedProfiles || [];
-        document.getElementById('profile-count').textContent = profiles.length;
-    });
-}
-
-let selectedProfiles = [];
-
-function showProfileUrlsPopup(profiles) {
-    const campaignModal = document.getElementById('campaign-modal');
-    if (campaignModal) {
-        campaignModal.style.display = 'none';
-    }
-    selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
-    document.getElementById('profile-count-display').textContent = profiles.length;
-    const profilesList = document.getElementById('profile-urls-list');
-    profilesList.innerHTML = '';
-
-    profiles.forEach((profile, index) => {
-        const profileItem = document.createElement('div');
-        profileItem.className = 'profile-item';
-        let cleanName = 'Unknown Name';
-
-        if (profile.name && profile.name !== 'Status is reachable') {
-            cleanName = profile.name.trim();
-        }
-        else if (profile.location) {
-            const nameMatch = profile.location.match(/^([^V•\n]+?)(?:View|•|\n|$)/);
-            if (nameMatch) {
-                cleanName = nameMatch[1].trim();
-            }
-        }
-
-        cleanName = cleanName.replace(/\s+/g, ' ').trim();
-
-        const profilePicUrl = profile.profilePic || '';
-
-        profileItem.innerHTML = `
-            <input type="checkbox" class="profile-checkbox" data-index="${index}" checked>
-            <div class="profile-pic">
-                ${profilePicUrl ?
-                    `<img src="${profilePicUrl}" alt="${cleanName}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #0073b1;">` :
-                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #0073b1; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px;">${cleanName.charAt(0).toUpperCase()}</div>`
-                }
-            </div>
-            <div class="profile-info">
-                <div class="profile-name" style="font-weight: bold; color: #333;">${cleanName}</div>
-                <div class="profile-connection" style="color: #666; font-size: 12px;">• 1st degree connection</div>
-            </div>
-        `;
-        profilesList.appendChild(profileItem);
-    });
-
-    document.querySelectorAll('.profile-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const index = parseInt(this.getAttribute('data-index'));
-            selectedProfiles[index].selected = this.checked;
-            updateSelectedCount();
-        });
-    });
-
-    const modal = document.getElementById('profile-urls-modal');
-    if (modal) {
-        modal.style.cssText = `
-            display: block !important;
-            position: fixed !important;
-            z-index: 999999 !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            background: rgba(0,0,0,0.5) !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        `;
-
-        const modalContent = modal.querySelector('.modal-content');
-        if (modalContent) {
-            modalContent.style.cssText = `
-                background: white !important;
-                margin: 5% auto !important;
-                padding: 20px !important;
-                border-radius: 8px !important;
-                width: 90% !important;
-                max-width: 800px !important;
-                max-height: 80% !important;
-                overflow-y: auto !important;
-                position: relative !important;
-                z-index: 1000000 !important;
-            `;
-        }
-    } else {
-        console.error('Profile URLs modal not found!');
-    }
-    updateSelectedCount();
-}
-
-function closeProfileUrlsPopup() {
-    return false;
-}
-
-function forceCloseProfileUrlsPopup() {
-    document.getElementById('profile-urls-modal').style.display = 'none';
-    selectedProfiles = [];
-}
-
-function selectAllProfiles() {
-    const checkboxes = document.querySelectorAll('.profile-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-
-    checkboxes.forEach((checkbox, index) => {
-        checkbox.checked = !allChecked;
-        selectedProfiles[index].selected = !allChecked;
-    });
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const selectedCount = selectedProfiles.filter(p => p.selected).length;
-    const button = document.getElementById('add-profiles-to-campaign');
-    button.textContent = `Add Selected to Campaign (${selectedCount})`;
-    button.disabled = selectedCount === 0;
-}
-
-function addProfilesDirectlyToCampaign(profiles) {
-    NetworkManager.addProfilesDirectly(profiles);
-}
-
-function addSelectedProfilesToCampaign() {
-    ProfileURLModal.addSelected();
-}
