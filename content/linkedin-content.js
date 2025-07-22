@@ -1,8 +1,5 @@
-// LinkedIn Content Script - Handles automation on LinkedIn pages
-
-// Prevent multiple injections
+// LinkedIn Content Script
 if (window.linkedInAutomationInjected) {
-    console.log('LinkedIn Automation already injected, skipping...');
 } else {
     window.linkedInAutomationInjected = true;
 
@@ -13,20 +10,23 @@ class LinkedInAutomation {
         this.actionDelay = 30000; // 30 seconds default
         this.dailyLimit = 50;
         this.todayCount = 0;
-        
+        this.isRealTimeMode = false;
+        this.isAutoCollecting = false;
+        this.isAutoCollectionEnabled = true; // Auto collection enabled by default
+        this.currentPageCollected = false;
+        this.autoProfileObserver = null;
+        this.autoCollectionTimeout = null;
+        this.processedProfiles = new Set();
+
         this.init();
     }
     
     init() {
-        console.log('LinkedIn Automation initialized');
-        
-        // Listen for messages from background script
         chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             this.handleMessage(message, sendResponse);
         });
-        
-        // Load settings
         this.loadSettings();
+        this.setupAutoDetection();
     }
     
     loadSettings() {
@@ -36,8 +36,158 @@ class LinkedInAutomation {
             this.todayCount = result.todayCount || 0;
         });
     }
+
+    setupAutoDetection() {
+        if (this.isProfilePage() && this.isAutoCollectionEnabled) {
+            setTimeout(() => {
+                this.startAutoCollection();
+            }, 2000);
+        }
+        this.setupPageChangeMonitoring();
+    }
+
+    isProfilePage() {
+        const url = window.location.href;
+        return url.includes('linkedin.com/search/results/people') ||
+               url.includes('linkedin.com/search/people') ||
+               url.includes('linkedin.com/mynetwork') ||
+               url.includes('linkedin.com/connections') ||
+               (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result'));
+    }
+
+    setupPageChangeMonitoring() {
+        let currentUrl = window.location.href;
+
+        const urlObserver = new MutationObserver(() => {
+            if (window.location.href !== currentUrl) {
+                currentUrl = window.location.href;
+                setTimeout(() => {
+                    if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
+                        this.startAutoCollection();
+                    }
+                }, 2000);
+            }
+        });
+
+        urlObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        window.addEventListener('popstate', () => {
+            setTimeout(() => {
+                if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
+                    this.startAutoCollection();
+                }
+            }, 2000);
+        });
+    }
+
+    async startAutoCollection() {
+        if (this.isAutoCollecting) {
+            return;
+        }
+
+        this.isAutoCollecting = true;
+
+        try {
+            if (chrome.runtime?.id) {
+                chrome.runtime.sendMessage({
+                    action: 'autoCollectionStarted',
+                    url: window.location.href
+                });
+            }
+        } catch (error) {
+        }
+
+        this.collectAndSendProfiles();
+        this.setupContinuousMonitoring();
+    }
+
+    async collectAndSendProfiles() {
+        const profiles = await this.collectCurrentPageOnly();
+
+        if (profiles.length > 0) {
+            this.sendProfilesRealTime(profiles);
+        }
+    }
+
+    setupContinuousMonitoring() {
+        const observer = new MutationObserver((mutations) => {
+            let hasNewProfiles = false;
+
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const newProfileCards = node.querySelectorAll ?
+                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
+
+                            if (newProfileCards.length > 0) {
+                                hasNewProfiles = true;
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (hasNewProfiles) {
+                clearTimeout(this.autoCollectionTimeout);
+                this.autoCollectionTimeout = setTimeout(() => {
+                    this.collectNewProfilesAuto();
+                }, 1500);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        this.autoProfileObserver = observer;
+    }
+
+    async collectNewProfilesAuto() {
+        if (!this.isAutoCollecting) return;
+
+        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
+        const newProfiles = [];
+
+        profileCards.forEach((card) => {
+            if (card.dataset.autoProcessed) return;
+
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                newProfiles.push(profile);
+                card.dataset.autoProcessed = 'true';
+            }
+        });
+
+        if (newProfiles.length > 0) {
+            this.sendProfilesRealTime(newProfiles);
+        }
+    }
+
+    stopAutoCollection() {
+        this.isAutoCollecting = false;
+
+        if (this.autoProfileObserver) {
+            this.autoProfileObserver.disconnect();
+            this.autoProfileObserver = null;
+        }
+
+        if (this.autoCollectionTimeout) {
+            clearTimeout(this.autoCollectionTimeout);
+            this.autoCollectionTimeout = null;
+        }
+    }
     
     handleMessage(message, sendResponse) {
+        if (!message || !message.action) {
+            sendResponse({ error: 'Invalid message format' });
+            return;
+        }
+
         switch (message.action) {
             case 'startAutomation':
                 this.startAutomation(message.campaign);
@@ -55,16 +205,61 @@ class LinkedInAutomation {
                     sendResponse({ profiles });
                 });
                 return true; // Keep message channel open for async response
+            case 'startRealTimeCollection':
+                this.isRealTimeMode = true;
+                this.currentPageCollected = false;
+                setTimeout(() => {
+                    this.collectCurrentPageOnly().then(profiles => {
+                        if (profiles.length > 0) {
+                            this.sendProfilesRealTime(profiles);
+                            this.currentPageCollected = true;
+                        } else {
+                            const alternativeProfiles = this.extractProfilesAlternative();
+                            if (alternativeProfiles.length > 0) {
+                                this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
+                            }
+                        }
+                    }).catch(error => {
+                        console.error('🚀 CONTENT: Error in real-time collection:', error);
+                    });
+                }, 1000);
+
+                sendResponse({ success: true });
+                return true;
+            case 'stopRealTimeCollection':
+                this.isRealTimeMode = false;
+                this.currentPageCollected = false;
+                sendResponse({ success: true });
+                return true;
+            case 'stopAutoCollection':
+                this.stopAutoCollection();
+                sendResponse({ success: true });
+                return true;
+            case 'startAutoCollection':
+                if (!this.isAutoCollecting && this.isAutoCollectionEnabled) {
+                    this.startAutoCollection();
+                }
+                sendResponse({ success: true });
+                return true;
+            case 'enableAutoCollection':
+                this.isAutoCollectionEnabled = true;
+                if (this.isProfilePage() && !this.isAutoCollecting) {
+                    this.startAutoCollection();
+                }
+                sendResponse({ success: true });
+                return true;
+            case 'disableAutoCollection':
+                this.isAutoCollectionEnabled = false;
+                this.stopAutoCollection();
+                sendResponse({ success: true });
+                return true;
             case 'searchByCompany':
                 this.searchByCompany(message.companyName).then(result => {
                     sendResponse(result);
                 });
                 return true;
             case 'searchNetwork':
-                console.log('Received searchNetwork message:', message);
-                // Handle async response properly
                 this.searchNetwork(message.criteria).then(profiles => {
-                    console.log('Sending response with profiles:', profiles);
                     sendResponse({ profiles: profiles || [] });
                 }).catch(error => {
                     console.error('Error in searchNetwork:', error);
@@ -72,7 +267,7 @@ class LinkedInAutomation {
                 });
                 return true;
             default:
-                sendResponse({ error: 'Unknown action' });
+                sendResponse({ error: 'Unknown action: ' + message.action });
         }
     }
     
@@ -83,13 +278,9 @@ class LinkedInAutomation {
     
     startAutomationFromPage() {
         if (this.todayCount >= this.dailyLimit) {
-            console.log('Daily limit reached!');
             return;
         }
-
         this.isRunning = true;
-        console.log('Starting automation...');
-
         this.processConnections();
     }
     
@@ -99,47 +290,34 @@ class LinkedInAutomation {
         const connectButtons = this.findConnectButtons();
         
         if (connectButtons.length === 0) {
-            console.log('No connect buttons found');
             this.stopAutomation();
             return;
         }
 
         for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
             if (this.todayCount >= this.dailyLimit) {
-                console.log('Daily limit reached!');
                 break;
             }
 
             const button = connectButtons[i];
             const personInfo = this.extractPersonInfo(button);
 
-            console.log(`Connecting to ${personInfo.name}...`);
-            
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-
-                // Update storage
                 chrome.storage.local.set({ todayCount: this.todayCount });
-
-                console.log(`Connected to ${personInfo.name}. Waiting...`);
-
-                // Wait before next action
                 if (i < connectButtons.length - 1) {
                     await this.delay(this.actionDelay);
                 }
             } catch (error) {
                 console.error('Error sending connection request:', error);
-                console.log(`Error connecting to ${personInfo.name}`);
             }
         }
 
-        console.log('Automation completed');
         this.stopAutomation();
     }
     
     findConnectButtons() {
-        // Find all "Connect" buttons on the page
         const selectors = [
             'button[aria-label*="Connect"]',
             'button[data-control-name="connect"]',
@@ -161,8 +339,7 @@ class LinkedInAutomation {
     }
     
     extractPersonInfo(connectButton) {
-        // Try to extract person information from the search result
-        const resultCard = connectButton.closest('.search-result') || 
+        const resultCard = connectButton.closest('.search-result') ||
                            connectButton.closest('.reusable-search__result-container') ||
                            connectButton.closest('[data-chameleon-result-urn]');
         
@@ -171,7 +348,6 @@ class LinkedInAutomation {
         let title = '';
         
         if (resultCard) {
-            // Try different selectors for name
             const nameElement = resultCard.querySelector('.entity-result__title-text a') ||
                                resultCard.querySelector('.search-result__result-link') ||
                                resultCard.querySelector('[data-anonymize="person-name"]');
@@ -179,8 +355,7 @@ class LinkedInAutomation {
             if (nameElement) {
                 name = nameElement.textContent.trim();
             }
-            
-            // Try to get company and title
+
             const subtitleElement = resultCard.querySelector('.entity-result__primary-subtitle') ||
                                    resultCard.querySelector('.search-result__truncate');
             
@@ -195,12 +370,9 @@ class LinkedInAutomation {
     async sendConnectionRequest(button, personInfo) {
         return new Promise((resolve, reject) => {
             try {
-                // Click the connect button
                 button.click();
-                
-                // Wait for modal to appear
+
                 setTimeout(() => {
-                    // Look for "Send without a note" or "Send" button
                     const sendButton = document.querySelector('button[aria-label*="Send without a note"]') ||
                                      document.querySelector('button[data-control-name="send_invite"]') ||
                                      document.querySelector('.send-invite__actions button[aria-label*="Send"]');
@@ -209,7 +381,6 @@ class LinkedInAutomation {
                         sendButton.click();
                         resolve();
                     } else {
-                        // Try to find and use custom message option
                         const addNoteButton = document.querySelector('button[aria-label*="Add a note"]');
                         if (addNoteButton) {
                             addNoteButton.click();
@@ -230,12 +401,10 @@ class LinkedInAutomation {
     
     async sendCustomMessage(personInfo, resolve, reject) {
         try {
-            // Get connection message template
             chrome.storage.local.get(['connectionMessage'], async (result) => {
                 const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
                 const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
 
-                // Find message textarea
                 const messageTextarea = document.querySelector('#custom-message') ||
                                        document.querySelector('textarea[name="message"]') ||
                                        document.querySelector('.send-invite__custom-message textarea');
@@ -244,7 +413,6 @@ class LinkedInAutomation {
                     messageTextarea.value = personalizedMessage;
                     messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-                    // Find and click send button
                     setTimeout(() => {
                         const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
                                          document.querySelector('.send-invite__actions button[aria-label*="Send"]');
@@ -277,20 +445,15 @@ class LinkedInAutomation {
             .replace(/{title}/g, personInfo.title);
     }
     
-    // Start automation with campaign data (called from popup)
     startAutomation(campaign) {
-        console.log('Starting automation with campaign:', campaign);
         this.currentCampaign = campaign;
         this.startAutomationFromPage();
     }
 
     stopAutomation() {
         this.isRunning = false;
-        console.log('Automation stopped');
     }
-    
 
-    
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -304,16 +467,13 @@ class LinkedInAutomation {
         };
     }
 
-    // Collect profiles from current page
     async collectProfiles() {
         const profiles = [];
 
-        // Check if we're on My Network page
         if (window.location.href.includes('/mynetwork/')) {
             return this.collectNetworkProfiles();
         }
 
-        // Find profile cards using common selectors
         const selectors = [
             '.reusable-search__result-container',
             '[data-chameleon-result-urn]',
@@ -327,21 +487,275 @@ class LinkedInAutomation {
             if (profileCards.length > 0) break;
         }
 
-        profileCards.forEach(card => {
+        profileCards.forEach((card) => {
             const profile = this.extractProfileFromCard(card);
             if (profile?.name && profile?.url) {
                 profiles.push(profile);
             }
         });
 
+        if (profiles.length === 0) {
+            const alternativeProfiles = this.extractProfilesAlternative();
+            profiles.push(...alternativeProfiles);
+        }
+
         return profiles;
     }
 
-    // Collect profiles specifically from My Network page
+    async collectCurrentPageOnly() {
+        const profiles = [];
+        if (window.location.href.includes('/mynetwork/')) {
+            const networkProfiles = await this.collectNetworkProfiles();
+            return networkProfiles.slice(0, 10);
+        }
+
+        const selectors = [
+            '.reusable-search__result-container',
+            '[data-chameleon-result-urn]',
+            '.search-result',
+            '.entity-result',
+            'li[data-reusable-search-result]',
+            '.search-results-container li'
+        ];
+
+        let profileCards = [];
+        for (const selector of selectors) {
+            profileCards = document.querySelectorAll(selector);
+            if (profileCards.length > 0) break;
+        }
+        if (profileCards.length === 0) {
+            const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+            const containers = new Set();
+            profileLinks.forEach(link => {
+                const container = link.closest('li, div[class*="result"], article');
+                if (container) containers.add(container);
+            });
+            profileCards = Array.from(containers);
+        }
+
+        const maxProfiles = Math.min(profileCards.length, 10);
+
+        for (let i = 0; i < maxProfiles; i++) {
+            const card = profileCards[i];
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                profiles.push(profile);
+                this.sendProfilesRealTime([profile]);
+            }
+        }
+
+        return profiles;
+    }
+
+    sendProfilesRealTime(profiles) {
+        if (!this.isAutoCollectionEnabled) {
+            return;
+        }
+
+        if (profiles.length > 0) {
+            if (!chrome.runtime?.id) {
+                this.storeProfilesForPopup(profiles);
+                return;
+            }
+            try {
+                chrome.runtime.sendMessage({
+                    action: 'addProfilesRealTime',
+                    profiles: profiles
+                }).catch(() => {
+                    this.storeProfilesForPopup(profiles);
+                });
+            } catch (error) {
+                this.storeProfilesForPopup(profiles);
+            }
+        }
+    }
+
+    storeProfilesForPopup(profiles) {
+        try {
+            chrome.storage.local.get(['realTimeProfiles'], (result) => {
+                const existingProfiles = result.realTimeProfiles || [];
+                const updatedProfiles = [...existingProfiles, ...profiles];
+                chrome.storage.local.set({
+                    realTimeProfiles: updatedProfiles,
+                    lastProfileUpdate: Date.now()
+                });
+            });
+        } catch (error) {
+            console.error('Error storing profiles:', error);
+        }
+    }
+
+    startContinuousCollection() {
+        const observer = new MutationObserver((mutations) => {
+            let hasNewProfiles = false;
+
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const newProfileCards = node.querySelectorAll ?
+                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
+
+                            if (newProfileCards.length > 0) {
+                                hasNewProfiles = true;
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (hasNewProfiles) {
+                clearTimeout(this.collectionTimeout);
+                this.collectionTimeout = setTimeout(() => {
+                    this.collectNewProfiles();
+                }, 1000);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        this.profileObserver = observer;
+    }
+
+    async collectNewProfiles() {
+        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
+        const newProfiles = [];
+
+        profileCards.forEach((card) => {
+            if (card.dataset.processed) return;
+
+            const profile = this.extractProfileFromCard(card);
+            if (profile?.name && profile?.url) {
+                newProfiles.push(profile);
+                card.dataset.processed = 'true';
+            }
+        });
+
+        if (newProfiles.length > 0) {
+            this.sendProfilesRealTime(newProfiles);
+        }
+    }
+
+    fixProfileData(profile) {
+        if (!profile.name ||
+            profile.name.includes('Status is') ||
+            profile.name.includes('offline') ||
+            profile.name.includes('reachable') ||
+            profile.name.length < 3) {
+
+            if (profile.location) {
+                const nameMatch = profile.location.match(/^([A-Za-z\s]+?)(?:View|•|\n)/);
+                if (nameMatch && nameMatch[1].trim().length > 2) {
+                    profile.name = nameMatch[1].trim();
+                }
+
+
+                const titleMatch = profile.location.match(/Full Stack Developer|Software Engineer|Developer|Engineer|Manager|Director|CEO|CTO|VP|President/i);
+                if (titleMatch && !profile.title) {
+                    profile.title = titleMatch[0];
+                }
+
+
+                const locationMatch = profile.location.match(/([A-Za-z\s]+,\s*[A-Za-z\s]+)(?:\n|$)/);
+                if (locationMatch) {
+                    const cleanLocation = locationMatch[1].trim();
+                    if (cleanLocation.includes(',') && !cleanLocation.includes('View')) {
+                        profile.location = cleanLocation;
+                    }
+                }
+            }
+        }
+
+        if (profile.title && profile.title.includes('degree connection')) {
+            if (profile.location) {
+                const titleMatch = profile.location.match(/\n\s*([A-Za-z\s]+(?:Developer|Engineer|Manager|Director|CEO|CTO|VP|President|Analyst|Consultant|Specialist)[A-Za-z\s]*)/i);
+                if (titleMatch) {
+                    profile.title = titleMatch[1].trim();
+                } else {
+                    profile.title = '';
+                }
+            } else {
+                profile.title = '';
+            }
+        }
+
+        if (profile.title && profile.title.includes(' at ') && !profile.company) {
+            const parts = profile.title.split(' at ');
+            if (parts.length === 2) {
+                profile.title = parts[0].trim();
+                profile.company = parts[1].trim();
+            }
+        }
+    }
+
+    extractProfilesAlternative() {
+        const profiles = [];
+
+        const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+
+        profileLinks.forEach(link => {
+            if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
+                return;
+            }
+
+            link.classList.add('processed');
+
+            const profile = {
+                name: '',
+                url: link.href,
+                company: '',
+                title: '',
+                location: '',
+                industry: '',
+                profilePic: '',
+                collectedAt: new Date().toISOString()
+            };
+
+            let nameText = link.textContent.trim();
+            if (!nameText || nameText.includes('View') || nameText.includes('Status') || nameText.length < 3) {
+                const parent = link.closest('li, div, article');
+                if (parent) {
+                    const nameElements = parent.querySelectorAll('span, h3, h4, .name, [data-anonymize="person-name"]');
+                    for (const el of nameElements) {
+                        const text = el.textContent.trim();
+                        if (text && text.length > 2 && !text.includes('Status') && !text.includes('View') && text.split(' ').length >= 2) {
+                            nameText = text;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (nameText && nameText.length > 2) {
+                profile.name = nameText;
+
+                if (profile.url.includes('?')) {
+                    profile.url = profile.url.split('?')[0];
+                }
+                profile.url = profile.url.replace(/\/$/, '');
+
+                const parent = link.closest('li, div, article');
+                if (parent) {
+                    const img = parent.querySelector('img[src*="http"]');
+                    if (img && img.src && !img.src.includes('data:image')) {
+                        profile.profilePic = img.src;
+                    }
+                }
+
+                profiles.push(profile);
+
+            }
+        });
+
+        return profiles;
+    }
+
     async collectNetworkProfiles() {
         const profiles = [];
 
-        // Selectors for My Network page
         const selectors = [
             '.discover-entity-type-card',
             '.mn-person-card',
@@ -366,7 +780,6 @@ class LinkedInAutomation {
         return profiles;
     }
 
-    // Extract profile information from a profile card (unified for all page types)
     extractProfileFromCard(card, isNetworkPage = false) {
         const profile = {
             name: '',
@@ -380,7 +793,6 @@ class LinkedInAutomation {
         };
 
         try {
-            // Common selectors for name and URL
             const nameSelectors = isNetworkPage ? [
                 'a[href*="/in/"]',
                 '.discover-entity-type-card__link',
@@ -400,22 +812,62 @@ class LinkedInAutomation {
             }
 
             if (nameLink) {
-                profile.name = nameLink.textContent.trim();
+                let nameText = nameLink.textContent.trim();
+
+                if (nameText.includes('View') && nameText.includes('profile')) {
+                    const match = nameText.match(/^(.+?)(?:View|•|\n)/);
+                    if (match) {
+                        nameText = match[1].trim();
+                    }
+                }
+
+                profile.name = nameText;
                 profile.url = nameLink.href || '';
             } else {
-                // Fallback: look for name in span elements
-                const nameSpan = card.querySelector('span[aria-hidden="true"]') ||
-                               card.querySelector('.t-16.t-black.t-bold') ||
-                               card.querySelector('[data-anonymize="person-name"] span');
+                const nameSelectors = [
+                    'span[aria-hidden="true"]',
+                    '.t-16.t-black.t-bold',
+                    '[data-anonymize="person-name"] span',
+                    '.entity-result__title-text span',
+                    '.search-result__result-link span',
+                    '.artdeco-entity-lockup__title span',
+                    'span.t-16',
+                    'span.t-bold'
+                ];
+
+                let nameSpan = null;
+                for (const selector of nameSelectors) {
+                    nameSpan = card.querySelector(selector);
+                    if (nameSpan && nameSpan.textContent.trim() &&
+                        !nameSpan.textContent.includes('Status') &&
+                        !nameSpan.textContent.includes('View') &&
+                        nameSpan.textContent.length > 2) {
+                        break;
+                    }
+                    nameSpan = null;
+                }
 
                 if (nameSpan) {
                     profile.name = nameSpan.textContent.trim();
                     const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
                     if (parentLink) profile.url = parentLink.href;
+                } else {
+                    const allLinks = card.querySelectorAll('a[href*="/in/"]');
+                    for (const link of allLinks) {
+                        const text = link.textContent.trim();
+                        if (text && text.length > 2 &&
+                            !text.includes('Status') &&
+                            !text.includes('View') &&
+                            !text.includes('•') &&
+                            text.split(' ').length >= 2) {
+                            profile.name = text;
+                            profile.url = link.href;
+                            break;
+                        }
+                    }
                 }
             }
 
-            // Clean and normalize the profile URL
             if (profile.url) {
                 if (profile.url.startsWith('/')) {
                     profile.url = 'https://www.linkedin.com' + profile.url;
@@ -426,24 +878,30 @@ class LinkedInAutomation {
                 profile.url = profile.url.replace(/\/$/, '');
             }
 
-            // Extract profile picture
             const imgSelectors = [
                 '.entity-result__image img',
                 '.presence-entity__image img',
+                '.discover-entity-type-card__image img',
+                '.mn-person-card__picture img',
+                '.artdeco-entity-lockup__image img',
                 'img[alt*="profile"]',
                 'img[alt*="Photo"]',
+                'img[data-ghost-classes]',
+                'img[src*="profile"]',
                 'img'
             ];
 
             for (const selector of imgSelectors) {
                 const imgElement = card.querySelector(selector);
-                if (imgElement?.src) {
+                if (imgElement?.src &&
+                    !imgElement.src.includes('data:image') &&
+                    !imgElement.src.includes('ghost') &&
+                    imgElement.src.includes('http')) {
                     profile.profilePic = imgElement.src;
                     break;
                 }
             }
 
-            // Extract title and company
             const subtitleSelectors = isNetworkPage ? [
                 '.discover-entity-type-card__occupation',
                 '.mn-person-card__occupation',
@@ -469,7 +927,6 @@ class LinkedInAutomation {
                 }
             }
 
-            // Extract location
             const locationSelectors = [
                 '.entity-result__secondary-subtitle',
                 '[data-anonymize="location"]',
@@ -484,8 +941,9 @@ class LinkedInAutomation {
                 }
             }
 
-            // Validate profile
+            this.fixProfileData(profile);
             if (!profile.name || !profile.url || !profile.url.includes('/in/')) {
+
                 return null;
             }
 
@@ -497,15 +955,9 @@ class LinkedInAutomation {
         }
     }
 
-
-
-    // Search for people by company name
     async searchByCompany(companyName) {
         try {
-            // Construct LinkedIn search URL for company employees
             const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(companyName)}&origin=GLOBAL_SEARCH_HEADER`;
-
-            // Navigate to search results
             window.location.href = searchUrl;
 
             return { success: true, message: `Searching for employees at ${companyName}` };
@@ -515,26 +967,18 @@ class LinkedInAutomation {
         }
     }
 
-
-
-
-
-    // Search network connections with auto-scrolling
     async searchNetwork(criteria) {
         try {
-            console.log('Searching network with criteria:', criteria);
-            console.log('Current URL:', window.location.href);
 
             const profiles = [];
             let scrollAttempts = 0;
             const maxScrollAttempts = 5;
 
-            if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
-                console.log('Processing search results page...');
+            this.startContinuousCollection();
 
-                // First, collect profiles from current view
+            if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
+
                 let searchResults = this.getSearchResultElements();
-                console.log(`Initial scan: Found ${searchResults.length} search result elements`);
 
                 searchResults.forEach((card) => {
                     if (profiles.length < 20) {
@@ -542,82 +986,57 @@ class LinkedInAutomation {
                         if (profile && profile.name && profile.url) {
                             profile.source = 'network-search';
                             profiles.push(profile);
-                            console.log(`Extracted profile ${profiles.length}:`, profile.name, profile.url);
+
                         }
                     }
                 });
 
-                console.log(`Initial collection: ${profiles.length} profiles`);
-
-                // Auto-scroll down first, then up
                 while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
                     scrollAttempts++;
-                    console.log(`Scroll attempt ${scrollAttempts}/${maxScrollAttempts}`);
 
                     const initialCount = profiles.length;
 
                     if (scrollAttempts <= 3) {
-                        // First 3 attempts: Scroll DOWN
-                        console.log('Scrolling DOWN to load more results...');
                         window.scrollBy(0, window.innerHeight);
                         await this.delay(2000);
-
-                        // Scroll to bottom to trigger infinite scroll
                         window.scrollTo(0, document.body.scrollHeight);
-                        console.log('Scrolled to bottom');
+
                     } else {
-                        // Last 2 attempts: Scroll UP
-                        console.log('Scrolling UP to check earlier results...');
                         window.scrollBy(0, -window.innerHeight);
                         await this.delay(2000);
 
                         if (scrollAttempts === maxScrollAttempts) {
-                            // Final attempt: scroll to top
                             window.scrollTo(0, 0);
-                            console.log('Scrolled to top');
+
                         }
                     }
 
-                    // Wait for content to load
                     await this.delay(2000);
-
-                    // Get updated search results
                     searchResults = this.getSearchResultElements();
-                    console.log(`After scroll: Found ${searchResults.length} search result elements`);
-
-                    // Extract profiles from current view
                     searchResults.forEach((card) => {
                         if (profiles.length < 20) {
                             const profile = this.extractProfileFromCard(card);
                             if (profile && profile.name && profile.url) {
-                                // Check for duplicates
                                 const isDuplicate = profiles.some(p => p.url === profile.url);
                                 if (!isDuplicate) {
                                     profile.source = 'network-search';
                                     profiles.push(profile);
-                                    console.log(`Extracted profile ${profiles.length}:`, profile.name);
-                                    console.log(`Profile URL: ${profile.url}`);
+
                                 }
                             }
                         }
                     });
 
                     const newProfilesCount = profiles.length - initialCount;
-                    console.log(`Extracted ${newProfilesCount} new profiles in this scroll`);
 
-                    // If no new profiles found in last 2 attempts, stop
                     if (newProfilesCount === 0 && scrollAttempts >= 2) {
-                        console.log('No new profiles found, stopping scroll attempts');
+
                         break;
                     }
                 }
 
-                console.log(`Completed auto-scroll. Total profiles collected: ${profiles.length}`);
             } else if (criteria.type === 'connections' || window.location.href.includes('mynetwork') || window.location.href.includes('connections')) {
-                // We're on connections page - extract connection cards
                 let connectionCards = document.querySelectorAll('.mn-connection-card');
-
-                // Try different selectors if first one doesn't work
                 if (connectionCards.length === 0) {
                     connectionCards = document.querySelectorAll('.connection-card');
                 }
@@ -628,29 +1047,26 @@ class LinkedInAutomation {
                     connectionCards = document.querySelectorAll('.artdeco-entity-lockup');
                 }
                 if (connectionCards.length === 0) {
-                    // Try to find any li elements that contain profile links
                     connectionCards = document.querySelectorAll('li');
                 }
 
-                console.log(`Found ${connectionCards.length} potential connection cards`);
 
-                // Debug: Log some sample elements to understand the structure
-                if (connectionCards.length > 0) {
-                    console.log('Sample card HTML:', connectionCards[0].outerHTML.substring(0, 500));
-                }
 
                 connectionCards.forEach((card, index) => {
-                    if (index < 10) { // Only process first 10 to avoid overwhelming
+                    if (index < 20) { // Process more profiles for better real-time experience
                         const profile = this.extractProfileFromCard(card, true); // Use unified extraction
                         if (profile?.name && profile?.url) {
                             profile.source = 'connections';
                             profiles.push(profile);
+
+                            if (profiles.length <= 3 || profiles.length % 2 === 0) {
+                                this.sendProfilesRealTime([profile]);
+                            }
                         }
                     }
                 });
             }
 
-            console.log(`Collected ${profiles.length} profiles from network`);
             return profiles;
         } catch (error) {
             console.error('Error searching network:', error);
@@ -658,9 +1074,7 @@ class LinkedInAutomation {
         }
     }
 
-    // Helper method to get search result elements
     getSearchResultElements() {
-        // Try different selectors for search results
         let elements = document.querySelectorAll('.search-result');
         if (elements.length > 0) return elements;
 
@@ -676,31 +1090,37 @@ class LinkedInAutomation {
         elements = document.querySelectorAll('.entity-result');
         if (elements.length > 0) return elements;
 
-        // Fallback to any li elements that might contain profile data
         elements = document.querySelectorAll('li');
         return Array.from(elements).filter(li => {
             return li.querySelector('a[href*="/in/"]') || li.querySelector('a[href*="linkedin.com/in/"]');
         });
     }
 
-
-
-
 }
 
-// Initialize the automation when the page loads
-console.log('LinkedIn content script loading...');
+new LinkedInAutomation();
+const originalError = console.error;
+console.error = function(...args) {
+    const message = args.join(' ');
+    if (message.includes('Permissions policy violation') ||
+        message.includes('unload is not allowed') ||
+        message.includes('Extension context invalidated') ||
+        message.includes('message port closed') ||
+        message.includes('Could not establish connection')) {
+
+        return;
+    }
+    originalError.apply(console, args);
+};
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOM loaded, initializing LinkedIn automation...');
+
         window.linkedInAutomation = new LinkedInAutomation();
     });
 } else {
-    console.log('DOM already loaded, initializing LinkedIn automation...');
+
     window.linkedInAutomation = new LinkedInAutomation();
 }
-
-
 
 } // End of injection guard

@@ -157,6 +157,33 @@ textarea {
     background-color: var(--border-color);
 }
 
+.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+}
+
 .empty-state {
     padding: 20px;
     text-align: center;
@@ -412,6 +439,39 @@ footer {
     padding: 20px;
 }
 
+.auto-detection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    animation: pulse 2s infinite;
+}
+
+.indicator-dot {
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
 .collected-count {
     display: flex;
     justify-content: space-between;
@@ -419,6 +479,33 @@ footer {
     margin-bottom: 20px;
     padding-bottom: 10px;
     border-bottom: 1px solid #e0e0e0;
+}
+
+.collection-status-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.collection-controls {
+    margin: 10px 0;
+}
+
+.auto-collection-info {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #e8f4fd;
+    border-radius: 4px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.auto-collection-info small {
+    color: #666;
+    line-height: 1.4;
 }
 
 .collected-profiles {

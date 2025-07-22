@@ -34,6 +34,23 @@
                 <button class="btn btn-secondary" id="collect-profiles">Collect Profiles from Current Page</button>
                 <button class="btn btn-secondary" id="view-collected">View Collected Profiles (<span id="profile-count">0</span>)</button>
             </div>
+
+            <div class="section">
+                <h3>Auto Profile Collection</h3>
+                <div class="collection-controls">
+                    <div class="auto-detection-indicator" id="main-auto-detection-indicator">
+                        <span class="indicator-dot"></span>
+                        <span>🔄 Auto-collecting profiles on LinkedIn pages...</span>
+                    </div>
+                    <div class="collection-status-main">
+                        <span>Collected: <span id="main-collected-number">0</span></span>
+                        <button class="btn btn-success" id="main-pause-collection">AUTO ON</button>
+                    </div>
+                    <div class="auto-collection-info">
+                        <small>Profiles are automatically collected when you visit LinkedIn search pages, connections, or network pages. Toggle to disable.</small>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Messages Tab -->
@@ -72,18 +89,7 @@
                     <label>Follow-up Delay (days):</label>
                     <input type="number" id="followup-delay" value="3" min="1" max="14">
                 </div>
-                <div class="form-group">
-                    <label>OpenAI API Key (optional):</label>
-                    <input type="password" id="openai-key" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>Message Style:</label>
-                    <select id="message-style">
-                        <option value="professional">Professional</option>
-                        <option value="friendly">Friendly</option>
-                        <option value="casual">Casual</option>
-                    </select>
-                </div>
+
                 <button class="btn btn-primary" id="save-settings">Save Settings</button>
             </div>
         </div>
@@ -96,7 +102,7 @@
                     <div class="wizard-header">
                         <button class="back-btn" style="display: none;">&larr;</button>
                         <h3>Campaign name</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 1 out of 4</div>
 
@@ -114,7 +120,7 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-step-1">&larr;</button>
                         <h3>Add people</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 2 out of 4</div>
 
@@ -147,7 +153,7 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-step-2-from-network">&larr;</button>
                         <h3>Add people from your network</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
@@ -177,7 +183,7 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-step-2">&larr;</button>
                         <h3>Add people</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
@@ -205,11 +211,15 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-search">&larr;</button>
                         <h3>Add people</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
                     <div class="collection-status">
+                        <div class="auto-detection-indicator" id="auto-detection-indicator" style="display: none;">
+                            <span class="indicator-dot"></span>
+                            <span>🔄 Auto-collecting profiles...</span>
+                        </div>
                         <div class="collected-count">
                             <span>Collected: <span id="collected-number">0</span></span>
                             <button class="btn btn-secondary" id="pause-collection">PAUSE</button>
@@ -228,7 +238,7 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-collecting">&larr;</button>
                         <h3>Configure messaging strategy</h3>
-                        <span class="close">&times;</span>
+                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 4 out of 4</div>
 
@@ -266,23 +276,7 @@
                             </div>
                         </div>
 
-                        <div class="ai-analysis-config">
-                            <h4>Message Configuration</h4>
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="analyze-profile" checked>
-                                    Use profile information for personalization
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>Message style:</label>
-                                <select id="message-style">
-                                    <option value="professional">Professional</option>
-                                    <option value="casual">Casual & Friendly</option>
-                                    <option value="direct">Direct & Brief</option>
-                                </select>
-                            </div>
-                        </div>
+
 
                         <button class="btn btn-primary" id="create-campaign-final">CREATE CAMPAIGN</button>
                     </div>
@@ -311,7 +305,7 @@
         <!-- Profile Collection Modal -->
         <div class="modal" id="profiles-modal">
             <div class="modal-content">
-                <span class="close" id="close-profiles">&times;</span>
+                <span class="close" id="close-profiles" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                 <h3>Collected Profiles</h3>
                 <div id="profiles-list"></div>
                 <div class="modal-actions">
@@ -334,7 +328,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Collected Profile URLs</h3>
-                <span class="close" id="close-profile-urls">&times;</span>
+                <span class="close" id="close-profile-urls" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="profile-urls-container">
