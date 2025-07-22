@@ -21,8 +21,10 @@ class LinkedInAutomationBackground {
         
 
         
-        // Load existing campaigns
-        this.loadCampaigns();
+        // Load existing campaigns after a short delay to ensure storage is ready
+        setTimeout(() => {
+            this.loadCampaigns();
+        }, 100);
     }
     
     onInstalled() {
@@ -65,7 +67,14 @@ class LinkedInAutomationBackground {
     async startCampaign(campaignId, sendResponse) {
         try {
             const campaigns = await this.getCampaigns();
-            const campaign = campaigns.find(c => c.id === campaignId);
+
+            if (!campaigns || !Array.isArray(campaigns)) {
+                console.error('Invalid campaigns data:', campaigns);
+                sendResponse({ error: 'Failed to load campaigns' });
+                return;
+            }
+
+            const campaign = campaigns.find(c => c && c.id === campaignId);
 
             if (!campaign) {
                 sendResponse({ error: 'Campaign not found' });
@@ -196,8 +205,20 @@ class LinkedInAutomationBackground {
     }
     
     async getCampaigns() {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             chrome.storage.local.get(['campaigns'], (result) => {
+                if (chrome.runtime.lastError) {
+                    console.error('Chrome storage error in getCampaigns:', chrome.runtime.lastError);
+                    reject(chrome.runtime.lastError);
+                    return;
+                }
+
+                if (!result) {
+                    console.error('Storage result is undefined in getCampaigns');
+                    resolve([]);
+                    return;
+                }
+
                 resolve(result.campaigns || []);
             });
         });
@@ -216,21 +237,60 @@ class LinkedInAutomationBackground {
     }
     
     loadCampaigns() {
-        chrome.storage.local.get(['campaigns'], (result) => {
-            const campaigns = result.campaigns || [];
-            
-            // Restore running campaigns (if any)
-            campaigns.forEach(campaign => {
-                if (campaign.status === 'running') {
-                    // Note: We don't auto-restart campaigns on extension reload
-                    // User needs to manually restart them for safety
-                    campaign.status = 'paused';
+        try {
+            chrome.storage.local.get(['campaigns'], (result) => {
+                // Add error handling and debugging
+                if (chrome.runtime.lastError) {
+                    console.error('Chrome storage error:', chrome.runtime.lastError);
+                    return;
                 }
+
+                if (!result) {
+                    console.error('Storage result is undefined, initializing empty campaigns');
+                    chrome.storage.local.set({ campaigns: [] });
+                    return;
+                }
+
+                // Initialize campaigns array if it doesn't exist
+                if (!result.hasOwnProperty('campaigns')) {
+                    console.log('Campaigns not found in storage, initializing empty array');
+                    chrome.storage.local.set({ campaigns: [] });
+                    return;
+                }
+
+                const campaigns = result.campaigns || [];
+                console.log('Loaded campaigns:', campaigns);
+
+                // Ensure campaigns is an array
+                if (!Array.isArray(campaigns)) {
+                    console.error('Campaigns is not an array, resetting to empty array');
+                    chrome.storage.local.set({ campaigns: [] });
+                    return;
+                }
+
+                // Restore running campaigns (if any)
+                campaigns.forEach(campaign => {
+                    if (campaign && campaign.status === 'running') {
+                        // Note: We don't auto-restart campaigns on extension reload
+                        // User needs to manually restart them for safety
+                        campaign.status = 'paused';
+                    }
+                });
+
+                // Update storage with corrected statuses
+                chrome.storage.local.set({ campaigns }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.error('Error saving campaigns:', chrome.runtime.lastError);
+                    } else {
+                        console.log('Campaigns updated successfully');
+                    }
+                });
             });
-            
-            // Update storage with corrected statuses
-            chrome.storage.local.set({ campaigns });
-        });
+        } catch (error) {
+            console.error('Unexpected error in loadCampaigns:', error);
+            // Initialize empty campaigns array as fallback
+            chrome.storage.local.set({ campaigns: [] });
+        }
     }
     
 

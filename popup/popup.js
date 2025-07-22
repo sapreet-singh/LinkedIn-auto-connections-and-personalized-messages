@@ -189,12 +189,22 @@ const ModalManager = {
         const profilesModal = DOMCache.get('profiles-modal');
 
         DOMCache.get('create-campaign')?.addEventListener('click', () => this.openCampaignModal());
-        DOMCache.getAll('.close').forEach(btn => btn.addEventListener('click', (e) => this.closeModal(e)));
+        DOMCache.getAll('.close').forEach(btn => btn.addEventListener('click', (e) => this.handleCloseClick(e)));
         DOMCache.get('close-profiles')?.addEventListener('click', () => this.closeModal('profiles-modal'));
 
         window.addEventListener('click', (e) => {
-            if (e.target === campaignModal) this.closeCampaignModal();
-            if (e.target === profilesModal) this.closeModal('profiles-modal');
+            // Prevent automatic closing when clicking outside modal
+            // if (e.target === campaignModal) this.closeCampaignModal();
+            // if (e.target === profilesModal) this.closeModal('profiles-modal');
+
+            // Optional: Add confirmation dialog for outside clicks
+            if (e.target === campaignModal || e.target === profilesModal) {
+                console.log('Clicked outside modal - modal will remain open');
+                // if (confirm('Are you sure you want to close this modal?')) {
+                //     if (e.target === campaignModal) this.closeCampaignModal();
+                //     if (e.target === profilesModal) this.closeModal('profiles-modal');
+                // }
+            }
         });
     },
 
@@ -209,6 +219,24 @@ const ModalManager = {
         WizardManager.reset();
     },
 
+    handleCloseClick(e) {
+        // Prevent automatic closing - just show a message or do nothing
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Show a notification to the user
+        console.log('Close button clicked - popup will remain open');
+        Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
+
+        // You can add a confirmation dialog here if needed:
+        // if (confirm('Are you sure you want to close this modal?')) {
+        //     this.closeModal(e);
+        // }
+
+        // For now, we just prevent the default close behavior
+        return false;
+    },
+
     closeModal(modalIdOrEvent) {
         const modalId = typeof modalIdOrEvent === 'string' ? modalIdOrEvent :
                        modalIdOrEvent.target.closest('#campaign-modal') ? 'campaign-modal' : null;
@@ -216,6 +244,17 @@ const ModalManager = {
             DOMCache.get(modalId).style.display = 'none';
             if (modalId === 'campaign-modal') WizardManager.reset();
         }
+    },
+
+    // Method to force close all modals (can be called from console if needed)
+    forceCloseAll() {
+        console.log('Force closing all modals...');
+        DOMCache.get('campaign-modal').style.display = 'none';
+        DOMCache.get('profiles-modal').style.display = 'none';
+        DOMCache.get('profile-urls-modal').style.display = 'none';
+        WizardManager.reset();
+        AppState.selectedProfiles = [];
+        Utils.showNotification('All modals have been closed.', 'success');
     }
 };
 
@@ -510,6 +549,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     ModalManager.init();
     RealTimeProfileHandler.init(); // Initialize real-time handler
     AutoCollectionHandler.init(); // Initialize auto-collection handler
+
+    // Add keyboard shortcut to force close modals (Ctrl+Shift+X)
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && e.key === 'X') {
+            e.preventDefault();
+            ModalManager.forceCloseAll();
+        }
+    });
 
     // Setup main event listeners
     const eventMap = {
@@ -1199,6 +1246,23 @@ const ProfileURLModal = {
     },
 
     close() {
+        // Prevent automatic closing - just show a message or do nothing
+        console.log('Profile URLs modal close button clicked - modal will remain open');
+        Utils.showNotification('Close button is disabled. Modal will remain open.', 'info');
+
+        // Optional: Show a message to user about how to close
+        // You can add a confirmation dialog here if needed:
+        // if (confirm('Are you sure you want to close this modal?')) {
+        //     DOMCache.get('profile-urls-modal').style.display = 'none';
+        //     AppState.selectedProfiles = [];
+        // }
+
+        // For now, we just prevent the default close behavior
+        return false;
+    },
+
+    // Add a new method for programmatic closing when needed
+    forceClose() {
         DOMCache.get('profile-urls-modal').style.display = 'none';
         AppState.selectedProfiles = [];
     },
@@ -1233,7 +1297,7 @@ const ProfileURLModal = {
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
 
-        this.close();
+        this.forceClose();
         Utils.showNotification(`Added ${profilesToAdd.length} profiles to campaign`, 'success');
 
         const campaignModal = DOMCache.get('campaign-modal');
@@ -1472,6 +1536,22 @@ function showProfileUrlsPopup(profiles) {
 }
 
 function closeProfileUrlsPopup() {
+    // Prevent automatic closing - just show a message or do nothing
+    console.log('Legacy close function called - modal will remain open');
+
+    // Optional: Show a message to user about how to close
+    // You can add a confirmation dialog here if needed:
+    // if (confirm('Are you sure you want to close this modal?')) {
+    //     document.getElementById('profile-urls-modal').style.display = 'none';
+    //     selectedProfiles = [];
+    // }
+
+    // For now, we just prevent the default close behavior
+    return false;
+}
+
+// Add a new function for programmatic closing when needed
+function forceCloseProfileUrlsPopup() {
     document.getElementById('profile-urls-modal').style.display = 'none';
     selectedProfiles = [];
 }
