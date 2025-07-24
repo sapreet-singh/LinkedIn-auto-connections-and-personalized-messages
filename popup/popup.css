@@ -1606,3 +1606,140 @@ footer {
     display: flex;
     justify-content: space-between;
 }
+
+/* Send Message Interface Styles */
+.send-message-interface {
+    padding: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.interface-header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.interface-header .success-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.interface-header h2 {
+    color: var(--success-color);
+    margin-bottom: 10px;
+}
+
+.interface-header p {
+    color: #666;
+    font-size: 14px;
+}
+
+.send-message-interface .messages-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+}
+
+.message-item {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+}
+
+.message-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-color: var(--primary-color);
+}
+
+.message-item .profile-info {
+    margin-bottom: 15px;
+}
+
+.message-item .profile-details h4 {
+    margin: 0 0 5px 0;
+    color: var(--text-color);
+    font-size: 16px;
+}
+
+.message-item .profile-details .profile-title {
+    margin: 0 0 8px 0;
+    color: #666;
+    font-size: 13px;
+}
+
+.message-item .profile-details .profile-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.message-item .profile-details .profile-link:hover {
+    text-decoration: underline;
+}
+
+.message-content {
+    margin-bottom: 15px;
+}
+
+.message-content .message-text {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text-color);
+}
+
+.message-actions {
+    text-align: right;
+}
+
+.send-message-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.send-message-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-success {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+    color: white;
+}
+
+.step-indicator {
+    background: var(--primary-color);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 15px;
+    display: inline-block;
+}
+
+.message-status {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.status-text {
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+}

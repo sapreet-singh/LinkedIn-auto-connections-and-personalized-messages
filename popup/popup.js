@@ -15,7 +15,7 @@ const CONSTANTS = {
     }
 };
 
-// API Service for LinkedIn message generation
+
 const APIService = {
     async generateMessage(profileUrl) {
         try {
@@ -37,7 +37,6 @@ const APIService = {
             const data = await response.json();
             return data;
         } catch (error) {
-            console.error('API call failed:', error);
             throw error;
         }
     },
@@ -928,7 +927,7 @@ const Step4Manager = {
         try {
             for (const index of this.selectedProfiles) {
                 const profile = AppState.collectedProfiles[index];
-                console.log(`Calling API for: ${profile.url}`);
+
 
                 try {
                     const response = await APIService.generateMessage(profile.url);
@@ -938,7 +937,7 @@ const Step4Manager = {
                         selected: true,
                         index: index
                     });
-                    console.log(`API response for ${profile.url}:`, response);
+
                 } catch (error) {
                     console.error(`API call failed for ${profile.url}:`, error);
                     this.generatedMessages.push({
@@ -1074,7 +1073,7 @@ const Step4Manager = {
 
     parseMessagesFromResponse(apiResponse) {
         const messages = [];
-        console.log('Parsing API response:', apiResponse);
+
 
         // Check if response has messages object
         if (apiResponse.messages) {
@@ -1109,150 +1108,28 @@ const Step4Manager = {
             profileSelectionStep.style.display = 'none';
         }
 
-        // Create and show message selection UI
-        const container = document.querySelector('.container');
-        if (!container) {
-            console.error('Main container not found');
-            return;
-        }
-
-        // Prepare messages data for display
-        const messagesData = this.generatedMessages.map(item => {
-            const messages = this.parseMessagesFromResponse(item.message);
-            return {
-                profile: item.profile,
-                messages: messages,
-                hasError: item.message.error || messages.length === 0
-            };
-        });
-
-        // Create message selection interface
-        const messageSelectionHTML = `
-            <div class="message-selection-step" id="message-selection-step">
-                <div class="step-header">
-                    <button class="back-btn" id="back-to-profiles">← Back to Profile Selection</button>
-                    <h3>Select Messages for Campaign</h3>
-                    <p>Choose one message for each selected profile</p>
-                </div>
-
-                <div class="messages-container" id="message-selection-container">
-                    ${messagesData.map((item, profileIndex) => `
-                        <div class="profile-message-card">
-                            <div class="profile-header">
-                                <div class="profile-info">
-                                    <h4>${item.profile.name}</h4>
-                                    <p class="profile-title">${item.profile.title || 'LinkedIn Member'}</p>
-                                    <a href="${item.profile.url}" target="_blank" class="profile-link">View Profile</a>
-                                </div>
-                            </div>
-
-                            ${item.hasError ? `
-                                <div class="error-section">
-                                    <p class="error-text">❌ Failed to generate messages for this profile</p>
-                                    <button class="btn-small btn-retry" onclick="retryProfile(${profileIndex})">🔄 Retry</button>
-                                </div>
-                            ` : `
-                                <div class="message-options">
-                                    <h5>Choose a message:</h5>
-                                    ${item.messages.map((msg, msgIndex) => `
-                                        <div class="message-option">
-                                            <input type="radio"
-                                                   name="message-${profileIndex}"
-                                                   value="${msgIndex}"
-                                                   id="msg-${profileIndex}-${msgIndex}"
-                                                   ${msgIndex === 0 ? 'checked' : ''}>
-                                            <label for="msg-${profileIndex}-${msgIndex}" class="message-label">
-                                                <div class="message-text">${msg}</div>
-                                            </label>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            `}
-                        </div>
-                    `).join('')}
-                </div>
-
-                <div class="selection-actions">
-                    <button class="btn btn-secondary" id="regenerate-all-messages">🔄 Regenerate All Messages</button>
-                    <button class="btn btn-primary" id="create-campaign-with-messages">✅ Create Campaign with Selected Messages</button>
-                </div>
-            </div>
-        `;
-
-        // Add the message selection interface to the container
-        container.insertAdjacentHTML('beforeend', messageSelectionHTML);
-
-        // Add event listeners
-        this.setupMessageSelectionListeners();
-    },
-
-    setupMessageSelectionListeners() {
-        // Back button
-        const backBtn = document.getElementById('back-to-profiles');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                document.getElementById('message-selection-step').remove();
-                const profileStep = document.querySelector('.step[data-step="4"]');
-                if (profileStep) {
-                    profileStep.style.display = 'block';
-                }
-            });
-        }
-
-        // Create campaign button
-        const createBtn = document.getElementById('create-campaign-with-messages');
-        if (createBtn) {
-            createBtn.addEventListener('click', () => {
-                this.createCampaignWithSelectedMessages();
-            });
-        }
-
-        // Regenerate all button
-        const regenerateBtn = document.getElementById('regenerate-all-messages');
-        if (regenerateBtn) {
-            regenerateBtn.addEventListener('click', () => {
-                // Go back to profile selection and regenerate
-                document.getElementById('message-selection-step').remove();
-                const profileStep = document.querySelector('.step[data-step="4"]');
-                if (profileStep) {
-                    profileStep.style.display = 'block';
-                }
-                this.generateMessages();
-            });
-        }
-    },
-
-    createCampaignWithSelectedMessages() {
+        // Prepare messages data and automatically select first message for each profile
         const selectedMessages = [];
-
-        this.generatedMessages.forEach((item, profileIndex) => {
-            const selectedRadio = document.querySelector(`input[name="message-${profileIndex}"]:checked`);
-            if (selectedRadio) {
-                const messageIndex = parseInt(selectedRadio.value);
-                const messages = this.parseMessagesFromResponse(item.message);
-                if (messages[messageIndex]) {
-                    selectedMessages.push({
-                        profile: item.profile,
-                        message: messages[messageIndex]
-                    });
-                }
+        this.generatedMessages.forEach(item => {
+            const messages = this.parseMessagesFromResponse(item.message);
+            if (messages.length > 0) {
+                selectedMessages.push({
+                    profile: item.profile,
+                    message: messages[0] // Automatically select first message
+                });
             }
         });
 
-        if (selectedMessages.length === 0) {
-            Utils.showNotification('Please select at least one message', 'warning');
-            return;
-        }
-
-        // Store selected messages and proceed to create campaign
+        // Store selected messages
         this.selectedCampaignMessages = selectedMessages;
 
-        // Show success and redirect to campaign creation
-        Utils.showNotification(`Campaign created with ${selectedMessages.length} personalized messages!`, 'success');
-
-        // Finalize campaign
-        this.finalizeCampaign();
+        // Show send message interface directly
+        this.showSendMessageInterface();
     },
+
+
+
+
 
     finalizeCampaign() {
         // Hide message selection
@@ -1261,30 +1138,136 @@ const Step4Manager = {
             messageSelection.remove();
         }
 
-        // Show campaign success
+        // Show send message interface
+        this.showSendMessageInterface();
+    },
+
+    showSendMessageInterface() {
         const container = document.querySelector('.container');
         container.innerHTML = `
-            <div class="campaign-success">
-                <div class="success-icon">✅</div>
-                <h2>Campaign Created Successfully!</h2>
-                <p>Your campaign with ${this.selectedCampaignMessages.length} personalized messages is ready.</p>
+            <div class="send-message-interface">
+                <div class="interface-header">
+                    <div class="step-indicator">Step 6: Send Messages</div>
+                    <div class="success-icon">📤</div>
+                    <h2>Ready to Send Messages</h2>
+                    <p>Messages will be sent automatically in the current tab. Click "Send Message" for each profile.</p>
+                </div>
 
-                <div class="campaign-summary">
-                    <h4>Campaign Summary:</h4>
-                    ${this.selectedCampaignMessages.map(item => `
-                        <div class="summary-item">
-                            <strong>${item.profile.name}</strong>
-                            <p class="message-preview">"${item.message.substring(0, 100)}..."</p>
+                <div class="messages-list">
+                    ${this.selectedCampaignMessages.map((item, index) => `
+                        <div class="message-item" data-index="${index}">
+                            <div class="profile-info">
+                                <div class="profile-details">
+                                    <h4>${item.profile.name}</h4>
+                                    <p class="profile-title">${item.profile.title || 'LinkedIn Member'}</p>
+                                    <a href="${item.profile.url}" target="_blank" class="profile-link">View Profile</a>
+                                </div>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-text">${item.message}</div>
+                            </div>
+                            <div class="message-actions">
+                                <button class="btn btn-primary send-message-btn"
+                                        data-profile-url="${item.profile.url}"
+                                        data-message="${item.message.replace(/"/g, '&quot;')}"
+                                        data-profile-name="${item.profile.name}">
+                                    📤 Send Message Automatically
+                                </button>
+                                <div class="message-status" style="display: none;">
+                                    <span class="status-text"></span>
+                                </div>
+                            </div>
                         </div>
                     `).join('')}
                 </div>
-
-                <div class="final-actions">
-                    <button class="btn btn-primary" onclick="window.close()">Close</button>
-                    <button class="btn btn-secondary" onclick="location.reload()">Create Another Campaign</button>
-                </div>
             </div>
         `;
+
+        // Add event listeners for send message buttons
+        this.setupSendMessageListeners();
+    },
+
+    setupSendMessageListeners() {
+        const sendButtons = document.querySelectorAll('.send-message-btn');
+        sendButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const profileUrl = e.target.getAttribute('data-profile-url');
+                const message = e.target.getAttribute('data-message');
+                const profileName = e.target.getAttribute('data-profile-name');
+
+                this.sendMessageToProfile(profileUrl, message, profileName, e.target);
+            });
+        });
+    },
+
+    async sendMessageToProfile(profileUrl, message, profileName, buttonElement) {
+        try {
+            const statusDiv = buttonElement.parentElement.querySelector('.message-status');
+            const statusText = statusDiv.querySelector('.status-text');
+
+            // Show status and update button
+            statusDiv.style.display = 'block';
+            buttonElement.disabled = true;
+            buttonElement.textContent = '⏳ Step 1: Navigating to Profile...';
+            statusText.textContent = 'Navigating to LinkedIn profile in current tab...';
+
+            // Get current active tab
+            const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            // Navigate to profile in current tab
+            await chrome.tabs.update(currentTab.id, { url: profileUrl });
+
+            // Wait for navigation and page load
+            setTimeout(async () => {
+                try {
+                    buttonElement.textContent = '⏳ Step 2: Preparing Automation...';
+                    statusText.textContent = 'Injecting automation script...';
+
+                    // First, try to inject the content script if it's not already loaded
+                    try {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: currentTab.id },
+                            files: ['content/linkedin-content.js']
+                        });
+                    } catch (injectionError) {
+                    }
+
+                    // Wait a bit for script to initialize
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    buttonElement.textContent = '⏳ Step 3: Finding Message Button...';
+                    statusText.textContent = 'Locating message button on profile...';
+
+                    // Send message to content script in current tab
+                    await chrome.tabs.sendMessage(currentTab.id, {
+                        action: 'sendDirectMessage',
+                        message: message,
+                        profileName: profileName
+                    });
+
+                    buttonElement.textContent = '✅ Message Sent Successfully!';
+                    buttonElement.classList.add('btn-success');
+                    buttonElement.classList.remove('btn-primary');
+                    statusText.textContent = `Message sent to ${profileName} automatically!`;
+                    statusText.style.color = '#28a745';
+
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    buttonElement.textContent = '❌ Error - Try Again';
+                    buttonElement.disabled = false;
+                    statusText.textContent = 'Failed to send message. Please try again.';
+                    statusText.style.color = '#dc3545';
+                }
+            }, 4000); // Increased wait time for navigation
+
+        } catch (error) {
+            console.error('Error navigating to profile:', error);
+            buttonElement.textContent = '❌ Error - Try Again';
+            buttonElement.disabled = false;
+            const statusText = buttonElement.parentElement.querySelector('.status-text');
+            statusText.textContent = 'Failed to navigate to profile. Please try again.';
+            statusText.style.color = '#dc3545';
+        }
     },
 
     useSelectedMessages() {
