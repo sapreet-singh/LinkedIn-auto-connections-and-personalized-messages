@@ -1,4 +1,3 @@
-// LinkedIn Automation Popup
 const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
@@ -322,11 +321,9 @@ const ModalManager = {
         const profilesModal = DOMCache.get('profiles-modal');
 
         const createCampaignBtn = DOMCache.get('create-campaign');
-        console.log('ModalManager.init - create-campaign button found:', createCampaignBtn);
 
         if (createCampaignBtn) {
             createCampaignBtn.addEventListener('click', () => {
-                console.log('🚀 Create Campaign button clicked!');
                 this.openCampaignModal();
             });
         } else {
@@ -343,22 +340,16 @@ const ModalManager = {
     },
 
     openCampaignModal() {
-        console.log('openCampaignModal called');
         const modal = DOMCache.get('campaign-modal');
-        console.log('Campaign modal element:', modal);
 
         if (modal) {
             // Remove hidden class and set display to block for modal
             modal.classList.remove('hidden');
             modal.style.display = 'block';
-            console.log('Modal display set to block and hidden class removed');
         }
 
         WizardManager.initialize();
-        console.log('WizardManager initialized');
-
         WizardManager.showStep(CONSTANTS.STEPS.CAMPAIGN_NAME);
-        console.log('Showing step:', CONSTANTS.STEPS.CAMPAIGN_NAME);
     },
 
     closeCampaignModal() {
@@ -406,18 +397,14 @@ const ModalManager = {
 
 const WizardManager = {
     initialize() {
-        console.log('WizardManager.initialize called, wizardInitialized:', AppState.wizardInitialized);
         if (AppState.wizardInitialized) {
-            console.log('Wizard already initialized, skipping');
             return;
         }
         AppState.wizardInitialized = true;
-        console.log('Setting up wizard event listeners');
         this.setupEventListeners();
     },
 
     reset() {
-        console.log('WizardManager.reset called');
         AppState.currentStep = 1;
         AppState.collectedProfiles = [];
         AppState.duplicateProfiles = [];
@@ -432,15 +419,11 @@ const WizardManager = {
     },
 
     showStep(stepNumber, subStep = null) {
-        console.log(`🔄 Showing step ${stepNumber}, subStep: ${subStep}`);
-
-        // Get all wizard steps and log them
+        // Get all wizard steps
         const allSteps = DOMCache.getAll('.wizard-step');
-        console.log('All wizard steps found:', allSteps.length, Array.from(allSteps).map(s => s.id));
 
         // Remove active class from all steps
         allSteps.forEach(step => {
-            console.log(`Removing active from step: ${step.id}`);
             step.classList.remove('active');
         });
 
@@ -450,14 +433,10 @@ const WizardManager = {
         };
 
         const targetStepId = stepMap[stepNumber];
-        console.log(`Target step ID: ${targetStepId}`);
-
         const stepElement = DOMCache.get(targetStepId);
-        console.log(`Step element for ${stepNumber} (${targetStepId}):`, stepElement);
 
         if (stepElement) {
             stepElement.classList.add('active');
-            console.log(`✅ Added active class to step: ${targetStepId}`);
         } else {
             console.error(`❌ Step element not found: ${targetStepId}`);
         }
@@ -466,7 +445,6 @@ const WizardManager = {
 
         // Initialize Step 4 when showing it
         if (stepNumber === 4) {
-            console.log('Initializing Step 4');
             Step4Manager.init();
             Step4Manager.showProfileSelection();
         }
@@ -481,7 +459,6 @@ const WizardManager = {
             'back-to-step-2-from-network': () => this.showStep(2),
             'back-to-collecting': () => this.showStep(3, 'collecting'),
             'next-to-messaging': () => {
-                console.log('Next button clicked, going to step 4');
                 this.showStep(4);
             },
             'linkedin-search-option': () => this.showStep(3, 'search'),
@@ -502,42 +479,29 @@ const WizardManager = {
             'generate-messages': () => MessageGenerator.generateMessages()
         };
 
-        console.log('🔧 Setting up wizard event listeners');
         Object.entries(eventMap).forEach(([id, handler]) => {
             const element = DOMCache.get(id);
             if (element) {
-                console.log(`✅ Adding event listener for: ${id}`);
                 element.addEventListener('click', handler);
-            } else {
-                console.log(`❌ Element not found for: ${id}`);
             }
         });
 
         const csvInput = DOMCache.get('csv-file-input');
         if (csvInput) {
-            console.log('✅ Adding CSV input change listener');
             csvInput.addEventListener('change', CSVHandler.upload);
-        } else {
-            console.log('❌ CSV input not found');
         }
     },
 
     validateAndProceed() {
-        console.log('🔍 validateAndProceed called');
         const campaignNameInput = DOMCache.get('campaign-name');
-        console.log('Campaign name input element:', campaignNameInput);
-
         const campaignName = campaignNameInput?.value.trim();
-        console.log('Campaign name value:', campaignName);
 
         if (!campaignName) {
-            console.log('❌ No campaign name provided');
             Utils.showNotification('Please enter a campaign name', 'error');
             campaignNameInput?.focus();
             return;
         }
 
-        console.log('✅ Campaign name valid, proceeding to step 2');
         this.showStep(2);
     },
 
@@ -833,15 +797,12 @@ const ProfileManager = {
 
         // Show/hide NEXT button based on collected profiles
         const nextButton = DOMCache.get('next-to-messaging');
-        console.log('UpdateList called, profiles:', AppState.collectedProfiles.length, 'nextButton:', nextButton);
         if (nextButton) {
             if (AppState.collectedProfiles.length > 0) {
                 Utils.show(nextButton);
                 nextButton.disabled = false;
-                console.log('NEXT button shown');
             } else {
                 Utils.hide(nextButton);
-                console.log('NEXT button hidden');
             }
         }
     },
@@ -990,8 +951,6 @@ const Step4Manager = {
             }
 
             // Automatically switch to message selection view
-            console.log('About to call showMessageSelection()');
-            console.log('Generated messages:', this.generatedMessages);
             this.showMessageSelection();
             Utils.showNotification(`Generated ${this.generatedMessages.length} messages`, 'success');
 
@@ -1007,15 +966,10 @@ const Step4Manager = {
     },
 
     showGeneratedMessages() {
-        console.log('showGeneratedMessages called with:', this.generatedMessages);
         const resultsContainer = DOMCache.get('message-results');
         const messagesContainer = DOMCache.get('messages-container');
 
-        console.log('Results container:', resultsContainer);
-        console.log('Messages container:', messagesContainer);
-
         if (!resultsContainer || !messagesContainer) {
-            console.log('Missing containers, returning');
             return;
         }
 
@@ -1025,7 +979,6 @@ const Step4Manager = {
         messagesContainer.innerHTML = '<div style="background: lime; padding: 20px; margin: 10px; border: 2px solid green; font-weight: bold;">🧪 TEST: Container is working! Messages should appear below...</div>';
 
         this.generatedMessages.forEach((item, profileIndex) => {
-            console.log(`Processing profile ${profileIndex}:`, item);
             const profileDiv = document.createElement('div');
             profileDiv.className = 'profile-messages-section';
 
@@ -1041,10 +994,8 @@ const Step4Manager = {
             } else {
                 // Parse messages from API response
                 const messages = this.parseMessagesFromResponse(item.message);
-                console.log(`Parsed ${messages.length} messages for ${item.profile.name}:`, messages);
 
                 if (messages.length === 0) {
-                    console.error('No messages parsed for profile:', item.profile.name);
                     profileDiv.innerHTML = `
                         <div class="profile-header">
                             <h4>${item.profile.name}</h4>
@@ -1087,7 +1038,6 @@ const Step4Manager = {
                             const selectedMessageIndex = parseInt(radio.value);
                             item.selectedMessage = messages[selectedMessageIndex];
                             item.selectedMessageIndex = selectedMessageIndex;
-                            console.log(`Selected message ${selectedMessageIndex + 1} for ${item.profile.name}:`, item.selectedMessage);
                         }
                     });
                 });
@@ -1111,8 +1061,7 @@ const Step4Manager = {
         resultsContainer.style.padding = '20px';
         resultsContainer.style.margin = '20px 0';
 
-        console.log('Message results container should now be visible');
-        console.log('Container styles applied:', resultsContainer.style.cssText);
+
 
         // Add a test message to verify the container is working
         if (messagesContainer.children.length === 0) {
@@ -1129,52 +1078,39 @@ const Step4Manager = {
 
         // Check if response has messages object
         if (apiResponse.messages) {
-            console.log('Found messages object:', apiResponse.messages);
             // Extract messages from the messages object, excluding 'id' field
             Object.keys(apiResponse.messages).forEach(key => {
                 if (key.startsWith('message') && apiResponse.messages[key] && key !== 'id') {
                     messages.push(apiResponse.messages[key]);
-                    console.log(`Found ${key}:`, apiResponse.messages[key]);
                 }
             });
         }
 
         // If no messages found, try to extract from root level
         if (messages.length === 0) {
-            console.log('No messages in messages object, checking root level');
             Object.keys(apiResponse).forEach(key => {
                 if (key.startsWith('message') && apiResponse[key]) {
                     messages.push(apiResponse[key]);
-                    console.log(`Found root level ${key}:`, apiResponse[key]);
                 }
             });
         }
 
         // If still no messages, return the whole response as a single message
         if (messages.length === 0) {
-            console.log('No messages found, using full response');
             messages.push(JSON.stringify(apiResponse, null, 2));
         }
-
-        console.log('Final parsed messages:', messages);
         return messages;
     },
 
     showMessageSelection() {
-        console.log('🚀 showMessageSelection() called');
-        console.log('Generated messages data:', this.generatedMessages);
-
         // Hide the profile selection step
         const profileSelectionStep = document.querySelector('.step[data-step="4"]');
-        console.log('Profile selection step found:', profileSelectionStep);
         if (profileSelectionStep) {
             profileSelectionStep.style.display = 'none';
-            console.log('Profile selection step hidden');
         }
 
         // Create and show message selection UI
         const container = document.querySelector('.container');
-        console.log('Main container found:', container);
         if (!container) {
             console.error('Main container not found');
             return;
@@ -1244,15 +1180,10 @@ const Step4Manager = {
         `;
 
         // Add the message selection interface to the container
-        console.log('About to insert HTML into container');
-        console.log('HTML length:', messageSelectionHTML.length);
         container.insertAdjacentHTML('beforeend', messageSelectionHTML);
-        console.log('HTML inserted successfully');
 
         // Add event listeners
         this.setupMessageSelectionListeners();
-
-        console.log('✅ Message selection interface created and should be visible');
     },
 
     setupMessageSelectionListeners() {
@@ -1307,8 +1238,6 @@ const Step4Manager = {
                 }
             }
         });
-
-        console.log('Selected messages for campaign:', selectedMessages);
 
         if (selectedMessages.length === 0) {
             Utils.showNotification('Please select at least one message', 'warning');
@@ -1381,7 +1310,6 @@ const Step4Manager = {
         AppState.selectedMessages = finalMessages;
 
         Utils.showNotification(`Selected ${finalMessages.length} messages for campaign`, 'success');
-        console.log('Final selected messages:', finalMessages);
 
         // Enable campaign creation
         const createBtn = DOMCache.get('create-campaign-final');

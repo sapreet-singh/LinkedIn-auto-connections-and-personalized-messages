@@ -537,7 +537,6 @@ class LinkedInAutomation {
 
     storeProfilesForPopup(profiles) {
         // Storage removed - profiles are handled in memory only
-        console.log('Profiles collected:', profiles.length);
     }
 
     // Removed duplicate startContinuousCollection() and collectNewProfiles() - functionality exists in setupContinuousMonitoring() and collectNewProfilesAuto()

@@ -21,7 +21,6 @@ class LinkedInAutomationBackground {
     }
 
     onInstalled() {
-        console.log('LinkedIn extension installed');
     }
     
     handleMessage(message, sender, sendResponse) {
@@ -194,7 +193,6 @@ class LinkedInAutomationBackground {
     
     loadCampaigns() {
         // No storage operations needed
-        console.log('Campaign loading simplified - no storage');
     }
 
 }
