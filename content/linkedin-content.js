@@ -1,4 +1,4 @@
-// LinkedIn Content Script
+
 if (window.linkedInAutomationInjected) {
 } else {
     window.linkedInAutomationInjected = true;
@@ -7,12 +7,12 @@ class LinkedInAutomation {
     constructor() {
         this.isRunning = false;
         this.currentCampaign = null;
-        this.actionDelay = 30000; // 30 seconds default
+        this.actionDelay = 30000;
         this.dailyLimit = 50;
         this.todayCount = 0;
         this.isRealTimeMode = false;
         this.isAutoCollecting = false;
-        this.isAutoCollectionEnabled = true; // Auto collection enabled by default
+        this.isAutoCollectionEnabled = true;
         this.currentPageCollected = false;
         this.autoProfileObserver = null;
         this.autoCollectionTimeout = null;
@@ -30,11 +30,9 @@ class LinkedInAutomation {
     }
     
     loadSettings() {
-        chrome.storage.local.get(['actionDelay', 'dailyLimit', 'todayCount'], (result) => {
-            this.actionDelay = (result.actionDelay || 30) * 1000;
-            this.dailyLimit = result.dailyLimit || 50;
-            this.todayCount = result.todayCount || 0;
-        });
+        this.actionDelay = 30 * 1000;
+        this.dailyLimit = 50;
+        this.todayCount = 0;
     }
 
     setupAutoDetection() {
@@ -48,6 +46,9 @@ class LinkedInAutomation {
 
     isProfilePage() {
         const url = window.location.href;
+        if (url.includes('/in/') && !url.includes('/search/')) {
+            return false;
+        }
         return url.includes('linkedin.com/search/results/people') ||
                url.includes('linkedin.com/search/people') ||
                url.includes('linkedin.com/mynetwork') ||
@@ -204,7 +205,11 @@ class LinkedInAutomation {
                 this.collectProfiles().then(profiles => {
                     sendResponse({ profiles });
                 });
-                return true; // Keep message channel open for async response
+                return true;
+            case 'sendDirectMessage':
+                this.handleDirectMessage(message.message, message.profileName, message.profileUrl);
+                sendResponse({ success: true });
+                break;
             case 'startRealTimeCollection':
                 this.isRealTimeMode = true;
                 this.currentPageCollected = false;
@@ -305,7 +310,6 @@ class LinkedInAutomation {
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-                chrome.storage.local.set({ todayCount: this.todayCount });
                 if (i < connectButtons.length - 1) {
                     await this.delay(this.actionDelay);
                 }
@@ -401,33 +405,32 @@ class LinkedInAutomation {
     
     async sendCustomMessage(personInfo, resolve, reject) {
         try {
-            chrome.storage.local.get(['connectionMessage'], async (result) => {
-                const messageTemplate = result.connectionMessage || 'Hi {firstName}, I\'d love to connect with you!';
-                const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
 
-                const messageTextarea = document.querySelector('#custom-message') ||
-                                       document.querySelector('textarea[name="message"]') ||
-                                       document.querySelector('.send-invite__custom-message textarea');
+            const messageTemplate = 'Hi {firstName}, I\'d love to connect with you!';
+            const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
 
-                if (messageTextarea) {
-                    messageTextarea.value = personalizedMessage;
-                    messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            const messageTextarea = document.querySelector('#custom-message') ||
+                                   document.querySelector('textarea[name="message"]') ||
+                                   document.querySelector('.send-invite__custom-message textarea');
 
-                    setTimeout(() => {
-                        const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
-                                         document.querySelector('.send-invite__actions button[aria-label*="Send"]');
+            if (messageTextarea) {
+                messageTextarea.value = personalizedMessage;
+                messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-                        if (sendButton) {
-                            sendButton.click();
-                            resolve();
-                        } else {
-                            reject(new Error('Could not find send button for custom message'));
-                        }
-                    }, 500);
-                } else {
-                    reject(new Error('Could not find message textarea'));
-                }
-            });
+                setTimeout(() => {
+                    const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
+                                     document.querySelector('.send-invite__actions button[aria-label*="Send"]');
+
+                    if (sendButton) {
+                        sendButton.click();
+                        resolve();
+                    } else {
+                        reject(new Error('Could not find send button for custom message'));
+                    }
+                }, 500);
+            } else {
+                reject(new Error('Could not find message textarea'));
+            }
         } catch (error) {
             reject(error);
         }
@@ -456,6 +459,275 @@ class LinkedInAutomation {
 
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async handleDirectMessage(message, profileName, profileUrl) {
+        try {
+            await this.delay(2000);
+            const messageButton = await this.findMessageButton();
+
+            if (messageButton) {
+                messageButton.click();
+                await this.delay(4000);
+                const messageInput = await this.findMessageInput();
+                if (!messageInput) {
+                    return;
+                }
+                await this.pasteMessageDirectly(messageInput, message);
+                await this.delay(1000);
+                if (!messageInput.textContent.trim() && !messageInput.value) {
+                    await this.pasteUsingClipboard(messageInput, message);
+                }
+                await this.delay(500);
+                if (!messageInput.textContent.trim() && !messageInput.value) {
+                    messageInput.textContent = message;
+                    messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                await this.clickSendButton();
+            }
+        } catch (error) {
+        }
+    }
+
+    async findMessageButton() {
+        await this.delay(2000);
+        const selectors = [
+            'button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])',
+            'button[data-control-name="message"]',
+            '.pv-s-profile-actions button[aria-label*="Message"]',
+            '.pvs-profile-actions__action button[aria-label*="Message"]',
+            '.message-anywhere-button',
+            'a[data-control-name="message"]'
+        ];
+
+        for (const selector of selectors) {
+            const button = document.querySelector(selector);
+            if (button) {
+                const text = button.textContent.toLowerCase().trim();
+                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                if (!text.includes('send') &&
+                    !text.includes('share') &&
+                    !ariaLabel.includes('send') &&
+                    !ariaLabel.includes('share') &&
+                    !ariaLabel.includes('post')) {
+                    return button;
+                }
+            }
+        }
+
+        const buttons = document.querySelectorAll('button, a');
+        for (const button of buttons) {
+            const text = button.textContent.toLowerCase().trim();
+            const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+            if ((text === 'message' || ariaLabel.includes('message')) &&
+                !ariaLabel.includes('send') &&
+                !ariaLabel.includes('share') &&
+                !ariaLabel.includes('post') &&
+                !text.includes('send') &&
+                !text.includes('share') &&
+                !text.includes('more')) {
+                return button;
+            }
+        }
+        return null;
+    }
+
+    async pasteMessageDirectly(messageInput, message) {
+        if (!messageInput) {
+            return;
+        }
+        messageInput.focus();
+        await this.delay(500);
+
+        if (messageInput.contentEditable === 'true') {
+            messageInput.innerHTML = '';
+            messageInput.innerHTML = `<p>${message}</p>`;
+
+            const range = document.createRange();
+            const selection = window.getSelection();
+            const textNode = messageInput.querySelector('p') || messageInput;
+            range.selectNodeContents(textNode);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            messageInput.value = message;
+        }
+
+        const events = [
+            new Event('focus', { bubbles: true }),
+            new Event('input', { bubbles: true }),
+            new Event('change', { bubbles: true }),
+            new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }),
+            new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' })
+        ];
+        for (const event of events) {
+            messageInput.dispatchEvent(event);
+            await this.delay(100);
+        }
+        messageInput.focus();
+        await this.delay(1000);
+    }
+
+    async pasteUsingClipboard(messageInput, message) {
+        try {
+
+            messageInput.focus();
+            await this.delay(300);
+
+
+            messageInput.textContent = '';
+
+            // Copy message to clipboard
+            await navigator.clipboard.writeText(message);
+            await this.delay(200);
+
+            // Simulate Ctrl+V paste
+            const pasteEvent = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                clipboardData: new DataTransfer()
+            });
+
+            pasteEvent.clipboardData.setData('text/plain', message);
+            messageInput.dispatchEvent(pasteEvent);
+
+            // Trigger input events
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+            messageInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            await this.delay(500);
+        } catch (error) {
+            messageInput.textContent = message;
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
+    async findMessageInput() {
+        const selectors = [
+            '.msg-form__contenteditable',
+            '.msg-form__msg-content-container div[contenteditable="true"]',
+            'div[data-placeholder*="message"]',
+            '.compose-form__message-field',
+            'div[contenteditable="true"][data-placeholder]',
+            '.msg-form__msg-content-container--scrollable div[contenteditable="true"]',
+            '.msg-form__placeholder + div[contenteditable="true"]',
+            'div[contenteditable="true"][role="textbox"]',
+            '.msg-form div[contenteditable="true"]'
+        ];
+
+        for (let attempt = 0; attempt < 8; attempt++) {
+            for (const selector of selectors) {
+                const input = document.querySelector(selector);
+                if (input && input.isContentEditable && input.offsetParent !== null) {
+                    return input;
+                }
+            }
+            const allContentEditables = document.querySelectorAll('div[contenteditable="true"]');
+            for (const element of allContentEditables) {
+                if (element.offsetParent === null) continue;
+
+                const placeholder = element.getAttribute('data-placeholder') ||
+                                  element.getAttribute('aria-label') ||
+                                  element.getAttribute('placeholder');
+                if (placeholder && placeholder.toLowerCase().includes('message')) {
+                    return element;
+                }
+
+                const parentContainer = element.closest('.msg-form, .compose-form');
+                if (parentContainer) {
+                    return element;
+                }
+            }
+            await this.delay(1000);
+        }
+
+        return null;
+    }
+
+    async typeText(element, text) {
+        // For contenteditable divs
+        if (element.contentEditable === 'true') {
+            // Focus the element first
+            element.focus();
+
+            // Clear existing content if this is the first text
+            if (!element.textContent.trim()) {
+                element.textContent = '';
+            }
+
+            // Add the text
+            element.textContent += text;
+
+            // Move cursor to end
+            const range = document.createRange();
+            const selection = window.getSelection();
+            range.selectNodeContents(element);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            // Trigger comprehensive events
+            element.dispatchEvent(new Event('focus', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        } else {
+            // For regular input/textarea
+            element.focus();
+            element.value += text;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        }
+    }
+
+    async clickSendButton() {
+
+        await this.delay(2000);
+
+        const sendSelectors = [
+            '.msg-form__send-button',
+            'button[type="submit"]',
+            '.msg-form button[type="submit"]',
+            'button[data-control-name="send"]',
+            'button[aria-label*="Send"]:not([aria-label*="options"])',
+            '.compose-form__send-button',
+            '.msg-form__send-btn'
+        ];
+
+        for (let attempt = 0; attempt < 10; attempt++) {
+            for (const selector of sendSelectors) {
+                const button = document.querySelector(selector);
+                if (button && !button.disabled && button.offsetParent !== null) {
+                    const text = button.textContent.toLowerCase().trim();
+                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                    if (!text.includes('options') && !ariaLabel.includes('options')) {
+                        button.click();
+                        await this.delay(1000);
+                        return;
+                    }
+                }
+            }
+            const buttons = document.querySelectorAll('button');
+            for (const button of buttons) {
+                const text = button.textContent.toLowerCase().trim();
+                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                if (text === 'send' &&
+                    !text.includes('options') &&
+                    !ariaLabel.includes('options') &&
+                    !button.disabled &&
+                    button.offsetParent !== null &&
+                    button.offsetWidth > 0 &&
+                    button.offsetHeight > 0) {
+                    button.click();
+                    await this.delay(1000);
+                    return;
+                }
+            }
+
+            await this.delay(500);
+        }
     }
     
     getPageInfo() {
@@ -503,48 +775,16 @@ class LinkedInAutomation {
     }
 
     async collectCurrentPageOnly() {
-        const profiles = [];
-        if (window.location.href.includes('/mynetwork/')) {
-            const networkProfiles = await this.collectNetworkProfiles();
-            return networkProfiles.slice(0, 10);
-        }
+        // Use existing collectProfiles method but limit results and send real-time
+        const allProfiles = await this.collectProfiles();
+        const limitedProfiles = allProfiles.slice(0, 10);
 
-        const selectors = [
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            '.search-result',
-            '.entity-result',
-            'li[data-reusable-search-result]',
-            '.search-results-container li'
-        ];
+        // Send profiles in real-time as they're collected
+        limitedProfiles.forEach(profile => {
+            this.sendProfilesRealTime([profile]);
+        });
 
-        let profileCards = [];
-        for (const selector of selectors) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) break;
-        }
-        if (profileCards.length === 0) {
-            const profileLinks = document.querySelectorAll('a[href*="/in/"]');
-            const containers = new Set();
-            profileLinks.forEach(link => {
-                const container = link.closest('li, div[class*="result"], article');
-                if (container) containers.add(container);
-            });
-            profileCards = Array.from(containers);
-        }
-
-        const maxProfiles = Math.min(profileCards.length, 10);
-
-        for (let i = 0; i < maxProfiles; i++) {
-            const card = profileCards[i];
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-                this.sendProfilesRealTime([profile]);
-            }
-        }
-
-        return profiles;
+        return limitedProfiles;
     }
 
     sendProfilesRealTime(profiles) {
@@ -570,74 +810,11 @@ class LinkedInAutomation {
         }
     }
 
-    storeProfilesForPopup(profiles) {
-        try {
-            chrome.storage.local.get(['realTimeProfiles'], (result) => {
-                const existingProfiles = result.realTimeProfiles || [];
-                const updatedProfiles = [...existingProfiles, ...profiles];
-                chrome.storage.local.set({
-                    realTimeProfiles: updatedProfiles,
-                    lastProfileUpdate: Date.now()
-                });
-            });
-        } catch (error) {
-            console.error('Error storing profiles:', error);
-        }
+    storeProfilesForPopup() {
+        // Storage removed - profiles are handled in memory only
     }
 
-    startContinuousCollection() {
-        const observer = new MutationObserver((mutations) => {
-            let hasNewProfiles = false;
-
-            mutations.forEach((mutation) => {
-                if (mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const newProfileCards = node.querySelectorAll ?
-                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
-
-                            if (newProfileCards.length > 0) {
-                                hasNewProfiles = true;
-                            }
-                        }
-                    });
-                }
-            });
-
-            if (hasNewProfiles) {
-                clearTimeout(this.collectionTimeout);
-                this.collectionTimeout = setTimeout(() => {
-                    this.collectNewProfiles();
-                }, 1000);
-            }
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        this.profileObserver = observer;
-    }
-
-    async collectNewProfiles() {
-        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
-        const newProfiles = [];
-
-        profileCards.forEach((card) => {
-            if (card.dataset.processed) return;
-
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                newProfiles.push(profile);
-                card.dataset.processed = 'true';
-            }
-        });
-
-        if (newProfiles.length > 0) {
-            this.sendProfilesRealTime(newProfiles);
-        }
-    }
+    // Removed duplicate startContinuousCollection() and collectNewProfiles() - functionality exists in setupContinuousMonitoring() and collectNewProfilesAuto()
 
     fixProfileData(profile) {
         if (!profile.name ||
@@ -692,61 +869,27 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
+        // Simplified alternative extraction using existing extractProfileFromCard method
         const profiles = [];
-
         const profileLinks = document.querySelectorAll('a[href*="/in/"]');
+        const containers = new Set();
 
         profileLinks.forEach(link => {
             if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
                 return;
             }
 
-            link.classList.add('processed');
-
-            const profile = {
-                name: '',
-                url: link.href,
-                company: '',
-                title: '',
-                location: '',
-                industry: '',
-                profilePic: '',
-                collectedAt: new Date().toISOString()
-            };
-
-            let nameText = link.textContent.trim();
-            if (!nameText || nameText.includes('View') || nameText.includes('Status') || nameText.length < 3) {
-                const parent = link.closest('li, div, article');
-                if (parent) {
-                    const nameElements = parent.querySelectorAll('span, h3, h4, .name, [data-anonymize="person-name"]');
-                    for (const el of nameElements) {
-                        const text = el.textContent.trim();
-                        if (text && text.length > 2 && !text.includes('Status') && !text.includes('View') && text.split(' ').length >= 2) {
-                            nameText = text;
-                            break;
-                        }
-                    }
-                }
+            const container = link.closest('li, div, article');
+            if (container && !container.classList.contains('processed')) {
+                container.classList.add('processed');
+                containers.add(container);
             }
+        });
 
-            if (nameText && nameText.length > 2) {
-                profile.name = nameText;
-
-                if (profile.url.includes('?')) {
-                    profile.url = profile.url.split('?')[0];
-                }
-                profile.url = profile.url.replace(/\/$/, '');
-
-                const parent = link.closest('li, div, article');
-                if (parent) {
-                    const img = parent.querySelector('img[src*="http"]');
-                    if (img && img.src && !img.src.includes('data:image')) {
-                        profile.profilePic = img.src;
-                    }
-                }
-
+        Array.from(containers).forEach(container => {
+            const profile = this.extractProfileFromCard(container);
+            if (profile?.name && profile?.url) {
                 profiles.push(profile);
-
             }
         });
 
@@ -974,7 +1117,7 @@ class LinkedInAutomation {
             let scrollAttempts = 0;
             const maxScrollAttempts = 5;
 
-            this.startContinuousCollection();
+            this.setupContinuousMonitoring();
 
             if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
 
@@ -1098,29 +1241,12 @@ class LinkedInAutomation {
 
 }
 
-new LinkedInAutomation();
-const originalError = console.error;
-console.error = function(...args) {
-    const message = args.join(' ');
-    if (message.includes('Permissions policy violation') ||
-        message.includes('unload is not allowed') ||
-        message.includes('Extension context invalidated') ||
-        message.includes('message port closed') ||
-        message.includes('Could not establish connection')) {
-
-        return;
-    }
-    originalError.apply(console, args);
-};
-
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-
         window.linkedInAutomation = new LinkedInAutomation();
     });
 } else {
-
     window.linkedInAutomation = new LinkedInAutomation();
 }
 
-} // End of injection guard
+}
