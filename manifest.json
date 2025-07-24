@@ -5,7 +5,8 @@
   "description": "Automate LinkedIn connections and personalized messages",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*"

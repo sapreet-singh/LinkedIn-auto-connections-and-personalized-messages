@@ -27,6 +27,7 @@ class LinkedInAutomation {
         });
         this.loadSettings();
         this.setupAutoDetection();
+        this.setupAutoPopupDetection();
     }
     
     loadSettings() {
@@ -82,6 +83,128 @@ class LinkedInAutomation {
                 }
             }, 2000);
         });
+    }
+
+    setupAutoPopupDetection() {
+        // Auto-open popup when LinkedIn loads
+        if (document.readyState === 'complete') {
+            setTimeout(() => {
+                this.showAutoPopup();
+            }, 3000);
+        } else {
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    this.showAutoPopup();
+                }, 3000);
+            });
+        }
+    }
+
+    showAutoPopup() {
+        try {
+            // Create and show auto popup notification
+            this.createAutoPopupNotification();
+        } catch (error) {
+            console.error('Error showing auto popup:', error);
+        }
+    }
+
+    createAutoPopupNotification() {
+        // Remove existing notification if any
+        const existing = document.getElementById('linkedin-auto-popup');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create popup notification
+        const popup = document.createElement('div');
+        popup.id = 'linkedin-auto-popup';
+        popup.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0, 119, 181, 0.3);
+                z-index: 10000;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                max-width: 350px;
+                animation: slideIn 0.5s ease-out;
+            ">
+                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <div style="font-size: 24px; margin-right: 10px;">🚀</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 16px;">LinkedIn Automation Ready!</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Your automation tools are now active</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="open-automation-popup" style="
+                        background: white;
+                        color: #0077b5;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        flex: 1;
+                        transition: all 0.2s;
+                    ">Open Tools</button>
+                    <button id="dismiss-popup" style="
+                        background: rgba(255,255,255,0.2);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    ">Dismiss</button>
+                </div>
+            </div>
+            <style>
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            </style>
+        `;
+
+        document.body.appendChild(popup);
+
+        // Add event listeners
+        const openBtn = popup.querySelector('#open-automation-popup');
+        const dismissBtn = popup.querySelector('#dismiss-popup');
+
+        openBtn.addEventListener('click', () => {
+            // Open extension popup by clicking the extension icon programmatically
+            this.openExtensionPopup();
+            popup.remove();
+        });
+
+        dismissBtn.addEventListener('click', () => {
+            popup.remove();
+        });
+
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => {
+            if (popup.parentNode) {
+                popup.remove();
+            }
+        }, 10000);
+    }
+
+    openExtensionPopup() {
+        // Send message to background script to open popup
+        try {
+            chrome.runtime.sendMessage({
+                action: 'openPopup'
+            });
+        } catch (error) {
+            console.error('Error opening popup:', error);
+        }
     }
 
     async startAutoCollection() {
@@ -208,6 +331,10 @@ class LinkedInAutomation {
                 return true;
             case 'sendDirectMessage':
                 this.handleDirectMessage(message.message, message.profileName, message.profileUrl);
+                sendResponse({ success: true });
+                break;
+            case 'showAutoPopup':
+                this.showAutoPopup();
                 sendResponse({ success: true });
                 break;
             case 'startRealTimeCollection':

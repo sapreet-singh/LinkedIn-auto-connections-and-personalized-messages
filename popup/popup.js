@@ -640,7 +640,194 @@ const RealTimeProfileHandler = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', async function() {
+// Launch Interface Manager
+const LaunchManager = {
+    init() {
+        console.log('LaunchManager initializing...');
+        this.setupLaunchButton();
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+            this.checkCurrentState();
+        }, 100);
+    },
+
+    async checkCurrentState() {
+        console.log('Checking current state...');
+        try {
+            // Check if we have chrome.tabs API available
+            if (typeof chrome !== 'undefined' && chrome.tabs) {
+                const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+                console.log('Found LinkedIn tabs:', tabs.length);
+
+                if (tabs.length > 0) {
+                    console.log('LinkedIn is open, showing main interface');
+                    this.showMainInterface();
+                } else {
+                    console.log('LinkedIn not open, showing launch interface');
+                    this.showLaunchInterface();
+                }
+            } else {
+                console.log('Chrome tabs API not available, showing launch interface');
+                this.showLaunchInterface();
+            }
+        } catch (error) {
+            console.error('Error checking current state:', error);
+            console.log('Fallback: showing launch interface');
+            this.showLaunchInterface();
+        }
+    },
+
+    showLaunchInterface() {
+        console.log('showLaunchInterface called');
+        const launchInterface = document.getElementById('launch-interface');
+        const mainInterface = document.getElementById('main-interface');
+
+        console.log('Launch interface element:', launchInterface);
+        console.log('Main interface element:', mainInterface);
+
+        if (launchInterface && mainInterface) {
+            launchInterface.classList.remove('hidden');
+            mainInterface.classList.add('hidden');
+            console.log('Successfully switched to launch interface');
+        } else {
+            console.error('Could not find interface elements');
+            console.error('Launch interface found:', !!launchInterface);
+            console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    showMainInterface() {
+        console.log('showMainInterface called');
+        const launchInterface = document.getElementById('launch-interface');
+        const mainInterface = document.getElementById('main-interface');
+
+        console.log('Launch interface element:', launchInterface);
+        console.log('Main interface element:', mainInterface);
+
+        if (launchInterface && mainInterface) {
+            launchInterface.classList.add('hidden');
+            mainInterface.classList.remove('hidden');
+            console.log('Successfully switched to main interface');
+        } else {
+            console.error('Could not find interface elements');
+            console.error('Launch interface found:', !!launchInterface);
+            console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    setupLaunchButton() {
+        console.log('Setting up launch button...');
+        const launchBtn = document.getElementById('launch-linkedin');
+        console.log('Launch button element:', launchBtn);
+
+        if (launchBtn) {
+            console.log('Adding click event listener to launch button');
+            launchBtn.addEventListener('click', () => {
+                console.log('Launch button clicked!');
+                this.launchLinkedIn();
+            });
+        } else {
+            console.error('Launch button not found! Available elements:');
+            console.error('All elements with IDs:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
+        }
+    },
+
+    async launchLinkedIn() {
+        console.log('launchLinkedIn called');
+        try {
+            // Check if chrome.tabs API is available
+            if (typeof chrome === 'undefined' || !chrome.tabs) {
+                console.error('Chrome tabs API not available');
+                this.showMainInterface();
+                return;
+            }
+
+            console.log('Getting current tab...');
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const currentTab = tabs[0];
+            console.log('Current tab:', currentTab);
+
+            if (currentTab && currentTab.url && currentTab.url.includes('linkedin.com')) {
+                console.log('Already on LinkedIn, showing main interface');
+                this.showMainInterface();
+            } else {
+                console.log('Navigating to LinkedIn...');
+                await chrome.tabs.update(currentTab.id, {
+                    url: 'https://www.linkedin.com/feed/'
+                });
+
+                console.log('Navigation initiated, showing main interface');
+                this.showMainInterface();
+
+                // Set up listener for when LinkedIn loads to auto-open popup
+                this.setupLinkedInAutoPopup(currentTab.id);
+            }
+        } catch (error) {
+            console.error('Error launching LinkedIn:', error);
+            console.log('Fallback: showing main interface anyway');
+            this.showMainInterface();
+        }
+    },
+
+    setupLinkedInAutoPopup(tabId) {
+        // Listen for tab updates to detect when LinkedIn loads
+        const listener = (updatedTabId, changeInfo, tab) => {
+            if (updatedTabId === tabId &&
+                changeInfo.status === 'complete' &&
+                tab.url &&
+                tab.url.includes('linkedin.com')) {
+
+                // Remove listener
+                chrome.tabs.onUpdated.removeListener(listener);
+
+                // Auto-open popup by sending message to content script
+                setTimeout(() => {
+                    this.triggerAutoPopup(tabId);
+                }, 2000);
+            }
+        };
+
+        chrome.tabs.onUpdated.addListener(listener);
+    },
+
+    async triggerAutoPopup(tabId) {
+        try {
+            // Inject content script if needed
+            await chrome.scripting.executeScript({
+                target: { tabId },
+                files: ['content/linkedin-content.js']
+            });
+
+            // Send message to show auto popup
+            await chrome.tabs.sendMessage(tabId, {
+                action: 'showAutoPopup'
+            });
+        } catch (error) {
+            console.error('Error triggering auto popup:', error);
+        }
+    }
+};
+
+// Add immediate initialization for debugging
+console.log('popup.js loaded, document.readyState:', document.readyState);
+
+// Initialize immediately if DOM is already ready
+if (document.readyState === 'loading') {
+    console.log('Document still loading, waiting for DOMContentLoaded');
+    document.addEventListener('DOMContentLoaded', initializeExtension);
+} else {
+    console.log('Document already loaded, initializing immediately');
+    initializeExtension();
+}
+
+function initializeExtension() {
+    console.log('initializeExtension called');
+
+    // Initialize launch manager first
+    console.log('Initializing LaunchManager...');
+    LaunchManager.init();
+
+    console.log('Initializing other managers...');
     ModalManager.init();
     RealTimeProfileHandler.init();
 
@@ -668,7 +855,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize without storage
     CampaignManager.load();
-});
+}
 
 const CampaignManager = {
     load() {

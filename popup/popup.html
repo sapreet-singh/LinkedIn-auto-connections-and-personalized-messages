@@ -7,7 +7,18 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Launch Interface - Shows initially -->
+    <div id="launch-interface" class="launch-container">
+        <div class="launch-content">
+            <div class="launch-icon">🚀</div>
+            <h2>LinkedIn Automation</h2>
+            <p>Launch LinkedIn automation tools</p>
+            <button id="launch-linkedin" class="btn-launch">Open LinkedIn & Start</button>
+        </div>
+    </div>
+
+    <!-- Main Interface - Shows after LinkedIn opens -->
+    <div id="main-interface" class="container hidden">
         <header>
             <h1>LinkedIn Auto Connect</h1>
             <div class="status" id="status">Ready</div>

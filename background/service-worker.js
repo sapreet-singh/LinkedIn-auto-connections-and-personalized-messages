@@ -40,6 +40,9 @@ class LinkedInAutomationBackground {
             case 'getCampaignStatus':
                 this.getCampaignStatus(message.campaignId, sendResponse);
                 break;
+            case 'openPopup':
+                this.openExtensionPopup(sendResponse);
+                break;
             default:
                 sendResponse({ error: 'Unknown action' });
         }
@@ -193,6 +196,17 @@ class LinkedInAutomationBackground {
     
     loadCampaigns() {
         // No storage operations needed
+    }
+
+    openExtensionPopup(sendResponse) {
+        try {
+            // Open the extension popup programmatically
+            chrome.action.openPopup();
+            sendResponse({ success: true });
+        } catch (error) {
+            console.error('Error opening popup:', error);
+            sendResponse({ error: error.message });
+        }
     }
 
 }
