@@ -21,17 +21,6 @@ class LinkedInAutomationBackground {
     }
 
     onInstalled() {
-        chrome.storage.local.set({
-            dailyLimit: 50,
-            actionDelay: 30,
-            followupDelay: 3,
-            connectionMessage: 'Hi {firstName}, I\'d love to connect with you!',
-            followup1: 'Thanks for connecting, {firstName}!',
-            followup2: 'Hope you\'re doing well, {firstName}!',
-            todayCount: 0,
-            totalCount: 0,
-            campaigns: []
-        });
     }
     
     handleMessage(message, sender, sendResponse) {
@@ -189,67 +178,21 @@ class LinkedInAutomationBackground {
     }
     
     async getCampaigns() {
-        return new Promise((resolve, reject) => {
-            chrome.storage.local.get(['campaigns'], (result) => {
-                if (chrome.runtime.lastError) {
-                    console.error('Chrome storage error in getCampaigns:', chrome.runtime.lastError);
-                    reject(chrome.runtime.lastError);
-                    return;
-                }
-
-                if (!result) {
-                    console.error('Storage result is undefined in getCampaigns');
-                    resolve([]);
-                    return;
-                }
-
-                resolve(result.campaigns || []);
-            });
-        });
+        // No storage - return empty array
+        return [];
     }
     
     async getSettings() {
-        return new Promise((resolve) => {
-            chrome.storage.local.get(['todayCount', 'dailyLimit', 'actionDelay'], (result) => {
-                resolve({
-                    todayCount: result.todayCount || 0,
-                    dailyLimit: result.dailyLimit || 50,
-                    actionDelay: result.actionDelay || 30
-                });
-            });
-        });
+        // Return default settings without storage
+        return {
+            todayCount: 0,
+            dailyLimit: 50,
+            actionDelay: 30
+        };
     }
     
     loadCampaigns() {
-        try {
-            chrome.storage.local.get(['campaigns'], (result) => {
-                if (chrome.runtime.lastError) {
-                    console.error('Chrome storage error:', chrome.runtime.lastError);
-                    return;
-                }
-
-                if (!result || !result.hasOwnProperty('campaigns')) {
-                    chrome.storage.local.set({ campaigns: [] });
-                    return;
-                }
-
-                const campaigns = result.campaigns || [];
-                if (!Array.isArray(campaigns)) {
-                    chrome.storage.local.set({ campaigns: [] });
-                    return;
-                }
-
-                campaigns.forEach(campaign => {
-                    if (campaign && campaign.status === 'running') {
-                        campaign.status = 'paused';
-                    }
-                });
-
-                chrome.storage.local.set({ campaigns });
-            });
-        } catch (error) {
-            chrome.storage.local.set({ campaigns: [] });
-        }
+        // No storage operations needed
     }
 
 }

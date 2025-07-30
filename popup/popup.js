@@ -1,21 +1,167 @@
-// LinkedIn Automation Popup
 const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
-    STORAGE_KEYS: {
-        CAMPAIGNS: 'campaigns', PROFILES: 'collectedProfiles', SETTINGS: ['dailyLimit', 'actionDelay', 'followupDelay'],
-        MESSAGES: ['connectionMessage', 'followup1', 'followup2'], STATS: ['todayCount', 'totalCount']
-    },
+
     URLS: {
         NETWORK_SEARCH: 'https://www.linkedin.com/search/results/people/?network=%5B%22F%22%5D&origin=FACETED_SEARCH',
         CONNECTIONS: 'https://www.linkedin.com/mynetwork/invite-connect/connections/',
         PEOPLE_SEARCH: 'https://www.linkedin.com/search/people/'
+    },
+    API: {
+        BASE_URL: 'http://localhost:7008/api/linkedin',
+        ENDPOINTS: {
+            MESSAGES: '/messages'
+        }
+    }
+};
+
+
+const APIService = {
+    async generateMessage(profileUrl) {
+        try {
+            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: profileUrl
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    async generateMessagesForProfiles(profiles, maxProfiles = 10) {
+        const limitedProfiles = profiles.slice(0, maxProfiles);
+        const results = [];
+
+        for (const profile of limitedProfiles) {
+            try {
+                const messageData = await this.generateMessage(profile.url);
+                results.push({
+                    profile,
+                    messageData,
+                    success: true
+                });
+            } catch (error) {
+                results.push({
+                    profile,
+                    error: error.message,
+                    success: false
+                });
+            }
+        }
+
+        return results;
+    }
+};
+
+// Message Generator for AI-powered personalized messages
+const MessageGenerator = {
+    async generateMessages() {
+        const generateBtn = DOMCache.get('generate-messages');
+        const statusDiv = DOMCache.get('generation-status');
+        const messagesDiv = DOMCache.get('generated-messages');
+        const messagesList = DOMCache.get('messages-list');
+        const summaryDiv = DOMCache.get('generation-summary');
+
+        // Show loading state
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'GENERATING...';
+        statusDiv.style.display = 'flex';
+        messagesDiv.style.display = 'none';
+
+        try {
+            // Get collected profiles (limit to 10)
+            const profiles = AppState.collectedProfiles.slice(0, 10);
+
+            if (profiles.length === 0) {
+                Utils.showNotification('No profiles available for message generation', 'warning');
+                return;
+            }
+
+            // Generate messages using API
+            const results = await APIService.generateMessagesForProfiles(profiles);
+
+            // Display results
+            this.displayGeneratedMessages(results, messagesList);
+
+            // Show results section
+            statusDiv.style.display = 'none';
+            messagesDiv.style.display = 'block';
+
+            // Update summary
+            const successCount = results.filter(r => r.success).length;
+            const totalCount = results.length;
+
+            summaryDiv.innerHTML = `
+                <strong>Generation Complete:</strong>
+                ${successCount}/${totalCount} messages generated successfully
+            `;
+
+            Utils.showNotification(`Generated ${successCount} personalized messages`, 'success');
+
+        } catch (error) {
+            console.error('Message generation failed:', error);
+            Utils.showNotification('Failed to generate messages. Please check your API connection.', 'error');
+            statusDiv.style.display = 'none';
+        } finally {
+            generateBtn.disabled = false;
+            generateBtn.textContent = '🤖 ANALYZE & GENERATE MESSAGES';
+        }
+    },
+
+    displayGeneratedMessages(results, container) {
+        container.innerHTML = '';
+
+        results.forEach((result) => {
+            const messageItem = document.createElement('div');
+            messageItem.className = 'message-item';
+
+            const profileName = result.profile.name || 'Unknown Profile';
+
+            if (result.success) {
+                // Display successful message generation
+                const data = result.messageData.data || result.messageData;
+                const messageContent = data.message || 'Generated message content';
+                const confidence = data.confidence || 'N/A';
+                const followUpMessage = data.followUpMessage || '';
+
+                messageItem.innerHTML = `
+                    <div class="message-profile">${profileName}</div>
+                    <div class="message-content">${messageContent}</div>
+                    ${followUpMessage ? `<div class="message-content" style="margin-top: 8px; border-left-color: #28a745;"><strong>Follow-up:</strong> ${followUpMessage}</div>` : ''}
+                    <div class="message-status success">✅ Generated (Confidence: ${confidence}%)</div>
+                `;
+            } else {
+                // Display error
+                messageItem.innerHTML = `
+                    <div class="message-profile">${profileName}</div>
+                    <div class="message-content" style="color: #e74c3c;">
+                        Failed to generate message: ${result.error}
+                    </div>
+                    <div class="message-status error">❌ Generation failed</div>
+                `;
+            }
+
+            container.appendChild(messageItem);
+        });
     }
 };
 
 const AppState = {
     currentStep: 1, isAutoCollectionEnabled: true, collectedProfiles: [], duplicateProfiles: [],
-    wizardInitialized: false, selectedProfiles: []
+    wizardInitialized: false, selectedProfiles: [], selectedMessages: []
 };
 
 const DOMCache = {
@@ -42,10 +188,56 @@ const Utils = {
     },
 
     updateCollectedCount: (count) => {
-        const collectedNumber = DOMCache.get('collected-number');
-        const mainCollectedNumber = DOMCache.get('main-collected-number');
-        if (collectedNumber) collectedNumber.textContent = count;
-        if (mainCollectedNumber) mainCollectedNumber.textContent = count;
+        ['collected-number', 'main-collected-number'].forEach(id => {
+            const element = DOMCache.get(id);
+            if (element) element.textContent = count;
+        });
+    },
+
+    show: (element) => {
+        if (element) {
+            element.classList.remove('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        }
+    },
+
+    hide: (element) => {
+        if (element) {
+            element.classList.add('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'none';
+            }
+        }
+    },
+
+    showById: (id) => {
+        const element = DOMCache.get(id);
+        if (element) {
+            element.classList.remove('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        }
+    },
+
+    hideById: (id) => {
+        const element = DOMCache.get(id);
+        if (element) {
+            element.classList.add('hidden');
+            // Special handling for modals
+            if (element.classList.contains('modal')) {
+                element.style.display = 'none';
+            }
+        }
+    },
+
+    isVisible: (element) => {
+        return element && !element.classList.contains('hidden');
     },
 
     extractCleanName: (profile) => {
@@ -118,74 +310,25 @@ const Utils = {
     }
 };
 
-const StorageAPI = {
-    get: (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve)),
-    set: (data) => new Promise(resolve => chrome.storage.local.set(data, resolve)),
+// Removed StorageAPI - Extension now works without persistent storage
 
-    async loadSettings() {
-        const result = await this.get(CONSTANTS.STORAGE_KEYS.SETTINGS);
-        CONSTANTS.STORAGE_KEYS.SETTINGS.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element && result[key]) element.value = result[key];
-        });
-
-        const stats = await this.get([...CONSTANTS.STORAGE_KEYS.STATS, CONSTANTS.STORAGE_KEYS.PROFILES]);
-        DOMCache.get('today-count').textContent = stats.todayCount || 0;
-        DOMCache.get('total-count').textContent = stats.totalCount || 0;
-        DOMCache.get('profile-count').textContent = (stats.collectedProfiles || []).length;
-    },
-
-    async saveSettings() {
-        const data = {};
-        CONSTANTS.STORAGE_KEYS.SETTINGS.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element) data[key] = key.includes('Delay') || key.includes('Limit') ? parseInt(element.value) : element.value;
-        });
-        await this.set(data);
-        Utils.showNotification('Settings saved successfully!');
-    },
-
-    async loadMessages() {
-        const result = await this.get(CONSTANTS.STORAGE_KEYS.MESSAGES);
-        CONSTANTS.STORAGE_KEYS.MESSAGES.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element && result[key]) element.value = result[key];
-        });
-    },
-
-    async saveMessages() {
-        const data = {};
-        CONSTANTS.STORAGE_KEYS.MESSAGES.forEach(key => {
-            const element = DOMCache.get(key.replace(/([A-Z])/g, '-$1').toLowerCase());
-            if (element) data[key] = element.value;
-        });
-        await this.set(data);
-        Utils.showNotification('Messages saved successfully!');
-    }
-};
-
-const TabManager = {
-    init() {
-        DOMCache.getAll('.tab-btn').forEach(button => {
-            button.addEventListener('click', () => this.switchTab(button.getAttribute('data-tab'), button));
-        });
-    },
-
-    switchTab(tabName, activeButton) {
-        DOMCache.getAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        DOMCache.getAll('.tab-content').forEach(content => {
-            content.classList.toggle('active', content.id === tabName);
-        });
-        activeButton.classList.add('active');
-    }
-};
+// TabManager removed - Single tab interface
 
 const ModalManager = {
     init() {
         const campaignModal = DOMCache.get('campaign-modal');
         const profilesModal = DOMCache.get('profiles-modal');
 
-        DOMCache.get('create-campaign')?.addEventListener('click', () => this.openCampaignModal());
+        const createCampaignBtn = DOMCache.get('create-campaign');
+
+        if (createCampaignBtn) {
+            createCampaignBtn.addEventListener('click', () => {
+                this.openCampaignModal();
+            });
+        } else {
+            console.error('❌ create-campaign button not found!');
+        }
+
         DOMCache.getAll('.close').forEach(btn => btn.addEventListener('click', (e) => this.handleCloseClick(e)));
         DOMCache.get('close-profiles')?.addEventListener('click', () => this.closeModal('profiles-modal'));
 
@@ -196,13 +339,24 @@ const ModalManager = {
     },
 
     openCampaignModal() {
-        DOMCache.get('campaign-modal').style.display = 'block';
+        const modal = DOMCache.get('campaign-modal');
+
+        if (modal) {
+            // Remove hidden class and set display to block for modal
+            modal.classList.remove('hidden');
+            modal.style.display = 'block';
+        }
+
         WizardManager.initialize();
         WizardManager.showStep(CONSTANTS.STEPS.CAMPAIGN_NAME);
     },
 
     closeCampaignModal() {
-        DOMCache.get('campaign-modal').style.display = 'none';
+        const modal = DOMCache.get('campaign-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
         WizardManager.reset();
     },
 
@@ -217,15 +371,23 @@ const ModalManager = {
         const modalId = typeof modalIdOrEvent === 'string' ? modalIdOrEvent :
                        modalIdOrEvent.target.closest('#campaign-modal') ? 'campaign-modal' : null;
         if (modalId) {
-            DOMCache.get(modalId).style.display = 'none';
+            const modal = DOMCache.get(modalId);
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
             if (modalId === 'campaign-modal') WizardManager.reset();
         }
     },
 
     forceCloseAll() {
-        DOMCache.get('campaign-modal').style.display = 'none';
-        DOMCache.get('profiles-modal').style.display = 'none';
-        DOMCache.get('profile-urls-modal').style.display = 'none';
+        ['campaign-modal', 'profiles-modal', 'profile-urls-modal'].forEach(modalId => {
+            const modal = DOMCache.get(modalId);
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
+        });
         WizardManager.reset();
         AppState.selectedProfiles = [];
         Utils.showNotification('All modals have been closed.', 'success');
@@ -234,7 +396,9 @@ const ModalManager = {
 
 const WizardManager = {
     initialize() {
-        if (AppState.wizardInitialized) return;
+        if (AppState.wizardInitialized) {
+            return;
+        }
         AppState.wizardInitialized = true;
         this.setupEventListeners();
     },
@@ -243,6 +407,7 @@ const WizardManager = {
         AppState.currentStep = 1;
         AppState.collectedProfiles = [];
         AppState.duplicateProfiles = [];
+        AppState.wizardInitialized = false; // Reset initialization flag
         const campaignNameInput = DOMCache.get('campaign-name');
         if (campaignNameInput) campaignNameInput.value = '';
         const elements = ['collected-number', 'collected-profiles-list'];
@@ -253,16 +418,35 @@ const WizardManager = {
     },
 
     showStep(stepNumber, subStep = null) {
-        DOMCache.getAll('.wizard-step').forEach(step => step.classList.remove('active'));
+        // Get all wizard steps
+        const allSteps = DOMCache.getAll('.wizard-step');
+
+        // Remove active class from all steps
+        allSteps.forEach(step => {
+            step.classList.remove('active');
+        });
 
         const stepMap = {
             1: 'step-1', 2: 'step-2', 4: 'step-4-messaging',
             3: subStep ? `step-3-${subStep}` : 'step-3-collecting'
         };
 
-        const stepElement = DOMCache.get(stepMap[stepNumber]);
-        if (stepElement) stepElement.classList.add('active');
+        const targetStepId = stepMap[stepNumber];
+        const stepElement = DOMCache.get(targetStepId);
+
+        if (stepElement) {
+            stepElement.classList.add('active');
+        } else {
+            console.error(`❌ Step element not found: ${targetStepId}`);
+        }
+
         AppState.currentStep = stepNumber;
+
+        // Initialize Step 4 when showing it
+        if (stepNumber === 4) {
+            Step4Manager.init();
+            Step4Manager.showProfileSelection();
+        }
     },
 
     setupEventListeners() {
@@ -273,7 +457,9 @@ const WizardManager = {
             'back-to-search': () => this.showStep(3, 'search'),
             'back-to-step-2-from-network': () => this.showStep(2),
             'back-to-collecting': () => this.showStep(3, 'collecting'),
-            'next-to-messaging': () => this.showStep(4),
+            'next-to-messaging': () => {
+                this.showStep(4);
+            },
             'linkedin-search-option': () => this.showStep(3, 'search'),
             'sales-navigator-option': () => Utils.showNotification('Sales Navigator integration coming soon!', 'info'),
             'network-option': () => this.showStep(3, 'network'),
@@ -287,27 +473,34 @@ const WizardManager = {
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
             'cancel-duplicates': () => DuplicateManager.cancel(),
-            'single-message-radio': () => DOMCache.get('follow-up-config').style.display = 'none',
-            'multi-step-radio': () => DOMCache.get('follow-up-config').style.display = 'block'
+            'single-message-radio': () => Utils.hideById('follow-up-config'),
+            'multi-step-radio': () => Utils.showById('follow-up-config'),
+            'generate-messages': () => MessageGenerator.generateMessages()
         };
 
         Object.entries(eventMap).forEach(([id, handler]) => {
             const element = DOMCache.get(id);
-            if (element) element.onclick = handler;
+            if (element) {
+                element.addEventListener('click', handler);
+            }
         });
 
         const csvInput = DOMCache.get('csv-file-input');
-        if (csvInput) csvInput.onchange = CSVHandler.upload;
+        if (csvInput) {
+            csvInput.addEventListener('change', CSVHandler.upload);
+        }
     },
 
     validateAndProceed() {
         const campaignNameInput = DOMCache.get('campaign-name');
         const campaignName = campaignNameInput?.value.trim();
+
         if (!campaignName) {
             Utils.showNotification('Please enter a campaign name', 'error');
             campaignNameInput?.focus();
             return;
         }
+
         this.showStep(2);
     },
 
@@ -332,7 +525,10 @@ const CSVHandler = {
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            const profiles = this.parseCSV(e.target.result);
+            const profiles = this.parseCSV(e.target.result).map(profile => ({
+                ...profile,
+                collectedAt: new Date().toISOString()
+            }));
             if (profiles.length > 0) {
                 AppState.collectedProfiles = profiles;
                 ProfileManager.updateList();
@@ -366,44 +562,18 @@ const CSVHandler = {
 };
 
 const DuplicateManager = {
-    async check() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const existingCampaigns = result.campaigns || [];
-        const allExistingProfiles = existingCampaigns.flatMap(campaign => campaign.profiles || []);
-
-        AppState.duplicateProfiles = AppState.collectedProfiles.filter(profile =>
-            allExistingProfiles.some(existing => existing.url === profile.url)
-        );
-
-        if (AppState.duplicateProfiles.length > 0) {
-            this.showModal();
-        } else {
-            CampaignManager.finalize();
-        }
-    },
-
-    showModal() {
-        DOMCache.get('duplicate-count').textContent = AppState.duplicateProfiles.length;
-        const list = DOMCache.get('duplicate-profiles-list');
-        list.innerHTML = '';
-
-        AppState.duplicateProfiles.forEach(profile => {
-            list.appendChild(Utils.createProfileCard(profile));
-        });
-
-        DOMCache.get('duplicates-modal').style.display = 'block';
+    check() {
+        // Simplified - no storage check, just proceed to finalize
+        CampaignManager.finalize();
     },
 
     exclude() {
-        AppState.collectedProfiles = AppState.collectedProfiles.filter(profile =>
-            !AppState.duplicateProfiles.some(dup => dup.url === profile.url)
-        );
-        DOMCache.get('duplicates-modal').style.display = 'none';
+        Utils.hideById('duplicates-modal');
         CampaignManager.finalize();
     },
 
     cancel() {
-        DOMCache.get('duplicates-modal').style.display = 'none';
+        Utils.hideById('duplicates-modal');
         CampaignManager.finalize();
     }
 };
@@ -441,10 +611,14 @@ const RealTimeProfileHandler = {
             });
 
             if (newProfiles.length > 0) {
-                AppState.collectedProfiles.push(...newProfiles);
+                const processedProfiles = newProfiles.map(profile => ({
+                    ...profile,
+                    collectedAt: new Date().toISOString()
+                }));
+                AppState.collectedProfiles.push(...processedProfiles);
                 const campaignModal = DOMCache.get('campaign-modal');
-                if (campaignModal && campaignModal.style.display !== 'block') {
-                    campaignModal.style.display = 'block';
+                if (campaignModal && !Utils.isVisible(campaignModal)) {
+                    Utils.show(campaignModal);
                     WizardManager.showStep(3, 'collecting');
                     setTimeout(() => {
                         this.updateUIAfterModalOpen(newProfiles.length);
@@ -467,10 +641,8 @@ const RealTimeProfileHandler = {
 };
 
 document.addEventListener('DOMContentLoaded', async function() {
-    TabManager.init();
     ModalManager.init();
     RealTimeProfileHandler.init();
-    AutoCollectionHandler.init();
 
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.shiftKey && e.key === 'X') {
@@ -480,17 +652,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     const eventMap = {
-        'collect-profiles': ProfileCollector.collectFromPage,
-        'view-collected': ProfileManager.view,
         'export-profiles': ProfileManager.export,
         'create-campaign-from-profiles': ProfileManager.createCampaign,
         'close-profile-urls': ProfileURLModal.close,
         'select-all-profiles': ProfileURLModal.selectAll,
-        'add-profiles-to-campaign': ProfileURLModal.addSelected,
-        'save-settings': StorageAPI.saveSettings,
-        'save-messages': StorageAPI.saveMessages,
-        'pause-collection': ProfileCollector.toggleAutoCollection,
-        'main-pause-collection': ProfileCollector.toggleAutoCollection
+        'add-profiles-to-campaign': ProfileURLModal.addSelected
     };
 
     Object.entries(eventMap).forEach(([id, handler]) => {
@@ -500,46 +666,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    await Promise.all([
-        StorageAPI.loadSettings(),
-        StorageAPI.loadMessages(),
-        CampaignManager.load(),
-        ProfileManager.loadCount()
-    ]);
-
-    AppState.isAutoCollectionEnabled = true;
-
-    // Setup both auto collection buttons
-    const pauseBtn = DOMCache.get('pause-collection');
-    const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-    [pauseBtn, mainPauseBtn].forEach((btn) => {
-        if (btn) {
-            btn.textContent = 'AUTO ON';
-            btn.className = 'btn btn-success';
-        }
-    });
-
-    AutoCollectionHandler.hideAutoIndicator();
+    // Initialize without storage
+    CampaignManager.load();
 });
 
 const CampaignManager = {
-    async load() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
+    load() {
         const campaignList = DOMCache.get('campaign-list');
-
-        if (result.campaigns?.length > 0) {
-            campaignList.innerHTML = '';
-            result.campaigns.forEach((campaign, index) => {
-                campaignList.appendChild(this.createCampaignItem(campaign, index));
-            });
-
-            DOMCache.getAll('[data-action]').forEach(button => {
-                button.addEventListener('click', this.handleAction);
-            });
-        } else {
-            campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
-        }
+        // Show empty state - no persistent storage
+        campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
     createCampaignItem(campaign, index) {
@@ -558,310 +693,40 @@ const CampaignManager = {
             <div class="campaign-stats">
                 Progress: ${campaign.progress}/${campaign.maxConnections} | Status: ${campaign.status}
             </div>
+            <div class="campaign-messaging">
+                Strategy: ${campaign.messagingStrategy?.type === 'multi' ? 'Multi-Step Follow-Up' : 'Single Message'}
+                ${campaign.messagingStrategy?.hasGeneratedMessages ? ' | 🤖 AI Messages Generated' : ''}
+                ${campaign.messagingStrategy?.type === 'multi' ? ` | ${campaign.messagingStrategy.followUpCount} follow-ups` : ''}
+            </div>
         `;
         return item;
     },
 
-    async handleAction(event) {
-        const action = event.target.getAttribute('data-action');
-        const index = parseInt(event.target.getAttribute('data-index'));
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const campaigns = result.campaigns || [];
-
-        if (action === 'pause') {
-            campaigns[index].status = campaigns[index].status === 'running' ? 'paused' : 'running';
-            await StorageAPI.set({ campaigns });
-            CampaignManager.load();
-
-            chrome.runtime.sendMessage({
-                action: campaigns[index].status === 'running' ? 'resumeCampaign' : 'pauseCampaign',
-                campaignId: campaigns[index].id
-            });
-        } else if (action === 'delete' && confirm('Are you sure you want to delete this campaign?')) {
-            const campaignId = campaigns[index].id;
-            campaigns.splice(index, 1);
-            await StorageAPI.set({ campaigns });
-            CampaignManager.load();
-
-            chrome.runtime.sendMessage({ action: 'deleteCampaign', campaignId });
-        }
+    handleAction() {
+        // Simplified - no storage operations
+        Utils.showNotification('Campaign action completed', 'success');
     },
 
-    async finalize() {
+    finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
-        const messagingStrategy = document.querySelector('input[name="messaging-strategy"]:checked')?.value || 'single';
-        const followUpCount = parseInt(DOMCache.get('follow-up-count')?.value || '1');
-        const followUpDelay = parseInt(DOMCache.get('follow-up-delay')?.value || '3');
 
-        const newCampaign = {
-            id: Date.now(), name: campaignName, profiles: AppState.collectedProfiles,
-            maxConnections: AppState.collectedProfiles.length, progress: 0, status: 'ready',
-            createdAt: new Date().toISOString(),
-            messagingStrategy: {
-                type: messagingStrategy, followUpCount: messagingStrategy === 'multi' ? followUpCount : 0,
-                followUpDelay
-            }
-        };
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.CAMPAIGNS]);
-        const campaigns = result.campaigns || [];
-        campaigns.push(newCampaign);
-
-        await StorageAPI.set({ campaigns });
+        // Simplified campaign creation without storage
         ModalManager.closeCampaignModal();
         this.load();
         Utils.showNotification(`Campaign "${campaignName}" created with ${AppState.collectedProfiles.length} profiles!`);
+
+        // Reset collected profiles for next campaign
+        AppState.collectedProfiles = [];
     }
 };
 
-const AutoCollectionHandler = {
-    init() {
-        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-            if (message.action === 'autoCollectionStarted') {
-                this.handleAutoCollectionStarted();
-                sendResponse({ success: true });
-            }
-        });
-        this.checkAutoStart();
-    },
+// AutoCollectionHandler removed - no longer needed
 
-    async checkAutoStart() {
-        try {
-            const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-            const tab = tabs[0];
-
-            if (tab.url.includes('linkedin.com')) {
-                try {
-                    await chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        files: ['content/linkedin-content.js']
-                    });
-                } catch (error) {
-                    console.error('Error injecting content script:', error);
-                }
-            }
-        } catch (error) {
-            console.error('Error checking auto-start:', error);
-        }
-    },
-
-    handleAutoCollectionStarted() {
-        // Only show modal if user is actively creating a campaign
-        const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal && campaignModal.style.display === 'block') {
-            WizardManager.showStep(3, 'collecting');
-        }
-
-        // Initialize profile list if empty
-        if (AppState.collectedProfiles.length === 0) {
-            AppState.collectedProfiles = [];
-            ProfileManager.updateList();
-            Utils.updateCollectedCount('0');
-        }
-
-        // Show that auto collection is working
-        Utils.showNotification('🔄 Auto-collecting profiles from this page...', 'info');
-    },
-
-    hideAutoIndicator() {
-        const indicator = DOMCache.get('auto-detection-indicator');
-        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
-        if (indicator) {
-            indicator.style.display = 'none';
-        }
-        if (mainIndicator) {
-            mainIndicator.style.display = 'none';
-        }
-    },
-
-    showAutoIndicator() {
-        const indicator = DOMCache.get('auto-detection-indicator');
-        const mainIndicator = DOMCache.get('main-auto-detection-indicator');
-        if (indicator) {
-            indicator.style.display = 'flex';
-        }
-        if (mainIndicator) {
-            mainIndicator.style.display = 'flex';
-        }
-    }
-};
-
-const ProfileCollector = {
-    async collectFromPage() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const existingProfiles = result.collectedProfiles || [];
-
-        try {
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' });
-
-            if (response?.profiles?.length > 0) {
-                const newProfiles = response.profiles.filter(profile =>
-                    !existingProfiles.some(existing => existing.url === profile.url)
-                );
-
-                const updated = [...existingProfiles, ...newProfiles];
-                await StorageAPI.set({ collectedProfiles: updated });
-                DOMCache.get('profile-count').textContent = updated.length;
-                Utils.showNotification(`Collected ${newProfiles.length} new profiles`);
-            } else {
-                if (existingProfiles.length > 0) {
-                    DOMCache.get('profile-count').textContent = existingProfiles.length;
-                    Utils.showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
-                } else {
-                    Utils.showNotification('No profiles found. Please navigate to LinkedIn search results page.', 'warning');
-                }
-            }
-        } catch (error) {
-            console.error('Error collecting profiles:', error);
-            if (existingProfiles.length > 0) {
-                DOMCache.get('profile-count').textContent = existingProfiles.length;
-                Utils.showNotification(`Showing ${existingProfiles.length} previously collected profiles`, 'info');
-            } else {
-                Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
-            }
-        }
-    },
-
-    start() {
-        AppState.isAutoCollectionEnabled = true;
-
-        const pauseBtn = DOMCache.get('pause-collection');
-        const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-        [pauseBtn, mainPauseBtn].forEach((btn) => {
-            if (btn) {
-                btn.textContent = 'AUTO ON';
-                btn.className = 'btn btn-success';
-            }
-        });
-
-        AutoCollectionHandler.showAutoIndicator();
-        this.startRealTimeCollection();
-        Utils.showNotification('🔄 Auto collection enabled! Profiles will be collected automatically.', 'info');
-    },
-
-    async startRealTimeCollection() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) {
-            campaignModal.style.display = 'block';
-            WizardManager.showStep(3, 'collecting');
-        }
-
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content/linkedin-content.js']
-            });
-
-            await chrome.tabs.sendMessage(tab.id, { action: 'startRealTimeCollection' });
-            Utils.showNotification('Real-time collection started! Profiles will appear as found.', 'success');
-        } catch (error) {
-            console.error('Error starting real-time collection:', error);
-            this.collectFromCurrentPage();
-        }
-    },
-
-    toggleAutoCollection() {
-        const pauseBtn = DOMCache.get('pause-collection');
-        const mainPauseBtn = DOMCache.get('main-pause-collection');
-
-        if (AppState.isAutoCollectionEnabled) {
-            // Disable auto collection
-            AppState.isAutoCollectionEnabled = false;
-
-            // Update both buttons
-            if (pauseBtn) {
-                pauseBtn.textContent = 'AUTO OFF';
-                pauseBtn.className = 'btn btn-secondary';
-            }
-            if (mainPauseBtn) {
-                mainPauseBtn.textContent = 'AUTO OFF';
-                mainPauseBtn.className = 'btn btn-secondary';
-            }
-
-            AutoCollectionHandler.hideAutoIndicator();
-
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'disableAutoCollection' });
-                }
-            });
-
-            Utils.showNotification('🔴 Auto collection disabled. Profiles will not be collected automatically.', 'info');
-        } else {
-            // Enable auto collection
-            AppState.isAutoCollectionEnabled = true;
-
-            // Update both buttons
-            if (pauseBtn) {
-                pauseBtn.textContent = 'AUTO ON';
-                pauseBtn.className = 'btn btn-success';
-            }
-            if (mainPauseBtn) {
-                mainPauseBtn.textContent = 'AUTO ON';
-                mainPauseBtn.className = 'btn btn-success';
-            }
-
-            AutoCollectionHandler.showAutoIndicator();
-
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'enableAutoCollection' });
-                }
-            });
-            Utils.showNotification('🟢 Auto collection enabled! Profiles will be collected automatically on LinkedIn pages.', 'success');
-        }
-    },
-
-    continue() {
-        if (AppState.isCollecting) this.collectFromCurrentPage();
-    },
-
-    async collectFromCurrentPage() {
-        const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-        const tab = tabs[0];
-
-        if (!tab.url.includes('linkedin.com')) {
-            Utils.showNotification('Please navigate to a LinkedIn page first', 'error');
-            return;
-        }
-
-        try {
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectProfiles' });
-            if (response?.profiles?.length > 0) {
-                AppState.collectedProfiles.push(...response.profiles);
-                ProfileManager.updateList();
-                DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
-                Utils.showNotification(`Collected ${response.profiles.length} profiles`);
-            }
-        } catch (error) {
-            console.error('Error collecting profiles:', error);
-            Utils.showNotification('Error collecting profiles. Please refresh the page.', 'error');
-        }
-    }
-};
+// ProfileCollector removed - no longer needed
 
 const ProfileManager = {
-    async view() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    view() {
+        const profiles = AppState.collectedProfiles;
         const profilesList = DOMCache.get('profiles-list');
 
         if (profiles.length === 0) {
@@ -876,12 +741,11 @@ const ProfileManager = {
             `).join('');
         }
 
-        DOMCache.get('profiles-modal').style.display = 'block';
+        Utils.showById('profiles-modal');
     },
 
-    async export() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    export() {
+        const profiles = AppState.collectedProfiles;
 
         if (profiles.length === 0) {
             Utils.showNotification('No profiles to export', 'warning');
@@ -903,19 +767,17 @@ const ProfileManager = {
         Utils.showNotification('Profiles exported successfully!');
     },
 
-    async createCampaign() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
+    createCampaign() {
+        const profiles = AppState.collectedProfiles;
 
         if (profiles.length === 0) {
             Utils.showNotification('No profiles to create campaign from', 'warning');
             return;
         }
 
-        DOMCache.get('profiles-modal').style.display = 'none';
+        Utils.hideById('profiles-modal');
         ModalManager.openCampaignModal();
 
-        AppState.collectedProfiles = profiles;
         DOMCache.get('campaign-name').value = `Campaign from ${profiles.length} profiles`;
         WizardManager.showStep(3, 'collecting');
         this.updateList();
@@ -931,12 +793,517 @@ const ProfileManager = {
         AppState.collectedProfiles.forEach((profile) => {
             listElement.appendChild(Utils.createProfileCard(profile));
         });
+
+        // Show/hide NEXT button based on collected profiles
+        const nextButton = DOMCache.get('next-to-messaging');
+        if (nextButton) {
+            if (AppState.collectedProfiles.length > 0) {
+                Utils.show(nextButton);
+                nextButton.disabled = false;
+            } else {
+                Utils.hide(nextButton);
+            }
+        }
     },
 
-    async loadCount() {
-        const result = await StorageAPI.get([CONSTANTS.STORAGE_KEYS.PROFILES]);
-        const profiles = result.collectedProfiles || [];
-        DOMCache.get('profile-count').textContent = profiles.length;
+
+
+
+};
+
+// New Step 4 Profile Selection Manager
+const Step4Manager = {
+    selectedProfiles: [],
+    generatedMessages: [],
+
+    init() {
+        this.setupEventListeners();
+    },
+
+    setupEventListeners() {
+        const selectAllBtn = DOMCache.get('select-all-step4');
+        const deselectAllBtn = DOMCache.get('deselect-all-step4');
+        const generateBtn = DOMCache.get('generate-selected-messages');
+        const useMessagesBtn = DOMCache.get('use-selected-messages');
+        const regenerateBtn = DOMCache.get('regenerate-messages');
+
+        if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAll());
+        if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => this.deselectAll());
+        if (generateBtn) generateBtn.addEventListener('click', () => this.generateMessages());
+        if (useMessagesBtn) useMessagesBtn.addEventListener('click', () => this.useSelectedMessages());
+        if (regenerateBtn) regenerateBtn.addEventListener('click', () => this.regenerateMessages());
+    },
+
+    showProfileSelection() {
+        const container = DOMCache.get('profiles-selection-list');
+        if (!container) return;
+
+        container.innerHTML = '';
+        this.selectedProfiles = [];
+
+        AppState.collectedProfiles.forEach((profile, index) => {
+            const item = document.createElement('div');
+            item.className = 'profile-selection-item';
+            item.innerHTML = `
+                <input type="checkbox" id="profile-${index}" data-index="${index}">
+                <div class="profile-selection-info">
+                    <div class="profile-selection-name">${profile.name}</div>
+                    <a href="${profile.url}" class="profile-selection-url" target="_blank">${profile.url}</a>
+                </div>
+            `;
+
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener('change', () => this.toggleProfile(index, checkbox.checked));
+
+            container.appendChild(item);
+        });
+
+        this.updateSelectedCount();
+    },
+
+    toggleProfile(index, selected) {
+        if (selected) {
+            if (!this.selectedProfiles.includes(index)) {
+                this.selectedProfiles.push(index);
+            }
+        } else {
+            this.selectedProfiles = this.selectedProfiles.filter(i => i !== index);
+        }
+        this.updateSelectedCount();
+        this.updateGenerateButton();
+    },
+
+    selectAll() {
+        this.selectedProfiles = AppState.collectedProfiles.map((_, index) => index);
+        this.updateCheckboxes();
+        this.updateSelectedCount();
+        this.updateGenerateButton();
+    },
+
+    deselectAll() {
+        this.selectedProfiles = [];
+        this.updateCheckboxes();
+        this.updateSelectedCount();
+        this.updateGenerateButton();
+    },
+
+    updateCheckboxes() {
+        AppState.collectedProfiles.forEach((_, index) => {
+            const checkbox = document.getElementById(`profile-${index}`);
+            if (checkbox) {
+                checkbox.checked = this.selectedProfiles.includes(index);
+            }
+        });
+    },
+
+    updateSelectedCount() {
+        const countElement = DOMCache.get('selected-count-step4');
+        if (countElement) {
+            countElement.textContent = this.selectedProfiles.length;
+        }
+    },
+
+    updateGenerateButton() {
+        const generateBtn = DOMCache.get('generate-selected-messages');
+        if (generateBtn) {
+            generateBtn.disabled = this.selectedProfiles.length === 0;
+        }
+    },
+
+    async generateMessages() {
+        if (this.selectedProfiles.length === 0) {
+            Utils.showNotification('Please select at least one profile', 'warning');
+            return;
+        }
+
+        const generateBtn = DOMCache.get('generate-selected-messages');
+        if (generateBtn) {
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating Messages...';
+        }
+
+        this.generatedMessages = [];
+
+        try {
+            for (const index of this.selectedProfiles) {
+                const profile = AppState.collectedProfiles[index];
+
+
+                try {
+                    const response = await APIService.generateMessage(profile.url);
+                    this.generatedMessages.push({
+                        profile: profile,
+                        message: response,
+                        selected: true,
+                        index: index
+                    });
+
+                } catch (error) {
+                    console.error(`API call failed for ${profile.url}:`, error);
+                    this.generatedMessages.push({
+                        profile: profile,
+                        message: { error: error.message },
+                        selected: false,
+                        index: index
+                    });
+                }
+            }
+
+            // Automatically switch to message selection view
+            this.showMessageSelection();
+            Utils.showNotification(`Generated ${this.generatedMessages.length} messages`, 'success');
+
+        } catch (error) {
+            console.error('Message generation error:', error);
+            Utils.showNotification('Error generating messages', 'error');
+        } finally {
+            if (generateBtn) {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🤖 Generate Messages for Selected Profiles';
+            }
+        }
+    },
+
+    showGeneratedMessages() {
+        const resultsContainer = DOMCache.get('message-results');
+        const messagesContainer = DOMCache.get('messages-container');
+
+        if (!resultsContainer || !messagesContainer) {
+            return;
+        }
+
+        messagesContainer.innerHTML = '';
+
+        // Add a test message first to verify container is working
+        messagesContainer.innerHTML = '<div style="background: lime; padding: 20px; margin: 10px; border: 2px solid green; font-weight: bold;">🧪 TEST: Container is working! Messages should appear below...</div>';
+
+        this.generatedMessages.forEach((item, profileIndex) => {
+            const profileDiv = document.createElement('div');
+            profileDiv.className = 'profile-messages-section';
+
+            if (item.message.error) {
+                // Handle error case
+                profileDiv.innerHTML = `
+                    <div class="profile-header">
+                        <h4>${item.profile.name}</h4>
+                        <span class="error-badge">Error</span>
+                    </div>
+                    <div class="error-message">Error: ${item.message.error}</div>
+                `;
+            } else {
+                // Parse messages from API response
+                const messages = this.parseMessagesFromResponse(item.message);
+
+                if (messages.length === 0) {
+                    profileDiv.innerHTML = `
+                        <div class="profile-header">
+                            <h4>${item.profile.name}</h4>
+                            <span class="error-badge">No Messages</span>
+                        </div>
+                        <div class="error-message">Failed to parse messages from API response</div>
+                        <pre style="font-size: 11px; background: #f5f5f5; padding: 10px; margin: 10px; border-radius: 4px;">${JSON.stringify(item.message, null, 2)}</pre>
+                    `;
+                } else {
+                    profileDiv.innerHTML = `
+                    <div class="profile-header">
+                        <h4>${item.profile.name}</h4>
+                        <span class="message-count">${messages.length} messages generated</span>
+                    </div>
+                    <div class="messages-list">
+                        ${messages.map((msg, msgIndex) => `
+                            <div class="individual-message">
+                                <div class="message-option">
+                                    <input type="radio" name="profile-${profileIndex}-message"
+                                           value="${msgIndex}" id="msg-${profileIndex}-${msgIndex}"
+                                           ${msgIndex === 0 ? 'checked' : ''}>
+                                    <label for="msg-${profileIndex}-${msgIndex}">
+                                        <div class="message-text">${msg}</div>
+                                    </label>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="profile-meta">
+                        <span>Profile: ${item.profile.url}</span>
+                        <span>Generated: ${new Date().toLocaleTimeString()}</span>
+                    </div>
+                `;
+
+                // Add event listeners for radio buttons
+                const radioButtons = profileDiv.querySelectorAll('input[type="radio"]');
+                radioButtons.forEach(radio => {
+                    radio.addEventListener('change', () => {
+                        if (radio.checked) {
+                            const selectedMessageIndex = parseInt(radio.value);
+                            item.selectedMessage = messages[selectedMessageIndex];
+                            item.selectedMessageIndex = selectedMessageIndex;
+                        }
+                    });
+                });
+
+                // Set default selected message (first one)
+                item.selectedMessage = messages[0];
+                item.selectedMessageIndex = 0;
+                }
+            }
+
+            messagesContainer.appendChild(profileDiv);
+        });
+
+        // Force the container to be visible with aggressive styling
+        resultsContainer.style.display = 'block';
+        resultsContainer.style.visibility = 'visible';
+        resultsContainer.style.opacity = '1';
+        resultsContainer.style.backgroundColor = '#ffeb3b'; // Bright yellow for debugging
+        resultsContainer.style.border = '3px solid red'; // Red border for debugging
+        resultsContainer.style.minHeight = '100px';
+        resultsContainer.style.padding = '20px';
+        resultsContainer.style.margin = '20px 0';
+
+
+
+        // Add a test message to verify the container is working
+        if (messagesContainer.children.length === 0) {
+            const noMessagesDiv = document.createElement('div');
+            noMessagesDiv.className = 'no-messages-placeholder';
+            noMessagesDiv.textContent = 'No messages generated or parsing failed';
+            messagesContainer.appendChild(noMessagesDiv);
+        }
+    },
+
+    parseMessagesFromResponse(apiResponse) {
+        const messages = [];
+
+
+        // Check if response has messages object
+        if (apiResponse.messages) {
+            // Extract messages from the messages object, excluding 'id' field
+            Object.keys(apiResponse.messages).forEach(key => {
+                if (key.startsWith('message') && apiResponse.messages[key] && key !== 'id') {
+                    messages.push(apiResponse.messages[key]);
+                }
+            });
+        }
+
+        // If no messages found, try to extract from root level
+        if (messages.length === 0) {
+            Object.keys(apiResponse).forEach(key => {
+                if (key.startsWith('message') && apiResponse[key]) {
+                    messages.push(apiResponse[key]);
+                }
+            });
+        }
+
+        // If still no messages, return the whole response as a single message
+        if (messages.length === 0) {
+            messages.push(JSON.stringify(apiResponse, null, 2));
+        }
+        return messages;
+    },
+
+    showMessageSelection() {
+        // Hide the profile selection step
+        const profileSelectionStep = document.querySelector('.step[data-step="4"]');
+        if (profileSelectionStep) {
+            profileSelectionStep.style.display = 'none';
+        }
+
+        // Prepare messages data and automatically select first message for each profile
+        const selectedMessages = [];
+        this.generatedMessages.forEach(item => {
+            const messages = this.parseMessagesFromResponse(item.message);
+            if (messages.length > 0) {
+                selectedMessages.push({
+                    profile: item.profile,
+                    message: messages[0] // Automatically select first message
+                });
+            }
+        });
+
+        // Store selected messages
+        this.selectedCampaignMessages = selectedMessages;
+
+        // Show send message interface directly
+        this.showSendMessageInterface();
+    },
+
+
+
+
+
+    finalizeCampaign() {
+        // Hide message selection
+        const messageSelection = document.getElementById('message-selection-step');
+        if (messageSelection) {
+            messageSelection.remove();
+        }
+
+        // Show send message interface
+        this.showSendMessageInterface();
+    },
+
+    showSendMessageInterface() {
+        const container = document.querySelector('.container');
+        container.innerHTML = `
+            <div class="send-message-interface">
+                <div class="interface-header">
+                    <div class="step-indicator">Step 6: Send Messages</div>
+                    <div class="success-icon">📤</div>
+                    <h2>Ready to Send Messages</h2>
+                    <p>Messages will be sent automatically in the current tab. Click "Send Message" for each profile.</p>
+                </div>
+
+                <div class="messages-list">
+                    ${this.selectedCampaignMessages.map((item, index) => `
+                        <div class="message-item" data-index="${index}">
+                            <div class="profile-info">
+                                <div class="profile-details">
+                                    <h4>${item.profile.name}</h4>
+                                    <p class="profile-title">${item.profile.title || 'LinkedIn Member'}</p>
+                                    <a href="${item.profile.url}" target="_blank" class="profile-link">View Profile</a>
+                                </div>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-text">${item.message}</div>
+                            </div>
+                            <div class="message-actions">
+                                <button class="btn btn-primary send-message-btn"
+                                        data-profile-url="${item.profile.url}"
+                                        data-message="${item.message.replace(/"/g, '&quot;')}"
+                                        data-profile-name="${item.profile.name}">
+                                    📤 Send Message Automatically
+                                </button>
+                                <div class="message-status" style="display: none;">
+                                    <span class="status-text"></span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        // Add event listeners for send message buttons
+        this.setupSendMessageListeners();
+    },
+
+    setupSendMessageListeners() {
+        const sendButtons = document.querySelectorAll('.send-message-btn');
+        sendButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const profileUrl = e.target.getAttribute('data-profile-url');
+                const message = e.target.getAttribute('data-message');
+                const profileName = e.target.getAttribute('data-profile-name');
+
+                this.sendMessageToProfile(profileUrl, message, profileName, e.target);
+            });
+        });
+    },
+
+    async sendMessageToProfile(profileUrl, message, profileName, buttonElement) {
+        try {
+            const statusDiv = buttonElement.parentElement.querySelector('.message-status');
+            const statusText = statusDiv.querySelector('.status-text');
+
+            // Show status and update button
+            statusDiv.style.display = 'block';
+            buttonElement.disabled = true;
+            buttonElement.textContent = '⏳ Step 1: Navigating to Profile...';
+            statusText.textContent = 'Navigating to LinkedIn profile in current tab...';
+
+            // Get current active tab
+            const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            // Navigate to profile in current tab
+            await chrome.tabs.update(currentTab.id, { url: profileUrl });
+
+            // Wait for navigation and page load
+            setTimeout(async () => {
+                try {
+                    buttonElement.textContent = '⏳ Step 2: Preparing Automation...';
+                    statusText.textContent = 'Injecting automation script...';
+
+                    // First, try to inject the content script if it's not already loaded
+                    try {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: currentTab.id },
+                            files: ['content/linkedin-content.js']
+                        });
+                    } catch (injectionError) {
+                    }
+
+                    // Wait a bit for script to initialize
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    buttonElement.textContent = '⏳ Step 3: Finding Message Button...';
+                    statusText.textContent = 'Locating message button on profile...';
+
+                    // Send message to content script in current tab
+                    await chrome.tabs.sendMessage(currentTab.id, {
+                        action: 'sendDirectMessage',
+                        message: message,
+                        profileName: profileName
+                    });
+
+                    buttonElement.textContent = '✅ Message Sent Successfully!';
+                    buttonElement.classList.add('btn-success');
+                    buttonElement.classList.remove('btn-primary');
+                    statusText.textContent = `Message sent to ${profileName} automatically!`;
+                    statusText.style.color = '#28a745';
+
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    buttonElement.textContent = '❌ Error - Try Again';
+                    buttonElement.disabled = false;
+                    statusText.textContent = 'Failed to send message. Please try again.';
+                    statusText.style.color = '#dc3545';
+                }
+            }, 4000); // Increased wait time for navigation
+
+        } catch (error) {
+            console.error('Error navigating to profile:', error);
+            buttonElement.textContent = '❌ Error - Try Again';
+            buttonElement.disabled = false;
+            const statusText = buttonElement.parentElement.querySelector('.status-text');
+            statusText.textContent = 'Failed to navigate to profile. Please try again.';
+            statusText.style.color = '#dc3545';
+        }
+    },
+
+    useSelectedMessages() {
+        // Get profiles that have generated messages (excluding errors)
+        const profilesWithMessages = this.generatedMessages.filter(item =>
+            !item.message.error && item.selectedMessage
+        );
+
+        if (profilesWithMessages.length === 0) {
+            Utils.showNotification('No messages available to select', 'warning');
+            return;
+        }
+
+        // Prepare final messages for campaign
+        const finalMessages = profilesWithMessages.map(item => ({
+            profile: item.profile,
+            selectedMessage: item.selectedMessage,
+            selectedMessageIndex: item.selectedMessageIndex,
+            fullApiResponse: item.message
+        }));
+
+        // Store selected messages in AppState for campaign creation
+        AppState.selectedMessages = finalMessages;
+
+        Utils.showNotification(`Selected ${finalMessages.length} messages for campaign`, 'success');
+
+        // Enable campaign creation
+        const createBtn = DOMCache.get('create-campaign-final');
+        if (createBtn) {
+            createBtn.disabled = false;
+            Utils.show(createBtn);
+        }
+    },
+
+    regenerateMessages() {
+        this.generateMessages();
     }
 };
 
@@ -968,7 +1335,7 @@ const NetworkManager = {
 
             const campaignModal = DOMCache.get('campaign-modal');
             if (campaignModal) {
-                campaignModal.style.display = 'block';
+                Utils.show(campaignModal);
                 WizardManager.showStep(3, 'collecting');
             }
             Utils.showNotification('Starting real-time profile collection...', 'info');
@@ -1019,14 +1386,18 @@ const NetworkManager = {
                 return false;
             }
             return true;
-        });
+        }).map(profile => ({
+            ...profile,
+            collectedAt: new Date().toISOString()
+        }));
+
         AppState.collectedProfiles.push(...validProfiles);
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
         Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
-            campaignModal.style.display = 'block';
+            Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
     }
@@ -1035,7 +1406,7 @@ const NetworkManager = {
 const ProfileURLModal = {
     show(profiles) {
         const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) campaignModal.style.display = 'none';
+        if (campaignModal) Utils.hide(campaignModal);
         AppState.selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
         DOMCache.get('profile-count-display').textContent = profiles.length;
         this.populateList(profiles);
@@ -1108,7 +1479,7 @@ const ProfileURLModal = {
     },
 
     forceClose() {
-        DOMCache.get('profile-urls-modal').style.display = 'none';
+        Utils.hideById('profile-urls-modal');
         AppState.selectedProfiles = [];
     },
 
@@ -1138,227 +1509,19 @@ const ProfileURLModal = {
             return;
         }
 
-        AppState.collectedProfiles.push(...profilesToAdd);
+        const processedProfiles = profilesToAdd.map(profile => ({
+            ...profile,
+            collectedAt: new Date().toISOString()
+        }));
+        AppState.collectedProfiles.push(...processedProfiles);
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
         this.forceClose();
         Utils.showNotification(`Added ${profilesToAdd.length} profiles to campaign`, 'success');
         const campaignModal = DOMCache.get('campaign-modal');
         if (campaignModal) {
-            campaignModal.style.display = 'block';
+            Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
     }
 };
-
-function startNetworkSearch(tabId, searchCriteria) {
-    chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['content/linkedin-content.js']
-    }).then(() => {
-        setTimeout(() => {
-            const messageTimeout = setTimeout(() => {
-                showNotification('Collecting profiles... This may take a moment.', 'info');
-            }, 5000);
-            chrome.tabs.sendMessage(tabId, {
-                action: 'searchNetwork',
-                criteria: searchCriteria
-            }).then(response => {
-                clearTimeout(messageTimeout);
-                if (response && response.profiles && response.profiles.length > 0) {
-                    NetworkManager.addProfilesDirectly(response.profiles);
-                } else {
-                    if (response && response.error) {
-                        Utils.showNotification(`Error: ${response.error}`, 'error');
-                    } else {
-                        chrome.tabs.sendMessage(tabId, { action: 'collectProfiles' }).then(fallbackResponse => {
-                            if (fallbackResponse && fallbackResponse.profiles && fallbackResponse.profiles.length > 0) {
-                                NetworkManager.addProfilesDirectly(fallbackResponse.profiles);
-                            } else {
-                                Utils.showNotification('No profiles found matching your criteria', 'warning');
-                            }
-                        }).catch(fallbackError => {
-                            console.error('Fallback error:', fallbackError);
-                            Utils.showNotification('No profiles found matching your criteria', 'warning');
-                        });
-                    }
-                }
-            }).catch(error => {
-                clearTimeout(messageTimeout);
-                console.error('Message sending error:', error);
-                showNotification('Profiles collected! Check the list below.', 'success');
-                chrome.storage.local.get(['collectedProfiles'], function(result) {
-                    if (result.collectedProfiles && result.collectedProfiles.length > 0) {
-                        collectedProfiles = result.collectedProfiles;
-                        updateCollectedProfilesList();
-                        document.getElementById('collected-number').textContent = result.collectedProfiles.length;
-                    }
-                });
-            });
-        }, 1000);
-    }).catch(error => {
-        console.error('Script injection error:', error);
-        chrome.tabs.sendMessage(tabId, {
-            action: 'searchNetwork',
-            criteria: searchCriteria
-        }, function(response) {
-            if (chrome.runtime.lastError) {
-                console.error('Message sending error:', chrome.runtime.lastError);
-                showNotification('Please refresh the LinkedIn page and try again.', 'error');
-                return;
-            }
-
-            if (response && response.profiles) {
-                chrome.storage.local.get(['collectedProfiles'], function(result) {
-                    const existing = result.collectedProfiles || [];
-                    const newProfiles = response.profiles.filter(profile =>
-                        !existing.some(existing => existing.url === profile.url)
-                    );
-                    const updated = [...existing, ...newProfiles];
-
-                    chrome.storage.local.set({ collectedProfiles: updated }, function() {
-                        collectedProfiles = updated;
-                        updateCollectedProfilesList();
-                        document.getElementById('collected-number').textContent = updated.length;
-                        showNotification(`Collected ${newProfiles.length} profiles from your network`);
-                    });
-                });
-            } else {
-                showNotification('No profiles found. Try scrolling down to load more results.', 'warning');
-            }
-        });
-    });
-}
-
-function loadCollectedProfiles() {
-    chrome.storage.local.get(['collectedProfiles'], function(result) {
-        const profiles = result.collectedProfiles || [];
-        document.getElementById('profile-count').textContent = profiles.length;
-    });
-}
-
-let selectedProfiles = [];
-
-function showProfileUrlsPopup(profiles) {
-    const campaignModal = document.getElementById('campaign-modal');
-    if (campaignModal) {
-        campaignModal.style.display = 'none';
-    }
-    selectedProfiles = profiles.map(profile => ({ ...profile, selected: true }));
-    document.getElementById('profile-count-display').textContent = profiles.length;
-    const profilesList = document.getElementById('profile-urls-list');
-    profilesList.innerHTML = '';
-
-    profiles.forEach((profile, index) => {
-        const profileItem = document.createElement('div');
-        profileItem.className = 'profile-item';
-        let cleanName = 'Unknown Name';
-
-        if (profile.name && profile.name !== 'Status is reachable') {
-            cleanName = profile.name.trim();
-        }
-        else if (profile.location) {
-            const nameMatch = profile.location.match(/^([^V•\n]+?)(?:View|•|\n|$)/);
-            if (nameMatch) {
-                cleanName = nameMatch[1].trim();
-            }
-        }
-
-        cleanName = cleanName.replace(/\s+/g, ' ').trim();
-
-        const profilePicUrl = profile.profilePic || '';
-
-        profileItem.innerHTML = `
-            <input type="checkbox" class="profile-checkbox" data-index="${index}" checked>
-            <div class="profile-pic">
-                ${profilePicUrl ?
-                    `<img src="${profilePicUrl}" alt="${cleanName}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #0073b1;">` :
-                    `<div style="width: 50px; height: 50px; border-radius: 50%; background: #0073b1; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px;">${cleanName.charAt(0).toUpperCase()}</div>`
-                }
-            </div>
-            <div class="profile-info">
-                <div class="profile-name" style="font-weight: bold; color: #333;">${cleanName}</div>
-                <div class="profile-connection" style="color: #666; font-size: 12px;">• 1st degree connection</div>
-            </div>
-        `;
-        profilesList.appendChild(profileItem);
-    });
-
-    document.querySelectorAll('.profile-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const index = parseInt(this.getAttribute('data-index'));
-            selectedProfiles[index].selected = this.checked;
-            updateSelectedCount();
-        });
-    });
-
-    const modal = document.getElementById('profile-urls-modal');
-    if (modal) {
-        modal.style.cssText = `
-            display: block !important;
-            position: fixed !important;
-            z-index: 999999 !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            background: rgba(0,0,0,0.5) !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        `;
-
-        const modalContent = modal.querySelector('.modal-content');
-        if (modalContent) {
-            modalContent.style.cssText = `
-                background: white !important;
-                margin: 5% auto !important;
-                padding: 20px !important;
-                border-radius: 8px !important;
-                width: 90% !important;
-                max-width: 800px !important;
-                max-height: 80% !important;
-                overflow-y: auto !important;
-                position: relative !important;
-                z-index: 1000000 !important;
-            `;
-        }
-    } else {
-        console.error('Profile URLs modal not found!');
-    }
-    updateSelectedCount();
-}
-
-function closeProfileUrlsPopup() {
-    return false;
-}
-
-function forceCloseProfileUrlsPopup() {
-    document.getElementById('profile-urls-modal').style.display = 'none';
-    selectedProfiles = [];
-}
-
-function selectAllProfiles() {
-    const checkboxes = document.querySelectorAll('.profile-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-
-    checkboxes.forEach((checkbox, index) => {
-        checkbox.checked = !allChecked;
-        selectedProfiles[index].selected = !allChecked;
-    });
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const selectedCount = selectedProfiles.filter(p => p.selected).length;
-    const button = document.getElementById('add-profiles-to-campaign');
-    button.textContent = `Add Selected to Campaign (${selectedCount})`;
-    button.disabled = selectedCount === 0;
-}
-
-function addProfilesDirectlyToCampaign(profiles) {
-    NetworkManager.addProfilesDirectly(profiles);
-}
-
-function addSelectedProfilesToCampaign() {
-    ProfileURLModal.addSelected();
-}

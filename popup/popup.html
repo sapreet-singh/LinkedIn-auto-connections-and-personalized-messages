@@ -13,10 +13,9 @@
             <div class="status" id="status">Ready</div>
         </header>
 
+        <!-- Single Tab - Campaigns Only -->
         <nav class="tabs">
             <button class="tab-btn active" data-tab="campaigns">Campaigns</button>
-            <button class="tab-btn" data-tab="messages">Messages</button>
-            <button class="tab-btn" data-tab="settings">Settings</button>
         </nav>
 
         <!-- Campaigns Tab -->
@@ -29,70 +28,10 @@
                 <button class="btn btn-primary" id="create-campaign">+ New Campaign</button>
             </div>
 
-            <div class="section">
-                <h3>Quick Actions</h3>
-                <button class="btn btn-secondary" id="collect-profiles">Collect Profiles from Current Page</button>
-                <button class="btn btn-secondary" id="view-collected">View Collected Profiles (<span id="profile-count">0</span>)</button>
-            </div>
 
-            <div class="section">
-                <h3>Auto Profile Collection</h3>
-                <div class="collection-controls">
-                    <div class="auto-detection-indicator" id="main-auto-detection-indicator">
-                        <span class="indicator-dot"></span>
-                        <span>🔄 Auto-collecting profiles on LinkedIn pages...</span>
-                    </div>
-                    <div class="collection-status-main">
-                        <span>Collected: <span id="main-collected-number">0</span></span>
-                        <button class="btn btn-success" id="main-pause-collection">AUTO ON</button>
-                    </div>
-                    <div class="auto-collection-info">
-                        <small>Profiles are automatically collected when you visit LinkedIn search pages, connections, or network pages. Toggle to disable.</small>
-                    </div>
-                </div>
-            </div>
         </div>
 
-        <!-- Messages Tab -->
-        <div class="tab-content" id="messages">
-            <div class="section">
-                <h3>Message Templates</h3>
-                <div class="form-group">
-                    <label>Connection Request Message:</label>
-                    <textarea id="connection-message" placeholder="Hi {firstName}, I'd love to connect with you!">Hi {firstName}, I'd love to connect with you!</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Follow-up Message 1:</label>
-                    <textarea id="followup-1" placeholder="Thanks for connecting, {firstName}!">Thanks for connecting, {firstName}!</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Follow-up Message 2:</label>
-                    <textarea id="followup-2" placeholder="Hope you're doing well, {firstName}!">Hope you're doing well, {firstName}!</textarea>
-                </div>
-                <button class="btn btn-primary" id="save-messages">Save Messages</button>
-            </div>
-        </div>
 
-        <!-- Settings Tab -->
-        <div class="tab-content" id="settings">
-            <div class="section">
-                <h3>Settings</h3>
-                <div class="form-group">
-                    <label>Daily Connection Limit:</label>
-                    <input type="number" id="daily-limit" value="20" min="1" max="100">
-                </div>
-                <div class="form-group">
-                    <label>Delay Between Actions (seconds):</label>
-                    <input type="number" id="action-delay" value="30" min="10" max="300">
-                </div>
-                <div class="form-group">
-                    <label>Follow-up Delay (days):</label>
-                    <input type="number" id="followup-delay" value="3" min="1" max="14">
-                </div>
-
-                <button class="btn btn-primary" id="save-settings">Save Settings</button>
-            </div>
-        </div>
 
         <!-- Campaign Creation Wizard -->
         <div class="modal" id="campaign-modal">
@@ -100,7 +39,7 @@
                 <!-- Step 1: Campaign Name -->
                 <div class="wizard-step active" id="step-1">
                     <div class="wizard-header">
-                        <button class="back-btn" style="display: none;">&larr;</button>
+                        <button class="back-btn hidden">&larr;</button>
                         <h3>Campaign name</h3>
                         <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
@@ -142,7 +81,7 @@
                         <div class="csv-upload-area">
                             <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
                             <button class="upload-btn" id="csv-upload-btn">Click to import the file</button>
-                            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                            <input type="file" id="csv-file-input" accept=".csv" class="hidden">
                             <div class="upload-hint">or drop it here</div>
                         </div>
                     </div>
@@ -216,7 +155,7 @@
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
                     <div class="collection-status">
-                        <div class="auto-detection-indicator" id="auto-detection-indicator" style="display: none;">
+                        <div class="auto-detection-indicator hidden" id="auto-detection-indicator">
                             <span class="indicator-dot"></span>
                             <span>🔄 Auto-collecting profiles...</span>
                         </div>
@@ -229,61 +168,59 @@
                             <!-- Profiles will be added here dynamically -->
                         </div>
 
-                        <button class="btn btn-primary" id="next-to-messaging">NEXT: CONFIGURE MESSAGING</button>
+                        <button class="btn btn-primary hidden" id="next-to-messaging">NEXT</button>
                     </div>
                 </div>
 
-                <!-- Step 4: Messaging Strategy -->
+                <!-- Step 4: Profile Selection & Message Generation -->
                 <div class="wizard-step" id="step-4-messaging">
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-collecting">&larr;</button>
-                        <h3>Configure messaging strategy</h3>
+                        <h3>Select Profiles & Generate Messages</h3>
                         <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 4 out of 4</div>
 
-                    <div class="messaging-strategy">
-                        <div class="strategy-options">
-                            <div class="strategy-option" id="single-message-option">
-                                <input type="radio" name="messaging-strategy" value="single" id="single-message-radio" checked>
-                                <label for="single-message-radio">
-                                    <div class="strategy-title">Single Message</div>
-                                    <div class="strategy-description">Send one personalized connection request message</div>
-                                </label>
-                            </div>
-
-                            <div class="strategy-option" id="multi-step-option">
-                                <input type="radio" name="messaging-strategy" value="multi" id="multi-step-radio">
-                                <label for="multi-step-radio">
-                                    <div class="strategy-title">Multi-Step Follow-Up</div>
-                                    <div class="strategy-description">Connection message + 1-2 follow-up messages (scheduled)</div>
-                                </label>
+                    <div class="profile-selection-section">
+                        <div class="selection-header">
+                            <h4>Select profiles to generate messages for:</h4>
+                            <div class="selection-controls">
+                                <button class="btn btn-small" id="select-all-step4">Select All</button>
+                                <button class="btn btn-small" id="deselect-all-step4">Deselect All</button>
+                                <span class="selected-count">Selected: <span id="selected-count-step4">0</span></span>
                             </div>
                         </div>
 
-                        <div class="follow-up-config" id="follow-up-config" style="display: none;">
-                            <h4>Follow-up Configuration</h4>
-                            <div class="form-group">
-                                <label>Number of follow-up messages:</label>
-                                <select id="follow-up-count">
-                                    <option value="1">1 follow-up message</option>
-                                    <option value="2">2 follow-up messages</option>
-                                </select>
+                        <div class="profiles-selection-list" id="profiles-selection-list">
+                            <!-- Profile checkboxes will be added here -->
+                        </div>
+
+                        <div class="generation-controls">
+                            <button class="btn btn-primary" id="generate-selected-messages" disabled>
+                                🤖 Generate Messages for Selected Profiles
+                            </button>
+                        </div>
+
+                        <!-- Message Generation Results -->
+                        <div class="message-results hidden" id="message-results">
+                            <h4>Generated Messages:</h4>
+                            <div class="messages-container" id="messages-container">
+                                <!-- Generated messages will appear here -->
                             </div>
-                            <div class="form-group">
-                                <label>Days between messages:</label>
-                                <input type="number" id="follow-up-delay" value="3" min="1" max="14">
+                            <div class="message-actions">
+                                <button class="btn btn-success" id="use-selected-messages">Use Selected Messages for Campaign</button>
+                                <button class="btn btn-secondary" id="regenerate-messages">Regenerate Messages</button>
                             </div>
                         </div>
 
-
-
-                        <button class="btn btn-primary" id="create-campaign-final">CREATE CAMPAIGN</button>
+                        <div class="campaign-creation">
+                            <button class="btn btn-primary" id="create-campaign-final">CREATE CAMPAIGN</button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Duplicates Modal -->
-                <div class="duplicates-overlay" id="duplicates-modal" style="display: none;">
+                <div class="duplicates-overlay hidden" id="duplicates-modal">
                     <div class="duplicates-content">
                         <h3><span id="duplicate-count">0</span> duplicates found</h3>
                         <p>The following people already appeared in one of your campaigns or you contacted them before.</p>
@@ -324,7 +261,7 @@
     </div>
 
     <!-- Profile URLs Popup Modal -->
-    <div id="profile-urls-modal" class="modal" style="display: none;">
+    <div id="profile-urls-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Collected Profile URLs</h3>
