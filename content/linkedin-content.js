@@ -584,6 +584,55 @@ class LinkedInAutomation {
         this.isRunning = false;
     }
 
+    async closeChatWindow() {
+        try {
+            const primarySelectors = [
+                'button svg[data-test-icon="close-small"]',
+                'button .artdeco-button__icon[data-test-icon="close-small"]',
+                '[data-test-icon="close-small"]'
+            ];
+
+            for (let attempt = 0; attempt < 5; attempt++) {
+                for (const selector of primarySelectors) {
+                    const closeIcon = document.querySelector(selector);
+                    if (closeIcon) {
+                        const closeButton = closeIcon.closest('button');
+                        if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
+                            closeButton.click();
+                            await this.delay(500);
+                            return true;
+                        }
+                    }
+                }
+
+                const fallbackSelectors = [
+                    '.msg-overlay-bubble-header__control--close',
+                    '.msg-overlay-bubble-header__control[aria-label*="Close"]',
+                    '.msg-overlay-bubble-header button[aria-label*="Close"]',
+                    '.msg-overlay-bubble-header .artdeco-button--circle',
+                    'button[aria-label="Close conversation"]',
+                    '.msg-overlay-bubble-header button:last-child'
+                ];
+
+                for (const selector of fallbackSelectors) {
+                    const closeButton = document.querySelector(selector);
+                    if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
+                        closeButton.click();
+                        await this.delay(500);
+                        return true;
+                    }
+                }
+
+                await this.delay(1000);
+            }
+
+            return false;
+        } catch (error) {
+            console.error('Error closing chat window:', error);
+            return false;
+        }
+    }
+
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -611,6 +660,9 @@ class LinkedInAutomation {
                     messageInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 await this.clickSendButton();
+                await this.delay(2000);
+                await this.closeChatWindow();
+                await this.delay(1000);
             }
         } catch (error) {
         }
