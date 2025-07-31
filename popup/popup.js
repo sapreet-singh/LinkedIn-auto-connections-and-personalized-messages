@@ -194,47 +194,61 @@ const Utils = {
         });
     },
 
-    show: (element) => {
-        if (element) {
-            element.classList.remove('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'block';
+    // Centralized event listener setup to eliminate duplication
+    setupEventListeners: (eventMap) => {
+        Object.entries(eventMap).forEach(([id, handler]) => {
+            const element = DOMCache.get(id);
+            if (element && !element.dataset.listenerAttached) {
+                element.addEventListener('click', handler);
+                element.dataset.listenerAttached = 'true';
             }
+        });
+    },
+
+    // Centralized message handling to eliminate duplication
+    sendTabMessage: async (tabId, message) => {
+        try {
+            return await chrome.tabs.sendMessage(tabId, message);
+        } catch (error) {
+            console.error('Error sending tab message:', error);
+            throw error;
         }
     },
 
-    hide: (element) => {
-        if (element) {
+    sendCurrentTabMessage: async (message) => {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                return await Utils.sendTabMessage(tab.id, message);
+            }
+            throw new Error('No active tab found');
+        } catch (error) {
+            console.error('Error sending message to current tab:', error);
+            throw error;
+        }
+    },
+
+    // Consolidated show/hide methods to eliminate duplication
+    toggleElement: (element, show) => {
+        if (!element) return;
+
+        if (show) {
+            element.classList.remove('hidden');
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        } else {
             element.classList.add('hidden');
-            // Special handling for modals
             if (element.classList.contains('modal')) {
                 element.style.display = 'none';
             }
         }
     },
 
-    showById: (id) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.classList.remove('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'block';
-            }
-        }
-    },
-
-    hideById: (id) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.classList.add('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'none';
-            }
-        }
-    },
+    show: (element) => Utils.toggleElement(element, true),
+    hide: (element) => Utils.toggleElement(element, false),
+    showById: (id) => Utils.toggleElement(DOMCache.get(id), true),
+    hideById: (id) => Utils.toggleElement(DOMCache.get(id), false),
 
     isVisible: (element) => {
         return element && !element.classList.contains('hidden');
@@ -310,9 +324,7 @@ const Utils = {
     }
 };
 
-// Removed StorageAPI - Extension now works without persistent storage
 
-// TabManager removed - Single tab interface
 
 const ModalManager = {
     init() {
@@ -339,24 +351,13 @@ const ModalManager = {
     },
 
     openCampaignModal() {
-        const modal = DOMCache.get('campaign-modal');
-
-        if (modal) {
-            // Remove hidden class and set display to block for modal
-            modal.classList.remove('hidden');
-            modal.style.display = 'block';
-        }
-
+        Utils.showById('campaign-modal');
         WizardManager.initialize();
         WizardManager.showStep(CONSTANTS.STEPS.CAMPAIGN_NAME);
     },
 
     closeCampaignModal() {
-        const modal = DOMCache.get('campaign-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
+        Utils.hideById('campaign-modal');
         WizardManager.reset();
     },
 
@@ -371,22 +372,14 @@ const ModalManager = {
         const modalId = typeof modalIdOrEvent === 'string' ? modalIdOrEvent :
                        modalIdOrEvent.target.closest('#campaign-modal') ? 'campaign-modal' : null;
         if (modalId) {
-            const modal = DOMCache.get(modalId);
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.style.display = 'none';
-            }
+            Utils.hideById(modalId);
             if (modalId === 'campaign-modal') WizardManager.reset();
         }
     },
 
     forceCloseAll() {
         ['campaign-modal', 'profiles-modal', 'profile-urls-modal'].forEach(modalId => {
-            const modal = DOMCache.get(modalId);
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.style.display = 'none';
-            }
+            Utils.hideById(modalId);
         });
         WizardManager.reset();
         AppState.selectedProfiles = [];
@@ -478,16 +471,12 @@ const WizardManager = {
             'generate-messages': () => MessageGenerator.generateMessages()
         };
 
-        Object.entries(eventMap).forEach(([id, handler]) => {
-            const element = DOMCache.get(id);
-            if (element) {
-                element.addEventListener('click', handler);
-            }
-        });
+        Utils.setupEventListeners(eventMap);
 
         const csvInput = DOMCache.get('csv-file-input');
-        if (csvInput) {
+        if (csvInput && !csvInput.dataset.listenerAttached) {
             csvInput.addEventListener('change', CSVHandler.upload);
+            csvInput.dataset.listenerAttached = 'true';
         }
     },
 
@@ -799,7 +788,7 @@ const LaunchManager = {
             });
 
             // Send message to show auto popup
-            await chrome.tabs.sendMessage(tabId, {
+            await Utils.sendTabMessage(tabId, {
                 action: 'showAutoPopup'
             });
         } catch (error) {
@@ -846,12 +835,7 @@ function initializeExtension() {
         'add-profiles-to-campaign': ProfileURLModal.addSelected
     };
 
-    Object.entries(eventMap).forEach(([id, handler]) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.addEventListener('click', handler);
-        }
-    });
+    Utils.setupEventListeners(eventMap);
 
     // Initialize without storage
     CampaignManager.load();
@@ -864,35 +848,7 @@ const CampaignManager = {
         campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
-    createCampaignItem(campaign, index) {
-        const item = document.createElement('div');
-        item.className = 'campaign-item';
-        item.innerHTML = `
-            <div class="campaign-header">
-                <div class="campaign-title">${campaign.name}</div>
-                <div class="campaign-actions">
-                    <button class="btn btn-secondary btn-sm" data-action="pause" data-index="${index}">
-                        ${campaign.status === 'running' ? 'Pause' : 'Resume'}
-                    </button>
-                    <button class="btn btn-secondary btn-sm" data-action="delete" data-index="${index}">Delete</button>
-                </div>
-            </div>
-            <div class="campaign-stats">
-                Progress: ${campaign.progress}/${campaign.maxConnections} | Status: ${campaign.status}
-            </div>
-            <div class="campaign-messaging">
-                Strategy: ${campaign.messagingStrategy?.type === 'multi' ? 'Multi-Step Follow-Up' : 'Single Message'}
-                ${campaign.messagingStrategy?.hasGeneratedMessages ? ' | 🤖 AI Messages Generated' : ''}
-                ${campaign.messagingStrategy?.type === 'multi' ? ` | ${campaign.messagingStrategy.followUpCount} follow-ups` : ''}
-            </div>
-        `;
-        return item;
-    },
 
-    handleAction() {
-        // Simplified - no storage operations
-        Utils.showNotification('Campaign action completed', 'success');
-    },
 
     finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
@@ -907,9 +863,7 @@ const CampaignManager = {
     }
 };
 
-// AutoCollectionHandler removed - no longer needed
 
-// ProfileCollector removed - no longer needed
 
 const ProfileManager = {
     view() {
@@ -1527,7 +1481,7 @@ const Step4Manager = {
                 await new Promise(resolve => setTimeout(resolve, 3000));
 
                 // Step 3: Send message through content script
-                await chrome.tabs.sendMessage(tab.id, {
+                await Utils.sendTabMessage(tab.id, {
                     action: 'sendDirectMessage',
                     message: message,
                     profileName: profileName,
@@ -1546,16 +1500,12 @@ const Step4Manager = {
     async sendMessageToProfileDirect(profileUrl, message, profileName) {
         try {
             // Send message directly to content script (legacy method)
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-            if (tab) {
-                await chrome.tabs.sendMessage(tab.id, {
-                    action: 'sendDirectMessage',
-                    message: message,
-                    profileName: profileName,
-                    profileUrl: profileUrl
-                });
-            }
+            await Utils.sendCurrentTabMessage({
+                action: 'sendDirectMessage',
+                message: message,
+                profileName: profileName,
+                profileUrl: profileUrl
+            });
         } catch (error) {
             console.error('Error sending message to profile:', error);
             throw error;
@@ -1601,7 +1551,7 @@ const Step4Manager = {
                     statusText.textContent = 'Locating message button on profile...';
 
                     // Send message to content script in current tab
-                    await chrome.tabs.sendMessage(currentTab.id, {
+                    await Utils.sendTabMessage(currentTab.id, {
                         action: 'sendDirectMessage',
                         message: message,
                         profileName: profileName
@@ -1732,7 +1682,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    chrome.tabs.sendMessage(tabId, {
+                    Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });

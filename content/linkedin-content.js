@@ -637,7 +637,7 @@ class LinkedInAutomation {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async handleDirectMessage(message, profileName, profileUrl) {
+    async handleDirectMessage(message) {
         try {
             await this.delay(2000);
             const messageButton = await this.findMessageButton();
@@ -1048,31 +1048,8 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
-        // Simplified alternative extraction using existing extractProfileFromCard method
-        const profiles = [];
-        const profileLinks = document.querySelectorAll('a[href*="/in/"]');
-        const containers = new Set();
-
-        profileLinks.forEach(link => {
-            if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
-                return;
-            }
-
-            const container = link.closest('li, div, article');
-            if (container && !container.classList.contains('processed')) {
-                container.classList.add('processed');
-                containers.add(container);
-            }
-        });
-
-        Array.from(containers).forEach(container => {
-            const profile = this.extractProfileFromCard(container);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-            }
-        });
-
-        return profiles;
+        // Use unified extraction method - this method is now redundant
+        return this.collectProfiles();
     }
 
     async collectNetworkProfiles() {
@@ -1134,59 +1111,14 @@ class LinkedInAutomation {
             }
 
             if (nameLink) {
-                let nameText = nameLink.textContent.trim();
-
-                if (nameText.includes('View') && nameText.includes('profile')) {
-                    const match = nameText.match(/^(.+?)(?:View|•|\n)/);
-                    if (match) {
-                        nameText = match[1].trim();
-                    }
-                }
-
-                profile.name = nameText;
+                profile.name = this.cleanNameText(nameLink.textContent.trim());
                 profile.url = nameLink.href || '';
             } else {
-                const nameSelectors = [
-                    'span[aria-hidden="true"]',
-                    '.t-16.t-black.t-bold',
-                    '[data-anonymize="person-name"] span',
-                    '.entity-result__title-text span',
-                    '.search-result__result-link span',
-                    '.artdeco-entity-lockup__title span',
-                    'span.t-16',
-                    'span.t-bold'
-                ];
-
-                let nameSpan = null;
-                for (const selector of nameSelectors) {
-                    nameSpan = card.querySelector(selector);
-                    if (nameSpan && nameSpan.textContent.trim() &&
-                        !nameSpan.textContent.includes('Status') &&
-                        !nameSpan.textContent.includes('View') &&
-                        nameSpan.textContent.length > 2) {
-                        break;
-                    }
-                    nameSpan = null;
-                }
-
-                if (nameSpan) {
-                    profile.name = nameSpan.textContent.trim();
-                    const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
-                    if (parentLink) profile.url = parentLink.href;
-                } else {
-                    const allLinks = card.querySelectorAll('a[href*="/in/"]');
-                    for (const link of allLinks) {
-                        const text = link.textContent.trim();
-                        if (text && text.length > 2 &&
-                            !text.includes('Status') &&
-                            !text.includes('View') &&
-                            !text.includes('•') &&
-                            text.split(' ').length >= 2) {
-                            profile.name = text;
-                            profile.url = link.href;
-                            break;
-                        }
-                    }
+                // Fallback: try to find name and URL separately
+                const nameResult = this.findNameInCard(card);
+                if (nameResult.name) {
+                    profile.name = nameResult.name;
+                    profile.url = nameResult.url || card.querySelector('a[href*="/in/"]')?.href || '';
                 }
             }
 
@@ -1275,6 +1207,59 @@ class LinkedInAutomation {
             console.error('Error extracting profile data:', error);
             return null;
         }
+    }
+
+    // Helper methods to reduce duplication in profile extraction
+    cleanNameText(nameText) {
+        if (nameText.includes('View') && nameText.includes('profile')) {
+            const match = nameText.match(/^(.+?)(?:View|•|\n)/);
+            if (match) {
+                return match[1].trim();
+            }
+        }
+        return nameText;
+    }
+
+    findNameInCard(card) {
+        const nameSelectors = [
+            'span[aria-hidden="true"]',
+            '.t-16.t-black.t-bold',
+            '[data-anonymize="person-name"] span',
+            '.entity-result__title-text span',
+            '.search-result__result-link span',
+            '.artdeco-entity-lockup__title span',
+            'span.t-16',
+            'span.t-bold'
+        ];
+
+        for (const selector of nameSelectors) {
+            const nameSpan = card.querySelector(selector);
+            if (nameSpan && this.isValidNameText(nameSpan.textContent.trim())) {
+                const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
+                return {
+                    name: nameSpan.textContent.trim(),
+                    url: parentLink?.href || ''
+                };
+            }
+        }
+
+        // Final fallback: check all profile links
+        const allLinks = card.querySelectorAll('a[href*="/in/"]');
+        for (const link of allLinks) {
+            const text = link.textContent.trim();
+            if (this.isValidNameText(text) && text.split(' ').length >= 2) {
+                return { name: text, url: link.href };
+            }
+        }
+
+        return { name: '', url: '' };
+    }
+
+    isValidNameText(text) {
+        return text && text.length > 2 &&
+               !text.includes('Status') &&
+               !text.includes('View') &&
+               !text.includes('•');
     }
 
     async searchByCompany(companyName) {
