@@ -961,7 +961,9 @@ class LinkedInAutomation {
 
         if (profiles.length === 0) {
             const alternativeProfiles = this.extractProfilesAlternative();
-            profiles.push(...alternativeProfiles);
+            if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
+                profiles.push(...alternativeProfiles);
+            }
         }
 
         return profiles;
@@ -989,16 +991,16 @@ class LinkedInAutomation {
 
         try {
             // Send status update
-            this.sendCollectionStatus(`Starting collection from ${maxPages} pages...`);
+            this.sendCollectionStatus(`🚀 Starting collection from ${maxPages} pages...`);
 
             while (currentPage <= maxPages) {
                 console.log(`=== Starting collection for page ${currentPage}/${maxPages} ===`);
-                this.sendCollectionStatus(`Processing page ${currentPage}/${maxPages}...`);
+                this.sendCollectionStatus(`Processing page ${currentPage}`);
 
                 // Navigate to specific page if not on page 1
                 if (currentPage > 1) {
                     console.log(`Attempting to navigate to page ${currentPage}...`);
-                    this.sendCollectionStatus(`Navigating to page ${currentPage}...`);
+                    this.sendCollectionStatus(`Navigating to page ${currentPage}`);
 
                     let navigationSuccess = false;
                     let attempts = 0;
@@ -1039,50 +1041,73 @@ class LinkedInAutomation {
                         await this.waitForPageLoad();
                         await this.delay(3000);
                         await this.waitForSearchResults();
+
+                        // Verify URL navigation worked
+                        const finalVerifiedPage = this.getCurrentPageNumber();
+                        if (finalVerifiedPage === currentPage) {
+                            navigationSuccess = true;
+                            console.log(`URL navigation successful - now on page ${currentPage}`);
+                        } else {
+                            console.log(`URL navigation failed - expected page ${currentPage}, got page ${finalVerifiedPage}`);
+                        }
+                    }
+
+                    // Skip this page if navigation completely failed
+                    if (!navigationSuccess) {
+                        console.log(`Failed to navigate to page ${currentPage} - skipping this page`);
+                        this.sendCollectionStatus(`Page ${currentPage} navigation failed - skipping`);
+                        currentPage++;
+                        continue; // Skip to next page
                     }
                 }
 
                 // Send status update
-                this.sendCollectionStatus(`Collecting profiles from page ${currentPage}/${maxPages}...`);
+                this.sendCollectionStatus(`Collecting from page ${currentPage}`);
 
-                // Collect profiles from current page with retry logic
+                // Collect profiles from current page (single attempt only)
                 let pageProfiles = [];
-                let retryCount = 0;
-                const maxRetries = 2;
 
-                while (retryCount <= maxRetries) {
-                    console.log(`Attempting to collect profiles from page ${currentPage} (attempt ${retryCount + 1})`);
+                console.log(`Collecting profiles from page ${currentPage}`);
+
+                try {
                     pageProfiles = await this.collectProfiles();
 
-                    if (pageProfiles.length > 0) {
-                        console.log(`Successfully collected ${pageProfiles.length} profiles on attempt ${retryCount + 1}`);
-                        break; // Successfully collected profiles
+                    // Ensure pageProfiles is always an array
+                    if (!Array.isArray(pageProfiles)) {
+                        console.warn('collectProfiles returned non-array:', pageProfiles);
+                        pageProfiles = [];
                     }
 
-                    if (retryCount < maxRetries) {
-                        console.log(`No profiles found on page ${currentPage}, retry ${retryCount + 1}/${maxRetries}`);
-                        this.sendCollectionStatus(`Retrying page ${currentPage} (${retryCount + 1}/${maxRetries})...`);
-                        await this.delay(2000); // Wait before retry
-                        retryCount++;
+                    if (pageProfiles.length > 0) {
+                        console.log(`Successfully collected ${pageProfiles.length} profiles from page ${currentPage}`);
                     } else {
-                        console.log(`No profiles found on page ${currentPage} after ${maxRetries} retries`);
-                        break;
+                        console.log(`No profiles found on page ${currentPage} - skipping to next page`);
+                        this.sendCollectionStatus(`Page ${currentPage} completed (no profiles)`);
                     }
+                } catch (error) {
+                    console.error('Error collecting profiles:', error);
+                    pageProfiles = [];
+                    console.log(`Collection failed on page ${currentPage} - skipping to next page`);
+                    this.sendCollectionStatus(`Page ${currentPage} failed - skipping`);
                 }
 
-                if (pageProfiles.length > 0) {
+                if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
                     // Add page info to profiles
                     pageProfiles.forEach(profile => {
-                        profile.collectedFromPage = currentPage;
-                        profile.collectionTimestamp = new Date().toISOString();
+                        if (profile && typeof profile === 'object') {
+                            profile.collectedFromPage = currentPage;
+                            profile.collectionTimestamp = new Date().toISOString();
+                        }
                     });
 
+                    // Safely add profiles to allProfiles array
                     allProfiles.push(...pageProfiles);
 
                     // Send profiles in real-time
                     this.sendProfilesRealTime(pageProfiles);
 
                     console.log(`Collected ${pageProfiles.length} profiles from page ${currentPage}`);
+                    this.sendCollectionStatus(`Completed page ${currentPage}`);
                 } else {
                     console.log(`No profiles found on page ${currentPage} - continuing to next page`);
                     // Continue to next page instead of breaking - some pages might be empty
@@ -1100,15 +1125,28 @@ class LinkedInAutomation {
 
             // Send final status
             const pagesProcessed = currentPage - 1;
-            this.sendCollectionStatus(`Collection complete! Found ${allProfiles.length} profiles from ${pagesProcessed} pages (requested ${maxPages} pages).`);
+            this.sendCollectionStatus(`All pages completed (${pagesProcessed}/${maxPages})`);
 
             console.log(`Multi-page collection complete. Total profiles: ${allProfiles.length} from ${pagesProcessed} pages`);
             return allProfiles;
 
         } catch (error) {
             console.error('Error in multi-page collection:', error);
-            this.sendCollectionStatus(`Collection error: ${error.message}`);
-            return allProfiles; // Return what we collected so far
+
+            // Send more user-friendly error message
+            let errorMessage = 'Collection error occurred';
+            if (error.message.includes('iterable') || error.message.includes('Symbol.iterator')) {
+                errorMessage = 'Profile data format error - collection stopped';
+            } else if (error.message.includes('timeout')) {
+                errorMessage = 'Page loading timeout - collection stopped';
+            } else {
+                errorMessage = `Collection error: ${error.message}`;
+            }
+
+            this.sendCollectionStatus(errorMessage);
+
+            // Return collected profiles so far instead of empty array
+            return Array.isArray(allProfiles) ? allProfiles : [];
         }
     }
 
@@ -1518,8 +1556,31 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
-        // Use unified extraction method - this method is now redundant
-        return this.collectProfiles();
+        // Alternative extraction method for edge cases
+        const profiles = [];
+
+        // Try alternative selectors for profile cards
+        const alternativeSelectors = [
+            '.search-results-container .result-card',
+            '.search-results .search-result__wrapper',
+            '.artdeco-list .artdeco-list__item',
+            '.pvs-list .pvs-list__item'
+        ];
+
+        for (const selector of alternativeSelectors) {
+            const cards = document.querySelectorAll(selector);
+            if (cards.length > 0) {
+                cards.forEach(card => {
+                    const profile = this.extractProfileFromCard(card);
+                    if (profile?.name && profile?.url) {
+                        profiles.push(profile);
+                    }
+                });
+                break; // Stop after finding profiles with first working selector
+            }
+        }
+
+        return profiles;
     }
 
     async collectNetworkProfiles() {

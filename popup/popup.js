@@ -645,10 +645,42 @@ const RealTimeProfileHandler = {
             Utils.show(autoDetectionIndicator);
         }
 
+        // Update page progress display
+        this.updatePageProgress(statusMessage);
+
         // Also show as notification for important status updates
         if (statusMessage.includes('complete') || statusMessage.includes('error')) {
             const notificationType = statusMessage.includes('error') ? 'error' : 'success';
             Utils.showNotification(statusMessage, notificationType);
+        }
+    },
+
+    updatePageProgress(statusMessage) {
+        const currentPageElement = DOMCache.get('current-page-number');
+        const totalPagesElement = DOMCache.get('total-pages');
+        const progressFill = DOMCache.get('page-progress-fill');
+        const pageProgress = DOMCache.get('page-progress');
+
+        // Show page progress container
+        if (pageProgress) {
+            pageProgress.classList.add('visible');
+            Utils.show(pageProgress);
+        }
+
+        // Parse status message for page information
+        const pageMatch = statusMessage.match(/page (\d+)/i);
+        if (pageMatch && currentPageElement && progressFill) {
+            const currentPage = parseInt(pageMatch[1]);
+            const totalPages = 4; // Always 4 pages for multi-page collection
+
+            currentPageElement.textContent = currentPage;
+            if (totalPagesElement) {
+                totalPagesElement.textContent = totalPages;
+            }
+
+            // Update progress bar based on page progress
+            const progressPercentage = (currentPage / totalPages) * 100;
+            progressFill.style.width = `${progressPercentage}%`;
         }
     }
 };
@@ -1678,9 +1710,35 @@ const ProfileCollector = {
                 return;
             }
 
+            // Initialize page progress display
+            this.initializePageProgress();
+
             Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
             this.startMultiPageSearch(tab.id, { type: 'multi-page', maxPages: 4, realTime: true });
         });
+    },
+
+    initializePageProgress() {
+        const currentPageElement = DOMCache.get('current-page-number');
+        const totalPagesElement = DOMCache.get('total-pages');
+        const progressFill = DOMCache.get('page-progress-fill');
+        const pageProgress = DOMCache.get('page-progress');
+
+        // Show and initialize page progress
+        if (pageProgress) {
+            pageProgress.classList.add('visible');
+            Utils.show(pageProgress);
+        }
+
+        if (currentPageElement) currentPageElement.textContent = '1';
+        if (totalPagesElement) totalPagesElement.textContent = '4';
+        if (progressFill) progressFill.style.width = '0%';
+
+        // Show auto-detection indicator
+        const autoDetectionIndicator = DOMCache.get('auto-detection-indicator');
+        if (autoDetectionIndicator) {
+            Utils.show(autoDetectionIndicator);
+        }
     },
 
     async startSearch(tabId, searchCriteria) {
@@ -1791,6 +1849,10 @@ const NetworkManager = {
                 Utils.show(campaignModal);
                 WizardManager.showStep(3, 'collecting');
             }
+
+            // Initialize page progress display
+            ProfileCollector.initializePageProgress();
+
             Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
 
             if (tab.url.includes('search/results/people') && tab.url.includes('network')) {
