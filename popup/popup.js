@@ -194,47 +194,61 @@ const Utils = {
         });
     },
 
-    show: (element) => {
-        if (element) {
-            element.classList.remove('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'block';
+    // Centralized event listener setup to eliminate duplication
+    setupEventListeners: (eventMap) => {
+        Object.entries(eventMap).forEach(([id, handler]) => {
+            const element = DOMCache.get(id);
+            if (element && !element.dataset.listenerAttached) {
+                element.addEventListener('click', handler);
+                element.dataset.listenerAttached = 'true';
             }
+        });
+    },
+
+    // Centralized message handling to eliminate duplication
+    sendTabMessage: async (tabId, message) => {
+        try {
+            return await chrome.tabs.sendMessage(tabId, message);
+        } catch (error) {
+            console.error('Error sending tab message:', error);
+            throw error;
         }
     },
 
-    hide: (element) => {
-        if (element) {
+    sendCurrentTabMessage: async (message) => {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                return await Utils.sendTabMessage(tab.id, message);
+            }
+            throw new Error('No active tab found');
+        } catch (error) {
+            console.error('Error sending message to current tab:', error);
+            throw error;
+        }
+    },
+
+    // Consolidated show/hide methods to eliminate duplication
+    toggleElement: (element, show) => {
+        if (!element) return;
+
+        if (show) {
+            element.classList.remove('hidden');
+            if (element.classList.contains('modal')) {
+                element.style.display = 'block';
+            }
+        } else {
             element.classList.add('hidden');
-            // Special handling for modals
             if (element.classList.contains('modal')) {
                 element.style.display = 'none';
             }
         }
     },
 
-    showById: (id) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.classList.remove('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'block';
-            }
-        }
-    },
-
-    hideById: (id) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.classList.add('hidden');
-            // Special handling for modals
-            if (element.classList.contains('modal')) {
-                element.style.display = 'none';
-            }
-        }
-    },
+    show: (element) => Utils.toggleElement(element, true),
+    hide: (element) => Utils.toggleElement(element, false),
+    showById: (id) => Utils.toggleElement(DOMCache.get(id), true),
+    hideById: (id) => Utils.toggleElement(DOMCache.get(id), false),
 
     isVisible: (element) => {
         return element && !element.classList.contains('hidden');
@@ -310,9 +324,7 @@ const Utils = {
     }
 };
 
-// Removed StorageAPI - Extension now works without persistent storage
 
-// TabManager removed - Single tab interface
 
 const ModalManager = {
     init() {
@@ -339,24 +351,13 @@ const ModalManager = {
     },
 
     openCampaignModal() {
-        const modal = DOMCache.get('campaign-modal');
-
-        if (modal) {
-            // Remove hidden class and set display to block for modal
-            modal.classList.remove('hidden');
-            modal.style.display = 'block';
-        }
-
+        Utils.showById('campaign-modal');
         WizardManager.initialize();
         WizardManager.showStep(CONSTANTS.STEPS.CAMPAIGN_NAME);
     },
 
     closeCampaignModal() {
-        const modal = DOMCache.get('campaign-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
+        Utils.hideById('campaign-modal');
         WizardManager.reset();
     },
 
@@ -371,22 +372,14 @@ const ModalManager = {
         const modalId = typeof modalIdOrEvent === 'string' ? modalIdOrEvent :
                        modalIdOrEvent.target.closest('#campaign-modal') ? 'campaign-modal' : null;
         if (modalId) {
-            const modal = DOMCache.get(modalId);
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.style.display = 'none';
-            }
+            Utils.hideById(modalId);
             if (modalId === 'campaign-modal') WizardManager.reset();
         }
     },
 
     forceCloseAll() {
         ['campaign-modal', 'profiles-modal', 'profile-urls-modal'].forEach(modalId => {
-            const modal = DOMCache.get(modalId);
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.style.display = 'none';
-            }
+            Utils.hideById(modalId);
         });
         WizardManager.reset();
         AppState.selectedProfiles = [];
@@ -467,8 +460,10 @@ const WizardManager = {
             'csv-upload-btn-2': () => DOMCache.get('csv-file-input')?.click(),
             'show-filters': () => chrome.tabs.create({ url: CONSTANTS.URLS.PEOPLE_SEARCH }),
             'start-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.start(); },
+            'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
             'show-network-filters': () => NetworkManager.openSearch(),
             'start-network-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startCollecting(); },
+            'start-network-multi-page-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startMultiPageCollecting(); },
             'browse-connections': () => NetworkManager.browseConnections(),
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
@@ -478,16 +473,12 @@ const WizardManager = {
             'generate-messages': () => MessageGenerator.generateMessages()
         };
 
-        Object.entries(eventMap).forEach(([id, handler]) => {
-            const element = DOMCache.get(id);
-            if (element) {
-                element.addEventListener('click', handler);
-            }
-        });
+        Utils.setupEventListeners(eventMap);
 
         const csvInput = DOMCache.get('csv-file-input');
-        if (csvInput) {
+        if (csvInput && !csvInput.dataset.listenerAttached) {
             csvInput.addEventListener('change', CSVHandler.upload);
+            csvInput.dataset.listenerAttached = 'true';
         }
     },
 
@@ -585,6 +576,10 @@ const RealTimeProfileHandler = {
                 this.handleRealTimeProfiles(message.profiles);
                 sendResponse({ success: true });
                 return true;
+            } else if (message.action === 'collectionStatusUpdate' && message.message) {
+                this.handleCollectionStatus(message.message);
+                sendResponse({ success: true });
+                return true;
             }
         });
     },
@@ -637,10 +632,247 @@ const RealTimeProfileHandler = {
             counterElement.textContent = AppState.collectedProfiles.length;
         }
         Utils.showNotification(`✅ Added ${newProfileCount} new profiles (Total: ${AppState.collectedProfiles.length})`, 'success');
+    },
+
+    handleCollectionStatus(statusMessage) {
+        // Update the collection status indicator
+        const autoDetectionIndicator = DOMCache.get('auto-detection-indicator');
+        if (autoDetectionIndicator) {
+            const statusSpan = autoDetectionIndicator.querySelector('span:last-child');
+            if (statusSpan) {
+                statusSpan.textContent = `🔄 ${statusMessage}`;
+            }
+            Utils.show(autoDetectionIndicator);
+        }
+
+        // Update page progress display
+        this.updatePageProgress(statusMessage);
+
+        // Also show as notification for important status updates
+        if (statusMessage.includes('complete') || statusMessage.includes('error')) {
+            const notificationType = statusMessage.includes('error') ? 'error' : 'success';
+            Utils.showNotification(statusMessage, notificationType);
+        }
+    },
+
+    updatePageProgress(statusMessage) {
+        const currentPageElement = DOMCache.get('current-page-number');
+        const totalPagesElement = DOMCache.get('total-pages');
+        const progressFill = DOMCache.get('page-progress-fill');
+        const pageProgress = DOMCache.get('page-progress');
+
+        // Show page progress container
+        if (pageProgress) {
+            pageProgress.classList.add('visible');
+            Utils.show(pageProgress);
+        }
+
+        // Parse status message for page information
+        const pageMatch = statusMessage.match(/page (\d+)/i);
+        if (pageMatch && currentPageElement && progressFill) {
+            const currentPage = parseInt(pageMatch[1]);
+            const totalPages = 4; // Always 4 pages for multi-page collection
+
+            currentPageElement.textContent = currentPage;
+            if (totalPagesElement) {
+                totalPagesElement.textContent = totalPages;
+            }
+
+            // Update progress bar based on page progress
+            const progressPercentage = (currentPage / totalPages) * 100;
+            progressFill.style.width = `${progressPercentage}%`;
+        }
     }
 };
 
-document.addEventListener('DOMContentLoaded', async function() {
+// Launch Interface Manager
+const LaunchManager = {
+    init() {
+        console.log('LaunchManager initializing...');
+        this.setupLaunchButton();
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+            this.checkCurrentState();
+        }, 100);
+    },
+
+    async checkCurrentState() {
+        console.log('Checking current state...');
+        try {
+            // Check if we have chrome.tabs API available
+            if (typeof chrome !== 'undefined' && chrome.tabs) {
+                const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+                console.log('Found LinkedIn tabs:', tabs.length);
+
+                if (tabs.length > 0) {
+                    console.log('LinkedIn is open, showing main interface');
+                    this.showMainInterface();
+                } else {
+                    console.log('LinkedIn not open, showing launch interface');
+                    this.showLaunchInterface();
+                }
+            } else {
+                console.log('Chrome tabs API not available, showing launch interface');
+                this.showLaunchInterface();
+            }
+        } catch (error) {
+            console.error('Error checking current state:', error);
+            console.log('Fallback: showing launch interface');
+            this.showLaunchInterface();
+        }
+    },
+
+    showLaunchInterface() {
+        console.log('showLaunchInterface called');
+        const launchInterface = document.getElementById('launch-interface');
+        const mainInterface = document.getElementById('main-interface');
+
+        console.log('Launch interface element:', launchInterface);
+        console.log('Main interface element:', mainInterface);
+
+        if (launchInterface && mainInterface) {
+            launchInterface.classList.remove('hidden');
+            mainInterface.classList.add('hidden');
+            console.log('Successfully switched to launch interface');
+        } else {
+            console.error('Could not find interface elements');
+            console.error('Launch interface found:', !!launchInterface);
+            console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    showMainInterface() {
+        console.log('showMainInterface called');
+        const launchInterface = document.getElementById('launch-interface');
+        const mainInterface = document.getElementById('main-interface');
+
+        console.log('Launch interface element:', launchInterface);
+        console.log('Main interface element:', mainInterface);
+
+        if (launchInterface && mainInterface) {
+            launchInterface.classList.add('hidden');
+            mainInterface.classList.remove('hidden');
+            console.log('Successfully switched to main interface');
+        } else {
+            console.error('Could not find interface elements');
+            console.error('Launch interface found:', !!launchInterface);
+            console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    setupLaunchButton() {
+        console.log('Setting up launch button...');
+        const launchBtn = document.getElementById('launch-linkedin');
+        console.log('Launch button element:', launchBtn);
+
+        if (launchBtn) {
+            console.log('Adding click event listener to launch button');
+            launchBtn.addEventListener('click', () => {
+                console.log('Launch button clicked!');
+                this.launchLinkedIn();
+            });
+        } else {
+            console.error('Launch button not found! Available elements:');
+            console.error('All elements with IDs:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
+        }
+    },
+
+    async launchLinkedIn() {
+        console.log('launchLinkedIn called');
+        try {
+            // Check if chrome.tabs API is available
+            if (typeof chrome === 'undefined' || !chrome.tabs) {
+                console.error('Chrome tabs API not available');
+                this.showMainInterface();
+                return;
+            }
+
+            console.log('Getting current tab...');
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const currentTab = tabs[0];
+            console.log('Current tab:', currentTab);
+
+            if (currentTab && currentTab.url && currentTab.url.includes('linkedin.com')) {
+                console.log('Already on LinkedIn, showing main interface');
+                this.showMainInterface();
+            } else {
+                console.log('Navigating to LinkedIn...');
+                await chrome.tabs.update(currentTab.id, {
+                    url: 'https://www.linkedin.com/feed/'
+                });
+
+                console.log('Navigation initiated, showing main interface');
+                this.showMainInterface();
+
+                // Set up listener for when LinkedIn loads to auto-open popup
+                this.setupLinkedInAutoPopup(currentTab.id);
+            }
+        } catch (error) {
+            console.error('Error launching LinkedIn:', error);
+            console.log('Fallback: showing main interface anyway');
+            this.showMainInterface();
+        }
+    },
+
+    setupLinkedInAutoPopup(tabId) {
+        // Listen for tab updates to detect when LinkedIn loads
+        const listener = (updatedTabId, changeInfo, tab) => {
+            if (updatedTabId === tabId &&
+                changeInfo.status === 'complete' &&
+                tab.url &&
+                tab.url.includes('linkedin.com')) {
+
+                // Remove listener
+                chrome.tabs.onUpdated.removeListener(listener);
+
+                // Auto-open popup by sending message to content script
+                setTimeout(() => {
+                    this.triggerAutoPopup(tabId);
+                }, 2000);
+            }
+        };
+
+        chrome.tabs.onUpdated.addListener(listener);
+    },
+
+    async triggerAutoPopup(tabId) {
+        try {
+            // Inject content script if needed
+            await chrome.scripting.executeScript({
+                target: { tabId },
+                files: ['content/linkedin-content.js']
+            });
+
+            // Send message to show auto popup
+            await Utils.sendTabMessage(tabId, {
+                action: 'showAutoPopup'
+            });
+        } catch (error) {
+            console.error('Error triggering auto popup:', error);
+        }
+    }
+};
+
+// Add immediate initialization for debugging
+console.log('popup.js loaded, document.readyState:', document.readyState);
+
+// Initialize immediately if DOM is already ready
+if (document.readyState === 'loading') {
+    console.log('Document still loading, waiting for DOMContentLoaded');
+    document.addEventListener('DOMContentLoaded', initializeExtension);
+} else {
+    console.log('Document already loaded, initializing immediately');
+    initializeExtension();
+}
+
+function initializeExtension() {
+    console.log('initializeExtension called');
+
+    // Initialize launch manager first
+    console.log('Initializing LaunchManager...');
+    LaunchManager.init();
+
+    console.log('Initializing other managers...');
     ModalManager.init();
     RealTimeProfileHandler.init();
 
@@ -659,16 +891,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         'add-profiles-to-campaign': ProfileURLModal.addSelected
     };
 
-    Object.entries(eventMap).forEach(([id, handler]) => {
-        const element = DOMCache.get(id);
-        if (element) {
-            element.addEventListener('click', handler);
-        }
-    });
+    Utils.setupEventListeners(eventMap);
 
     // Initialize without storage
     CampaignManager.load();
-});
+}
 
 const CampaignManager = {
     load() {
@@ -677,35 +904,7 @@ const CampaignManager = {
         campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
-    createCampaignItem(campaign, index) {
-        const item = document.createElement('div');
-        item.className = 'campaign-item';
-        item.innerHTML = `
-            <div class="campaign-header">
-                <div class="campaign-title">${campaign.name}</div>
-                <div class="campaign-actions">
-                    <button class="btn btn-secondary btn-sm" data-action="pause" data-index="${index}">
-                        ${campaign.status === 'running' ? 'Pause' : 'Resume'}
-                    </button>
-                    <button class="btn btn-secondary btn-sm" data-action="delete" data-index="${index}">Delete</button>
-                </div>
-            </div>
-            <div class="campaign-stats">
-                Progress: ${campaign.progress}/${campaign.maxConnections} | Status: ${campaign.status}
-            </div>
-            <div class="campaign-messaging">
-                Strategy: ${campaign.messagingStrategy?.type === 'multi' ? 'Multi-Step Follow-Up' : 'Single Message'}
-                ${campaign.messagingStrategy?.hasGeneratedMessages ? ' | 🤖 AI Messages Generated' : ''}
-                ${campaign.messagingStrategy?.type === 'multi' ? ` | ${campaign.messagingStrategy.followUpCount} follow-ups` : ''}
-            </div>
-        `;
-        return item;
-    },
 
-    handleAction() {
-        // Simplified - no storage operations
-        Utils.showNotification('Campaign action completed', 'success');
-    },
 
     finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
@@ -720,9 +919,7 @@ const CampaignManager = {
     }
 };
 
-// AutoCollectionHandler removed - no longer needed
 
-// ProfileCollector removed - no longer needed
 
 const ProfileManager = {
     view() {
@@ -826,12 +1023,14 @@ const Step4Manager = {
         const generateBtn = DOMCache.get('generate-selected-messages');
         const useMessagesBtn = DOMCache.get('use-selected-messages');
         const regenerateBtn = DOMCache.get('regenerate-messages');
+        const skipToBulkBtn = DOMCache.get('skip-to-bulk-send');
 
         if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAll());
         if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => this.deselectAll());
         if (generateBtn) generateBtn.addEventListener('click', () => this.generateMessages());
         if (useMessagesBtn) useMessagesBtn.addEventListener('click', () => this.useSelectedMessages());
         if (regenerateBtn) regenerateBtn.addEventListener('click', () => this.regenerateMessages());
+        if (skipToBulkBtn) skipToBulkBtn.addEventListener('click', () => this.skipToBulkSend());
     },
 
     showProfileSelection() {
@@ -839,13 +1038,13 @@ const Step4Manager = {
         if (!container) return;
 
         container.innerHTML = '';
-        this.selectedProfiles = [];
+        this.selectedProfiles = AppState.collectedProfiles.map((_, index) => index);
 
         AppState.collectedProfiles.forEach((profile, index) => {
             const item = document.createElement('div');
             item.className = 'profile-selection-item';
             item.innerHTML = `
-                <input type="checkbox" id="profile-${index}" data-index="${index}">
+                <input type="checkbox" id="profile-${index}" data-index="${index}" checked>
                 <div class="profile-selection-info">
                     <div class="profile-selection-name">${profile.name}</div>
                     <a href="${profile.url}" class="profile-selection-url" target="_blank">${profile.url}</a>
@@ -859,6 +1058,7 @@ const Step4Manager = {
         });
 
         this.updateSelectedCount();
+        this.updateGenerateButton();
     },
 
     toggleProfile(index, selected) {
@@ -905,8 +1105,13 @@ const Step4Manager = {
 
     updateGenerateButton() {
         const generateBtn = DOMCache.get('generate-selected-messages');
+        const skipToBulkBtn = DOMCache.get('skip-to-bulk-send');
+
         if (generateBtn) {
             generateBtn.disabled = this.selectedProfiles.length === 0;
+        }
+        if (skipToBulkBtn) {
+            skipToBulkBtn.disabled = this.selectedProfiles.length === 0;
         }
     },
 
@@ -928,12 +1133,33 @@ const Step4Manager = {
             for (const index of this.selectedProfiles) {
                 const profile = AppState.collectedProfiles[index];
 
-
                 try {
                     const response = await APIService.generateMessage(profile.url);
+                    console.log('API Response for', profile.name, ':', response);
+
+                    let message = "Hii";
+
+                    if (response) {
+                        if (typeof response === 'string') {
+                            message = response;
+                        } else if (response.messages && response.messages.message1) {
+                            message = response.messages.message1;
+                        } else if (response.message) {
+                            message = response.message;
+                        } else if (response.content) {
+                            message = response.content;
+                        } else if (response.text) {
+                            message = response.text;
+                        } else if (response.data && response.data.message) {
+                            message = response.data.message;
+                        } else {
+                            console.warn('API response structure unclear for', profile.name, '- using default message');
+                        }
+                    }
+
                     this.generatedMessages.push({
                         profile: profile,
-                        message: response,
+                        message: message,
                         selected: true,
                         index: index
                     });
@@ -1144,38 +1370,46 @@ const Step4Manager = {
 
     showSendMessageInterface() {
         const container = document.querySelector('.container');
+
+        // Show interface for selected profiles (not pre-generated messages)
+        const selectedProfiles = Step4Manager.selectedProfiles.map(index => AppState.collectedProfiles[index]);
+
         container.innerHTML = `
             <div class="send-message-interface">
                 <div class="interface-header">
-                    <div class="step-indicator">Step 6: Send Messages</div>
-                    <div class="success-icon">📤</div>
-                    <h2>Ready to Send Messages</h2>
-                    <p>Messages will be sent automatically in the current tab. Click "Send Message" for each profile.</p>
+                    <div class="step-indicator">Step 6: Bulk Message Automation</div>
+                    <div class="success-icon">�</div>
+                    <h2>Ready for Bulk Processing</h2>
+                    <p>Selected profiles will be processed one by one: Generate message → Open profile → Send message → Close chat → Next profile</p>
                 </div>
 
-                <div class="messages-list">
-                    ${this.selectedCampaignMessages.map((item, index) => `
-                        <div class="message-item" data-index="${index}">
+                <div class="bulk-actions">
+                    <div class="bulk-controls">
+                        <button class="btn btn-success bulk-send-btn" id="bulk-send-messages">
+                            🚀 Start Bulk Processing (${selectedProfiles.length} profiles)
+                        </button>
+                        <div class="bulk-progress hidden" id="bulk-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                            <div class="progress-text" id="progress-text">Processing 0 of 0 profiles...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profiles-list">
+                    <h3>Selected Profiles (${selectedProfiles.length})</h3>
+                    ${selectedProfiles.map((profile, index) => `
+                        <div class="profile-item" data-index="${index}">
                             <div class="profile-info">
                                 <div class="profile-details">
-                                    <h4>${item.profile.name}</h4>
-                                    <p class="profile-title">${item.profile.title || 'LinkedIn Member'}</p>
-                                    <a href="${item.profile.url}" target="_blank" class="profile-link">View Profile</a>
+                                    <h4>${profile.name}</h4>
+                                    <p class="profile-title">${profile.title || 'LinkedIn Member'}</p>
+                                    <a href="${profile.url}" target="_blank" class="profile-link">View Profile</a>
                                 </div>
                             </div>
-                            <div class="message-content">
-                                <div class="message-text">${item.message}</div>
-                            </div>
-                            <div class="message-actions">
-                                <button class="btn btn-primary send-message-btn"
-                                        data-profile-url="${item.profile.url}"
-                                        data-message="${item.message.replace(/"/g, '&quot;')}"
-                                        data-profile-name="${item.profile.name}">
-                                    📤 Send Message Automatically
-                                </button>
-                                <div class="message-status" style="display: none;">
-                                    <span class="status-text"></span>
-                                </div>
+                            <div class="profile-status">
+                                <span class="status-indicator">⏳ Waiting</span>
                             </div>
                         </div>
                     `).join('')}
@@ -1183,21 +1417,155 @@ const Step4Manager = {
             </div>
         `;
 
-        // Add event listeners for send message buttons
-        this.setupSendMessageListeners();
+        // Add event listeners for bulk send button
+        this.setupBulkSendListeners();
     },
 
-    setupSendMessageListeners() {
-        const sendButtons = document.querySelectorAll('.send-message-btn');
-        sendButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const profileUrl = e.target.getAttribute('data-profile-url');
-                const message = e.target.getAttribute('data-message');
-                const profileName = e.target.getAttribute('data-profile-name');
-
-                this.sendMessageToProfile(profileUrl, message, profileName, e.target);
+    setupBulkSendListeners() {
+        // Add event listener for bulk send button
+        const bulkSendBtn = document.querySelector('#bulk-send-messages');
+        if (bulkSendBtn) {
+            bulkSendBtn.addEventListener('click', () => {
+                this.startBulkMessageSending();
             });
-        });
+        }
+    },
+
+    async startBulkMessageSending() {
+        const bulkSendBtn = document.querySelector('#bulk-send-messages');
+        const bulkProgress = document.querySelector('#bulk-progress');
+        const progressFill = document.querySelector('#progress-fill');
+        const progressText = document.querySelector('#progress-text');
+
+        // Check if we have selected profiles instead of pre-generated messages
+        if (!Step4Manager.selectedProfiles || Step4Manager.selectedProfiles.length === 0) {
+            Utils.showNotification('No profiles selected', 'warning');
+            return;
+        }
+
+        // Disable bulk send button and show progress
+        bulkSendBtn.disabled = true;
+        bulkSendBtn.textContent = '⏳ Processing Profiles...';
+        bulkProgress.classList.remove('hidden');
+
+        const totalProfiles = Step4Manager.selectedProfiles.length;
+        let completedProfiles = 0;
+
+        try {
+            // Process each selected profile sequentially - one complete workflow at a time
+            for (let i = 0; i < Step4Manager.selectedProfiles.length; i++) {
+                const profileIndex = Step4Manager.selectedProfiles[i];
+                const profile = AppState.collectedProfiles[profileIndex];
+
+                // Update progress
+                progressText.textContent = `Processing ${i + 1} of ${totalProfiles} profiles: ${profile.name}`;
+                progressFill.style.width = `${(i / totalProfiles) * 100}%`;
+
+                try {
+                    // Step 1: Generate message for this profile using API
+                    progressText.textContent = `Step 1/4: Generating message for ${profile.name}`;
+                    const response = await APIService.generateMessage(profile.url);
+                    console.log('Bulk API Response for', profile.name, ':', response);
+
+                    // Extract message from API response
+                    let message = "Hello dear"; // Default fallback message
+
+                    if (response) {
+                        if (typeof response === 'string') {
+                            message = response;
+                        } else if (response.messages && response.messages.message1) {
+                            // Use message1 from the API response structure
+                            message = response.messages.message1;
+                        } else if (response.message) {
+                            message = response.message;
+                        } else if (response.content) {
+                            message = response.content;
+                        } else if (response.text) {
+                            message = response.text;
+                        } else if (response.data && response.data.message) {
+                            message = response.data.message;
+                        } else {
+                            console.warn('Bulk API response structure unclear for', profile.name, '- using default message');
+                        }
+                    }
+
+                    // Step 2: Open profile URL
+                    progressText.textContent = `Step 2/4: Opening profile for ${profile.name}`;
+                    await this.openProfileAndSendMessage(profile.url, message, profile.name);
+
+                    completedProfiles++;
+
+                    // Step 3: Wait before processing next profile
+                    progressText.textContent = `Step 4/4: Completed ${profile.name}, moving to next...`;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                } catch (error) {
+                    console.error(`Failed to process ${profile.name}:`, error);
+                    // Continue with next profile even if this one fails
+                }
+            }
+
+            // Update final progress
+            progressFill.style.width = '100%';
+            progressText.textContent = `Completed! Processed ${completedProfiles} of ${totalProfiles} profiles`;
+
+            // Show completion notification
+            Utils.showNotification(`Bulk processing completed! ${completedProfiles}/${totalProfiles} profiles processed successfully`, 'success');
+
+        } catch (error) {
+            console.error('Bulk processing error:', error);
+            Utils.showNotification('Error during bulk processing', 'error');
+        } finally {
+            // Re-enable bulk send button
+            setTimeout(() => {
+                bulkSendBtn.disabled = false;
+                bulkSendBtn.textContent = '🚀 Send All Messages Automatically';
+                bulkProgress.classList.add('hidden');
+            }, 3000);
+        }
+    },
+
+    async openProfileAndSendMessage(profileUrl, message, profileName) {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            if (tab) {
+                // Step 1: Navigate to profile URL
+                await chrome.tabs.update(tab.id, { url: profileUrl });
+
+                // Step 2: Wait for page to load
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Step 3: Send message through content script
+                await Utils.sendTabMessage(tab.id, {
+                    action: 'sendDirectMessage',
+                    message: message,
+                    profileName: profileName,
+                    profileUrl: profileUrl
+                });
+
+                // Step 4: Wait for message to be sent and chat to close
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error in complete profile workflow:', error);
+            throw error;
+        }
+    },
+
+    async sendMessageToProfileDirect(profileUrl, message, profileName) {
+        try {
+            // Send message directly to content script (legacy method)
+            await Utils.sendCurrentTabMessage({
+                action: 'sendDirectMessage',
+                message: message,
+                profileName: profileName,
+                profileUrl: profileUrl
+            });
+        } catch (error) {
+            console.error('Error sending message to profile:', error);
+            throw error;
+        }
     },
 
     async sendMessageToProfile(profileUrl, message, profileName, buttonElement) {
@@ -1239,7 +1607,7 @@ const Step4Manager = {
                     statusText.textContent = 'Locating message button on profile...';
 
                     // Send message to content script in current tab
-                    await chrome.tabs.sendMessage(currentTab.id, {
+                    await Utils.sendTabMessage(currentTab.id, {
                         action: 'sendDirectMessage',
                         message: message,
                         profileName: profileName
@@ -1304,6 +1672,122 @@ const Step4Manager = {
 
     regenerateMessages() {
         this.generateMessages();
+    },
+
+    skipToBulkSend() {
+        if (this.selectedProfiles.length === 0) {
+            Utils.showNotification('Please select at least one profile', 'warning');
+            return;
+        }
+
+        // Skip message generation and go directly to bulk send interface
+        this.showSendMessageInterface();
+        Utils.showNotification(`Ready to process ${this.selectedProfiles.length} profiles`, 'success');
+    }
+};
+
+const ProfileCollector = {
+    start() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            Utils.showNotification('Starting single page profile collection...', 'info');
+            this.startSearch(tab.id, { type: 'single-page', realTime: true });
+        });
+    },
+
+    startMultiPage() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            // Initialize page progress display
+            this.initializePageProgress();
+
+            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
+            this.startMultiPageSearch(tab.id, { type: 'multi-page', maxPages: 4, realTime: true });
+        });
+    },
+
+    initializePageProgress() {
+        const currentPageElement = DOMCache.get('current-page-number');
+        const totalPagesElement = DOMCache.get('total-pages');
+        const progressFill = DOMCache.get('page-progress-fill');
+        const pageProgress = DOMCache.get('page-progress');
+
+        // Show and initialize page progress
+        if (pageProgress) {
+            pageProgress.classList.add('visible');
+            Utils.show(pageProgress);
+        }
+
+        if (currentPageElement) currentPageElement.textContent = '1';
+        if (totalPagesElement) totalPagesElement.textContent = '4';
+        if (progressFill) progressFill.style.width = '0%';
+
+        // Show auto-detection indicator
+        const autoDetectionIndicator = DOMCache.get('auto-detection-indicator');
+        if (autoDetectionIndicator) {
+            Utils.show(autoDetectionIndicator);
+        }
+    },
+
+    async startSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startRealTimeCollection',
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
+    },
+
+    async startMultiPageSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startMultiPageCollection',
+                        maxPages: searchCriteria.maxPages || 4,
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
     }
 };
 
@@ -1351,6 +1835,37 @@ const NetworkManager = {
         });
     },
 
+    startMultiPageCollecting() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            const campaignModal = DOMCache.get('campaign-modal');
+            if (campaignModal) {
+                Utils.show(campaignModal);
+                WizardManager.showStep(3, 'collecting');
+            }
+
+            // Initialize page progress display
+            ProfileCollector.initializePageProgress();
+
+            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
+
+            if (tab.url.includes('search/results/people') && tab.url.includes('network')) {
+                this.startMultiPageSearch(tab.id, { type: 'search', maxPages: 4, realTime: true });
+            } else if (tab.url.includes('mynetwork') || tab.url.includes('connections')) {
+                this.startMultiPageSearch(tab.id, { type: 'connections', maxPages: 4, realTime: true });
+            } else {
+                this.openSearch();
+                setTimeout(() => this.startMultiPageSearch(tab.id, { type: 'search', maxPages: 4, realTime: true }), 3000);
+            }
+        });
+    },
+
     async startSearch(tabId, searchCriteria) {
         try {
             await chrome.scripting.executeScript({
@@ -1359,7 +1874,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    chrome.tabs.sendMessage(tabId, {
+                    Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -1367,6 +1882,31 @@ const NetworkManager = {
                 } catch (error) {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
+    },
+
+    async startMultiPageSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startMultiPageCollection',
+                        maxPages: searchCriteria.maxPages || 4,
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
             }, 500);
         } catch (error) {

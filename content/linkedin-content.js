@@ -27,6 +27,7 @@ class LinkedInAutomation {
         });
         this.loadSettings();
         this.setupAutoDetection();
+        this.setupAutoPopupDetection();
     }
     
     loadSettings() {
@@ -84,6 +85,128 @@ class LinkedInAutomation {
         });
     }
 
+    setupAutoPopupDetection() {
+        // Auto-open popup when LinkedIn loads
+        if (document.readyState === 'complete') {
+            setTimeout(() => {
+                this.showAutoPopup();
+            }, 3000);
+        } else {
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    this.showAutoPopup();
+                }, 3000);
+            });
+        }
+    }
+
+    showAutoPopup() {
+        try {
+            // Create and show auto popup notification
+            this.createAutoPopupNotification();
+        } catch (error) {
+            console.error('Error showing auto popup:', error);
+        }
+    }
+
+    createAutoPopupNotification() {
+        // Remove existing notification if any
+        const existing = document.getElementById('linkedin-auto-popup');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create popup notification
+        const popup = document.createElement('div');
+        popup.id = 'linkedin-auto-popup';
+        popup.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0, 119, 181, 0.3);
+                z-index: 10000;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                max-width: 350px;
+                animation: slideIn 0.5s ease-out;
+            ">
+                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <div style="font-size: 24px; margin-right: 10px;">🚀</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 16px;">LinkedIn Automation Ready!</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Your automation tools are now active</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="open-automation-popup" style="
+                        background: white;
+                        color: #0077b5;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        flex: 1;
+                        transition: all 0.2s;
+                    ">Open Tools</button>
+                    <button id="dismiss-popup" style="
+                        background: rgba(255,255,255,0.2);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    ">Dismiss</button>
+                </div>
+            </div>
+            <style>
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            </style>
+        `;
+
+        document.body.appendChild(popup);
+
+        // Add event listeners
+        const openBtn = popup.querySelector('#open-automation-popup');
+        const dismissBtn = popup.querySelector('#dismiss-popup');
+
+        openBtn.addEventListener('click', () => {
+            // Open extension popup by clicking the extension icon programmatically
+            this.openExtensionPopup();
+            popup.remove();
+        });
+
+        dismissBtn.addEventListener('click', () => {
+            popup.remove();
+        });
+
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => {
+            if (popup.parentNode) {
+                popup.remove();
+            }
+        }, 10000);
+    }
+
+    openExtensionPopup() {
+        // Send message to background script to open popup
+        try {
+            chrome.runtime.sendMessage({
+                action: 'openPopup'
+            });
+        } catch (error) {
+            console.error('Error opening popup:', error);
+        }
+    }
+
     async startAutoCollection() {
         if (this.isAutoCollecting) {
             return;
@@ -106,7 +229,8 @@ class LinkedInAutomation {
     }
 
     async collectAndSendProfiles() {
-        const profiles = await this.collectCurrentPageOnly();
+        // Use multi-page collection by default
+        const profiles = await this.collectMultiplePages(4);
 
         if (profiles.length > 0) {
             this.sendProfilesRealTime(profiles);
@@ -210,6 +334,10 @@ class LinkedInAutomation {
                 this.handleDirectMessage(message.message, message.profileName, message.profileUrl);
                 sendResponse({ success: true });
                 break;
+            case 'showAutoPopup':
+                this.showAutoPopup();
+                sendResponse({ success: true });
+                break;
             case 'startRealTimeCollection':
                 this.isRealTimeMode = true;
                 this.currentPageCollected = false;
@@ -231,6 +359,19 @@ class LinkedInAutomation {
 
                 sendResponse({ success: true });
                 return true;
+            case 'startMultiPageCollection':
+                this.isRealTimeMode = true;
+                const maxPages = message.maxPages || 4;
+                setTimeout(() => {
+                    this.collectMultiplePages(maxPages).then(profiles => {
+                        console.log(`Multi-page collection completed: ${profiles.length} profiles`);
+                        sendResponse({ success: true, totalProfiles: profiles.length });
+                    }).catch(error => {
+                        console.error('Error in multi-page collection:', error);
+                        sendResponse({ success: false, error: error.message });
+                    });
+                }, 1000);
+                return true; // Keep message channel open for async response
             case 'stopRealTimeCollection':
                 this.isRealTimeMode = false;
                 this.currentPageCollected = false;
@@ -457,11 +598,60 @@ class LinkedInAutomation {
         this.isRunning = false;
     }
 
+    async closeChatWindow() {
+        try {
+            const primarySelectors = [
+                'button svg[data-test-icon="close-small"]',
+                'button .artdeco-button__icon[data-test-icon="close-small"]',
+                '[data-test-icon="close-small"]'
+            ];
+
+            for (let attempt = 0; attempt < 5; attempt++) {
+                for (const selector of primarySelectors) {
+                    const closeIcon = document.querySelector(selector);
+                    if (closeIcon) {
+                        const closeButton = closeIcon.closest('button');
+                        if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
+                            closeButton.click();
+                            await this.delay(500);
+                            return true;
+                        }
+                    }
+                }
+
+                const fallbackSelectors = [
+                    '.msg-overlay-bubble-header__control--close',
+                    '.msg-overlay-bubble-header__control[aria-label*="Close"]',
+                    '.msg-overlay-bubble-header button[aria-label*="Close"]',
+                    '.msg-overlay-bubble-header .artdeco-button--circle',
+                    'button[aria-label="Close conversation"]',
+                    '.msg-overlay-bubble-header button:last-child'
+                ];
+
+                for (const selector of fallbackSelectors) {
+                    const closeButton = document.querySelector(selector);
+                    if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
+                        closeButton.click();
+                        await this.delay(500);
+                        return true;
+                    }
+                }
+
+                await this.delay(1000);
+            }
+
+            return false;
+        } catch (error) {
+            console.error('Error closing chat window:', error);
+            return false;
+        }
+    }
+
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async handleDirectMessage(message, profileName, profileUrl) {
+    async handleDirectMessage(message) {
         try {
             await this.delay(2000);
             const messageButton = await this.findMessageButton();
@@ -484,6 +674,9 @@ class LinkedInAutomation {
                     messageInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 await this.clickSendButton();
+                await this.delay(2000);
+                await this.closeChatWindow();
+                await this.delay(1000);
             }
         } catch (error) {
         }
@@ -768,7 +961,9 @@ class LinkedInAutomation {
 
         if (profiles.length === 0) {
             const alternativeProfiles = this.extractProfilesAlternative();
-            profiles.push(...alternativeProfiles);
+            if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
+                profiles.push(...alternativeProfiles);
+            }
         }
 
         return profiles;
@@ -785,6 +980,498 @@ class LinkedInAutomation {
         });
 
         return limitedProfiles;
+    }
+
+    async collectMultiplePages(maxPages = 4) {
+        const allProfiles = [];
+        const baseUrl = window.location.href.split('&page=')[0].split('?page=')[0];
+        let currentPage = 1;
+
+        console.log(`Starting multi-page collection for ${maxPages} pages`);
+
+        try {
+            // Send status update
+            this.sendCollectionStatus(`🚀 Starting collection from ${maxPages} pages...`);
+
+            while (currentPage <= maxPages) {
+                console.log(`=== Starting collection for page ${currentPage}/${maxPages} ===`);
+                this.sendCollectionStatus(`Processing page ${currentPage}`);
+
+                // Navigate to specific page if not on page 1
+                if (currentPage > 1) {
+                    console.log(`Attempting to navigate to page ${currentPage}...`);
+                    this.sendCollectionStatus(`Navigating to page ${currentPage}`);
+
+                    let navigationSuccess = false;
+                    let attempts = 0;
+                    const maxAttempts = 3;
+
+                    while (!navigationSuccess && attempts < maxAttempts) {
+                        attempts++;
+                        console.log(`Navigation attempt ${attempts}/${maxAttempts} for page ${currentPage}`);
+
+                        // Try clicking the pagination button
+                        const clickSuccess = await this.clickPaginationButton(currentPage);
+
+                        if (clickSuccess) {
+                            // Verify we're on the correct page
+                            await this.delay(2000);
+                            const verifiedPage = this.getCurrentPageNumber();
+                            console.log(`Page verification: Expected ${currentPage}, Current ${verifiedPage}`);
+
+                            if (verifiedPage === currentPage) {
+                                navigationSuccess = true;
+                                console.log(`Successfully navigated to page ${currentPage}`);
+                            } else {
+                                console.log(`Page verification failed, expected ${currentPage} but got ${verifiedPage}`);
+                            }
+                        }
+
+                        if (!navigationSuccess && attempts < maxAttempts) {
+                            console.log(`Navigation attempt ${attempts} failed, waiting before retry...`);
+                            await this.delay(2000);
+                        }
+                    }
+
+                    // Final fallback: URL navigation
+                    if (!navigationSuccess) {
+                        console.log(`All navigation attempts failed, trying URL navigation as final fallback`);
+                        const pageUrl = this.buildPageUrl(baseUrl, currentPage);
+                        window.location.href = pageUrl;
+                        await this.waitForPageLoad();
+                        await this.delay(3000);
+                        await this.waitForSearchResults();
+
+                        // Verify URL navigation worked
+                        const finalVerifiedPage = this.getCurrentPageNumber();
+                        if (finalVerifiedPage === currentPage) {
+                            navigationSuccess = true;
+                            console.log(`URL navigation successful - now on page ${currentPage}`);
+                        } else {
+                            console.log(`URL navigation failed - expected page ${currentPage}, got page ${finalVerifiedPage}`);
+                        }
+                    }
+
+                    // Skip this page if navigation completely failed
+                    if (!navigationSuccess) {
+                        console.log(`Failed to navigate to page ${currentPage} - skipping this page`);
+                        this.sendCollectionStatus(`Page ${currentPage} navigation failed - skipping`);
+                        currentPage++;
+                        continue; // Skip to next page
+                    }
+                }
+
+                // Send status update
+                this.sendCollectionStatus(`Collecting from page ${currentPage}`);
+
+                // Collect profiles from current page (single attempt only)
+                let pageProfiles = [];
+
+                console.log(`Collecting profiles from page ${currentPage}`);
+
+                try {
+                    pageProfiles = await this.collectProfiles();
+
+                    // Ensure pageProfiles is always an array
+                    if (!Array.isArray(pageProfiles)) {
+                        console.warn('collectProfiles returned non-array:', pageProfiles);
+                        pageProfiles = [];
+                    }
+
+                    if (pageProfiles.length > 0) {
+                        console.log(`Successfully collected ${pageProfiles.length} profiles from page ${currentPage}`);
+                    } else {
+                        console.log(`No profiles found on page ${currentPage} - skipping to next page`);
+                        this.sendCollectionStatus(`Page ${currentPage} completed (no profiles)`);
+                    }
+                } catch (error) {
+                    console.error('Error collecting profiles:', error);
+                    pageProfiles = [];
+                    console.log(`Collection failed on page ${currentPage} - skipping to next page`);
+                    this.sendCollectionStatus(`Page ${currentPage} failed - skipping`);
+                }
+
+                if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
+                    // Add page info to profiles
+                    pageProfiles.forEach(profile => {
+                        if (profile && typeof profile === 'object') {
+                            profile.collectedFromPage = currentPage;
+                            profile.collectionTimestamp = new Date().toISOString();
+                        }
+                    });
+
+                    // Safely add profiles to allProfiles array
+                    allProfiles.push(...pageProfiles);
+
+                    // Send profiles in real-time
+                    this.sendProfilesRealTime(pageProfiles);
+
+                    console.log(`Collected ${pageProfiles.length} profiles from page ${currentPage}`);
+                    this.sendCollectionStatus(`Completed page ${currentPage}`);
+                } else {
+                    console.log(`No profiles found on page ${currentPage} - continuing to next page`);
+                    // Continue to next page instead of breaking - some pages might be empty
+                }
+
+                currentPage++;
+                console.log(`=== Finished page ${currentPage - 1}, moving to page ${currentPage} ===`);
+
+                // Add delay between pages to avoid rate limiting
+                if (currentPage <= maxPages) {
+                    console.log(`Waiting 2 seconds before processing page ${currentPage}...`);
+                    await this.delay(2000);
+                }
+            }
+
+            // Send final status
+            const pagesProcessed = currentPage - 1;
+            this.sendCollectionStatus(`All pages completed (${pagesProcessed}/${maxPages})`);
+
+            console.log(`Multi-page collection complete. Total profiles: ${allProfiles.length} from ${pagesProcessed} pages`);
+            return allProfiles;
+
+        } catch (error) {
+            console.error('Error in multi-page collection:', error);
+
+            // Send more user-friendly error message
+            let errorMessage = 'Collection error occurred';
+            if (error.message.includes('iterable') || error.message.includes('Symbol.iterator')) {
+                errorMessage = 'Profile data format error - collection stopped';
+            } else if (error.message.includes('timeout')) {
+                errorMessage = 'Page loading timeout - collection stopped';
+            } else {
+                errorMessage = `Collection error: ${error.message}`;
+            }
+
+            this.sendCollectionStatus(errorMessage);
+
+            // Return collected profiles so far instead of empty array
+            return Array.isArray(allProfiles) ? allProfiles : [];
+        }
+    }
+
+    async clickPaginationButton(pageNumber) {
+        try {
+            console.log(`Looking for pagination button for page ${pageNumber}`);
+
+            // First, let's debug what pagination elements exist
+            this.debugPaginationElements();
+
+            // Multiple selectors to find pagination buttons
+            const selectors = [
+                `button[aria-label="Page ${pageNumber}"]`,
+                `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
+                `[data-test-pagination-page-btn="${pageNumber}"]`,
+                `.pagination button[aria-label="Page ${pageNumber}"]`,
+                `button[data-test-pagination-page-btn="${pageNumber}"]`
+            ];
+
+            let pageButton = null;
+
+            // Try each selector
+            for (const selector of selectors) {
+                try {
+                    pageButton = document.querySelector(selector);
+                    if (pageButton) {
+                        console.log(`Found pagination button using selector: ${selector}`);
+                        break;
+                    }
+                } catch (e) {
+                    // Some selectors might not work, continue to next
+                    continue;
+                }
+            }
+
+            // If no button found with aria-label, try finding by text content
+            if (!pageButton) {
+                console.log('Trying to find pagination button by text content...');
+                const allButtons = document.querySelectorAll('button');
+                console.log(`Checking ${allButtons.length} buttons for page ${pageNumber}`);
+
+                for (const button of allButtons) {
+                    const buttonText = button.textContent.trim();
+                    const span = button.querySelector('span');
+                    const spanText = span ? span.textContent.trim() : '';
+
+                    // Check if button text or span text matches the page number
+                    if (buttonText === pageNumber.toString() || spanText === pageNumber.toString()) {
+                        console.log(`Found potential button: text="${buttonText}", span="${spanText}", class="${button.className}"`);
+
+                        // Additional checks to ensure it's a pagination button
+                        const ariaLabel = button.getAttribute('aria-label');
+                        const parentClass = button.parentElement ? button.parentElement.className : '';
+
+                        // Check if it's likely a pagination button
+                        const isPaginationButton =
+                            (ariaLabel && ariaLabel.includes('Page')) ||
+                            parentClass.includes('pagination') ||
+                            button.className.includes('pagination') ||
+                            /^\d+$/.test(buttonText) || // Just a number
+                            /^\d+$/.test(spanText);     // Span contains just a number
+
+                        if (isPaginationButton) {
+                            pageButton = button;
+                            console.log(`Selected pagination button for page ${pageNumber}: aria-label="${ariaLabel}"`);
+                            break;
+                        }
+                    }
+                }
+
+                if (!pageButton) {
+                    console.log(`No pagination button found for page ${pageNumber} by text content`);
+                }
+            }
+
+            if (pageButton) {
+                console.log(`Clicking pagination button for page ${pageNumber}`);
+
+                // Scroll button into view
+                pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.delay(500);
+
+                // Click the button
+                pageButton.click();
+
+                // Wait for navigation to complete
+                await this.delay(3000);
+
+                // Wait for page content to load
+                await this.waitForSearchResults();
+
+                console.log(`Successfully navigated to page ${pageNumber}`);
+                return true;
+            } else {
+                console.log(`Pagination button for page ${pageNumber} not found`);
+
+                // Try alternative approach: use "Next" button multiple times
+                if (pageNumber > 1) {
+                    console.log(`Trying alternative: clicking Next button to reach page ${pageNumber}`);
+                    return await this.clickNextButtonToPage(pageNumber);
+                }
+
+                return false;
+            }
+
+        } catch (error) {
+            console.error(`Error clicking pagination button for page ${pageNumber}:`, error);
+            return false;
+        }
+    }
+
+    getCurrentPageNumber() {
+        try {
+            // Look for the current page button (aria-current="true")
+            const currentPageButton = document.querySelector('button[aria-current="true"]');
+            if (currentPageButton) {
+                const span = currentPageButton.querySelector('span');
+                if (span) {
+                    const pageNum = parseInt(span.textContent.trim());
+                    if (!isNaN(pageNum)) {
+                        return pageNum;
+                    }
+                }
+            }
+
+            // Fallback: check URL for page parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageParam = urlParams.get('page');
+            if (pageParam) {
+                const pageNum = parseInt(pageParam);
+                if (!isNaN(pageNum)) {
+                    return pageNum;
+                }
+            }
+
+            // Default to page 1 if no page indicator found
+            return 1;
+        } catch (error) {
+            console.error('Error getting current page number:', error);
+            return 1;
+        }
+    }
+
+    async clickNextButtonToPage(targetPage) {
+        try {
+            const currentPage = this.getCurrentPageNumber();
+            console.log(`Current page: ${currentPage}, Target page: ${targetPage}`);
+
+            if (currentPage >= targetPage) {
+                console.log('Already on or past target page');
+                return true;
+            }
+
+            const clicksNeeded = targetPage - currentPage;
+            console.log(`Need to click Next button ${clicksNeeded} times`);
+
+            for (let i = 0; i < clicksNeeded; i++) {
+                console.log(`Clicking Next button (${i + 1}/${clicksNeeded})`);
+
+                // Find Next button
+                const nextButton = this.findNextButton();
+                if (!nextButton) {
+                    console.log('Next button not found');
+                    return false;
+                }
+
+                // Click Next button
+                nextButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.delay(500);
+                nextButton.click();
+
+                // Wait for navigation
+                await this.delay(3000);
+                await this.waitForSearchResults();
+
+                // Verify we moved to the next page
+                const newPage = this.getCurrentPageNumber();
+                console.log(`After click ${i + 1}: now on page ${newPage}`);
+
+                if (newPage === targetPage) {
+                    console.log(`Successfully reached target page ${targetPage}`);
+                    return true;
+                }
+            }
+
+            return this.getCurrentPageNumber() === targetPage;
+
+        } catch (error) {
+            console.error('Error in clickNextButtonToPage:', error);
+            return false;
+        }
+    }
+
+    findNextButton() {
+        const nextSelectors = [
+            'button[aria-label="Next"]',
+            'button[aria-label="Next page"]',
+            'button:contains("Next")',
+            '.artdeco-pagination__button--next',
+            'button[data-test-pagination-page-btn="next"]'
+        ];
+
+        for (const selector of nextSelectors) {
+            try {
+                const button = document.querySelector(selector);
+                if (button && !button.disabled) {
+                    return button;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        // Fallback: look for buttons with "Next" text
+        const allButtons = document.querySelectorAll('button');
+        for (const button of allButtons) {
+            if (button.textContent.toLowerCase().includes('next') && !button.disabled) {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    debugPaginationElements() {
+        console.log('=== DEBUGGING PAGINATION ELEMENTS ===');
+
+        // Find all pagination-related elements
+        const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="artdeco-pagination"]');
+        console.log(`Found ${paginationContainers.length} pagination containers`);
+
+        paginationContainers.forEach((container, index) => {
+            console.log(`Pagination container ${index}:`, container.className);
+            const buttons = container.querySelectorAll('button');
+            console.log(`  - Contains ${buttons.length} buttons`);
+
+            buttons.forEach((button, btnIndex) => {
+                const ariaLabel = button.getAttribute('aria-label');
+                const ariaCurrent = button.getAttribute('aria-current');
+                const textContent = button.textContent.trim();
+                const span = button.querySelector('span');
+                const spanText = span ? span.textContent.trim() : '';
+
+                console.log(`    Button ${btnIndex}: aria-label="${ariaLabel}", aria-current="${ariaCurrent}", text="${textContent}", span="${spanText}"`);
+            });
+        });
+
+        // Also check for any buttons that might contain numbers
+        const allButtons = document.querySelectorAll('button');
+        const numberButtons = [];
+        allButtons.forEach(button => {
+            const text = button.textContent.trim();
+            if (/^\d+$/.test(text)) {
+                numberButtons.push({
+                    text: text,
+                    ariaLabel: button.getAttribute('aria-label'),
+                    ariaCurrent: button.getAttribute('aria-current'),
+                    className: button.className
+                });
+            }
+        });
+
+        console.log('Number buttons found:', numberButtons);
+        console.log('=== END PAGINATION DEBUG ===');
+    }
+
+    buildPageUrl(baseUrl, pageNumber) {
+        const separator = baseUrl.includes('?') ? '&' : '?';
+        return `${baseUrl}${separator}page=${pageNumber}`;
+    }
+
+    async waitForPageLoad() {
+        return new Promise((resolve) => {
+            if (document.readyState === 'complete') {
+                resolve();
+            } else {
+                window.addEventListener('load', resolve, { once: true });
+                // Fallback timeout
+                setTimeout(resolve, 5000);
+            }
+        });
+    }
+
+    async waitForSearchResults() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            const checkForResults = () => {
+                attempts++;
+
+                // Check for LinkedIn search result containers
+                const searchResults = document.querySelector('.search-results-container') ||
+                                    document.querySelector('[data-view-name="search-entity-result-universal-template"]') ||
+                                    document.querySelector('.reusable-search__result-container') ||
+                                    document.querySelector('.search-result__wrapper') ||
+                                    document.querySelector('.entity-result');
+
+                if (searchResults || attempts >= maxAttempts) {
+                    console.log(`Search results ${searchResults ? 'found' : 'not found'} after ${attempts} attempts`);
+                    resolve();
+                } else {
+                    setTimeout(checkForResults, 500);
+                }
+            };
+
+            checkForResults();
+        });
+    }
+
+    sendCollectionStatus(message) {
+        try {
+            if (chrome.runtime?.id) {
+                chrome.runtime.sendMessage({
+                    action: 'collectionStatus',
+                    message: message
+                }).catch(() => {
+                    console.log('Status update:', message);
+                });
+            }
+        } catch (error) {
+            console.log('Status update:', message);
+        }
     }
 
     sendProfilesRealTime(profiles) {
@@ -869,29 +1556,29 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
-        // Simplified alternative extraction using existing extractProfileFromCard method
+        // Alternative extraction method for edge cases
         const profiles = [];
-        const profileLinks = document.querySelectorAll('a[href*="/in/"]');
-        const containers = new Set();
 
-        profileLinks.forEach(link => {
-            if (!link.href.includes('/in/') || link.href.includes('?') || link.closest('.processed')) {
-                return;
-            }
+        // Try alternative selectors for profile cards
+        const alternativeSelectors = [
+            '.search-results-container .result-card',
+            '.search-results .search-result__wrapper',
+            '.artdeco-list .artdeco-list__item',
+            '.pvs-list .pvs-list__item'
+        ];
 
-            const container = link.closest('li, div, article');
-            if (container && !container.classList.contains('processed')) {
-                container.classList.add('processed');
-                containers.add(container);
+        for (const selector of alternativeSelectors) {
+            const cards = document.querySelectorAll(selector);
+            if (cards.length > 0) {
+                cards.forEach(card => {
+                    const profile = this.extractProfileFromCard(card);
+                    if (profile?.name && profile?.url) {
+                        profiles.push(profile);
+                    }
+                });
+                break; // Stop after finding profiles with first working selector
             }
-        });
-
-        Array.from(containers).forEach(container => {
-            const profile = this.extractProfileFromCard(container);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-            }
-        });
+        }
 
         return profiles;
     }
@@ -955,59 +1642,14 @@ class LinkedInAutomation {
             }
 
             if (nameLink) {
-                let nameText = nameLink.textContent.trim();
-
-                if (nameText.includes('View') && nameText.includes('profile')) {
-                    const match = nameText.match(/^(.+?)(?:View|•|\n)/);
-                    if (match) {
-                        nameText = match[1].trim();
-                    }
-                }
-
-                profile.name = nameText;
+                profile.name = this.cleanNameText(nameLink.textContent.trim());
                 profile.url = nameLink.href || '';
             } else {
-                const nameSelectors = [
-                    'span[aria-hidden="true"]',
-                    '.t-16.t-black.t-bold',
-                    '[data-anonymize="person-name"] span',
-                    '.entity-result__title-text span',
-                    '.search-result__result-link span',
-                    '.artdeco-entity-lockup__title span',
-                    'span.t-16',
-                    'span.t-bold'
-                ];
-
-                let nameSpan = null;
-                for (const selector of nameSelectors) {
-                    nameSpan = card.querySelector(selector);
-                    if (nameSpan && nameSpan.textContent.trim() &&
-                        !nameSpan.textContent.includes('Status') &&
-                        !nameSpan.textContent.includes('View') &&
-                        nameSpan.textContent.length > 2) {
-                        break;
-                    }
-                    nameSpan = null;
-                }
-
-                if (nameSpan) {
-                    profile.name = nameSpan.textContent.trim();
-                    const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
-                    if (parentLink) profile.url = parentLink.href;
-                } else {
-                    const allLinks = card.querySelectorAll('a[href*="/in/"]');
-                    for (const link of allLinks) {
-                        const text = link.textContent.trim();
-                        if (text && text.length > 2 &&
-                            !text.includes('Status') &&
-                            !text.includes('View') &&
-                            !text.includes('•') &&
-                            text.split(' ').length >= 2) {
-                            profile.name = text;
-                            profile.url = link.href;
-                            break;
-                        }
-                    }
+                // Fallback: try to find name and URL separately
+                const nameResult = this.findNameInCard(card);
+                if (nameResult.name) {
+                    profile.name = nameResult.name;
+                    profile.url = nameResult.url || card.querySelector('a[href*="/in/"]')?.href || '';
                 }
             }
 
@@ -1096,6 +1738,59 @@ class LinkedInAutomation {
             console.error('Error extracting profile data:', error);
             return null;
         }
+    }
+
+    // Helper methods to reduce duplication in profile extraction
+    cleanNameText(nameText) {
+        if (nameText.includes('View') && nameText.includes('profile')) {
+            const match = nameText.match(/^(.+?)(?:View|•|\n)/);
+            if (match) {
+                return match[1].trim();
+            }
+        }
+        return nameText;
+    }
+
+    findNameInCard(card) {
+        const nameSelectors = [
+            'span[aria-hidden="true"]',
+            '.t-16.t-black.t-bold',
+            '[data-anonymize="person-name"] span',
+            '.entity-result__title-text span',
+            '.search-result__result-link span',
+            '.artdeco-entity-lockup__title span',
+            'span.t-16',
+            'span.t-bold'
+        ];
+
+        for (const selector of nameSelectors) {
+            const nameSpan = card.querySelector(selector);
+            if (nameSpan && this.isValidNameText(nameSpan.textContent.trim())) {
+                const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
+                return {
+                    name: nameSpan.textContent.trim(),
+                    url: parentLink?.href || ''
+                };
+            }
+        }
+
+        // Final fallback: check all profile links
+        const allLinks = card.querySelectorAll('a[href*="/in/"]');
+        for (const link of allLinks) {
+            const text = link.textContent.trim();
+            if (this.isValidNameText(text) && text.split(' ').length >= 2) {
+                return { name: text, url: link.href };
+            }
+        }
+
+        return { name: '', url: '' };
+    }
+
+    isValidNameText(text) {
+        return text && text.length > 2 &&
+               !text.includes('Status') &&
+               !text.includes('View') &&
+               !text.includes('•');
     }
 
     async searchByCompany(companyName) {

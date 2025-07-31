@@ -4,6 +4,12 @@ A Chrome extension for automating LinkedIn connections and personalized messages
 
 ## 🚀 New Features
 
+### Simple Launch Interface
+- **Two-Stage Interface**: Shows only a launch button initially, then automatically opens the main interface
+- **Auto LinkedIn Navigation**: Automatically opens LinkedIn when you click the launch button
+- **Auto-Popup on LinkedIn**: Automatically shows the automation popup when LinkedIn loads
+- **Seamless Workflow**: No manual navigation required - just click launch and start automating
+
 ### AI-Powered Message Generation
 - **Profile Analysis**: Automatically analyze LinkedIn profiles for personalized messaging
 - **API Integration**: Connect to Node.js backend for AI message generation

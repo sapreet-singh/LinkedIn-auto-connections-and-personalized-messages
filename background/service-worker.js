@@ -40,6 +40,15 @@ class LinkedInAutomationBackground {
             case 'getCampaignStatus':
                 this.getCampaignStatus(message.campaignId, sendResponse);
                 break;
+            case 'openPopup':
+                this.openExtensionPopup(sendResponse);
+                break;
+            case 'addProfilesRealTime':
+                this.handleProfilesRealTime(message.profiles, sender, sendResponse);
+                break;
+            case 'collectionStatus':
+                this.handleCollectionStatus(message.message, sender, sendResponse);
+                break;
             default:
                 sendResponse({ error: 'Unknown action' });
         }
@@ -193,6 +202,55 @@ class LinkedInAutomationBackground {
     
     loadCampaigns() {
         // No storage operations needed
+    }
+
+    openExtensionPopup(sendResponse) {
+        try {
+            // Open the extension popup programmatically
+            chrome.action.openPopup();
+            sendResponse({ success: true });
+        } catch (error) {
+            console.error('Error opening popup:', error);
+            sendResponse({ error: error.message });
+        }
+    }
+
+    handleProfilesRealTime(profiles, sender, sendResponse) {
+        try {
+            // Forward profiles to popup if it's open
+            chrome.runtime.sendMessage({
+                action: 'profilesCollected',
+                profiles: profiles,
+                source: 'realtime'
+            }).catch(() => {
+                // Popup might not be open, that's okay
+                console.log('Profiles collected but popup not open');
+            });
+
+            sendResponse({ success: true });
+        } catch (error) {
+            console.error('Error handling real-time profiles:', error);
+            sendResponse({ error: error.message });
+        }
+    }
+
+    handleCollectionStatus(message, sender, sendResponse) {
+        try {
+            // Forward status to popup if it's open
+            chrome.runtime.sendMessage({
+                action: 'collectionStatusUpdate',
+                message: message,
+                source: 'content'
+            }).catch(() => {
+                // Popup might not be open, that's okay
+                console.log('Collection status:', message);
+            });
+
+            sendResponse({ success: true });
+        } catch (error) {
+            console.error('Error handling collection status:', error);
+            sendResponse({ error: error.message });
+        }
     }
 
 }
