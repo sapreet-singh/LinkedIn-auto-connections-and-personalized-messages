@@ -1013,12 +1013,14 @@ const Step4Manager = {
         const generateBtn = DOMCache.get('generate-selected-messages');
         const useMessagesBtn = DOMCache.get('use-selected-messages');
         const regenerateBtn = DOMCache.get('regenerate-messages');
+        const skipToBulkBtn = DOMCache.get('skip-to-bulk-send');
 
         if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAll());
         if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => this.deselectAll());
         if (generateBtn) generateBtn.addEventListener('click', () => this.generateMessages());
         if (useMessagesBtn) useMessagesBtn.addEventListener('click', () => this.useSelectedMessages());
         if (regenerateBtn) regenerateBtn.addEventListener('click', () => this.regenerateMessages());
+        if (skipToBulkBtn) skipToBulkBtn.addEventListener('click', () => this.skipToBulkSend());
     },
 
     showProfileSelection() {
@@ -1026,13 +1028,13 @@ const Step4Manager = {
         if (!container) return;
 
         container.innerHTML = '';
-        this.selectedProfiles = [];
+        this.selectedProfiles = AppState.collectedProfiles.map((_, index) => index);
 
         AppState.collectedProfiles.forEach((profile, index) => {
             const item = document.createElement('div');
             item.className = 'profile-selection-item';
             item.innerHTML = `
-                <input type="checkbox" id="profile-${index}" data-index="${index}">
+                <input type="checkbox" id="profile-${index}" data-index="${index}" checked>
                 <div class="profile-selection-info">
                     <div class="profile-selection-name">${profile.name}</div>
                     <a href="${profile.url}" class="profile-selection-url" target="_blank">${profile.url}</a>
@@ -1046,6 +1048,7 @@ const Step4Manager = {
         });
 
         this.updateSelectedCount();
+        this.updateGenerateButton();
     },
 
     toggleProfile(index, selected) {
@@ -1092,8 +1095,13 @@ const Step4Manager = {
 
     updateGenerateButton() {
         const generateBtn = DOMCache.get('generate-selected-messages');
+        const skipToBulkBtn = DOMCache.get('skip-to-bulk-send');
+
         if (generateBtn) {
             generateBtn.disabled = this.selectedProfiles.length === 0;
+        }
+        if (skipToBulkBtn) {
+            skipToBulkBtn.disabled = this.selectedProfiles.length === 0;
         }
     },
 
@@ -1115,12 +1123,33 @@ const Step4Manager = {
             for (const index of this.selectedProfiles) {
                 const profile = AppState.collectedProfiles[index];
 
-
                 try {
                     const response = await APIService.generateMessage(profile.url);
+                    console.log('API Response for', profile.name, ':', response);
+
+                    let message = "Hii";
+
+                    if (response) {
+                        if (typeof response === 'string') {
+                            message = response;
+                        } else if (response.messages && response.messages.message1) {
+                            message = response.messages.message1;
+                        } else if (response.message) {
+                            message = response.message;
+                        } else if (response.content) {
+                            message = response.content;
+                        } else if (response.text) {
+                            message = response.text;
+                        } else if (response.data && response.data.message) {
+                            message = response.data.message;
+                        } else {
+                            console.warn('API response structure unclear for', profile.name, '- using default message');
+                        }
+                    }
+
                     this.generatedMessages.push({
                         profile: profile,
-                        message: response,
+                        message: message,
                         selected: true,
                         index: index
                     });
@@ -1331,38 +1360,46 @@ const Step4Manager = {
 
     showSendMessageInterface() {
         const container = document.querySelector('.container');
+
+        // Show interface for selected profiles (not pre-generated messages)
+        const selectedProfiles = Step4Manager.selectedProfiles.map(index => AppState.collectedProfiles[index]);
+
         container.innerHTML = `
             <div class="send-message-interface">
                 <div class="interface-header">
-                    <div class="step-indicator">Step 6: Send Messages</div>
-                    <div class="success-icon">📤</div>
-                    <h2>Ready to Send Messages</h2>
-                    <p>Messages will be sent automatically in the current tab. Click "Send Message" for each profile.</p>
+                    <div class="step-indicator">Step 6: Bulk Message Automation</div>
+                    <div class="success-icon">�</div>
+                    <h2>Ready for Bulk Processing</h2>
+                    <p>Selected profiles will be processed one by one: Generate message → Open profile → Send message → Close chat → Next profile</p>
                 </div>
 
-                <div class="messages-list">
-                    ${this.selectedCampaignMessages.map((item, index) => `
-                        <div class="message-item" data-index="${index}">
+                <div class="bulk-actions">
+                    <div class="bulk-controls">
+                        <button class="btn btn-success bulk-send-btn" id="bulk-send-messages">
+                            🚀 Start Bulk Processing (${selectedProfiles.length} profiles)
+                        </button>
+                        <div class="bulk-progress hidden" id="bulk-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                            <div class="progress-text" id="progress-text">Processing 0 of 0 profiles...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profiles-list">
+                    <h3>Selected Profiles (${selectedProfiles.length})</h3>
+                    ${selectedProfiles.map((profile, index) => `
+                        <div class="profile-item" data-index="${index}">
                             <div class="profile-info">
                                 <div class="profile-details">
-                                    <h4>${item.profile.name}</h4>
-                                    <p class="profile-title">${item.profile.title || 'LinkedIn Member'}</p>
-                                    <a href="${item.profile.url}" target="_blank" class="profile-link">View Profile</a>
+                                    <h4>${profile.name}</h4>
+                                    <p class="profile-title">${profile.title || 'LinkedIn Member'}</p>
+                                    <a href="${profile.url}" target="_blank" class="profile-link">View Profile</a>
                                 </div>
                             </div>
-                            <div class="message-content">
-                                <div class="message-text">${item.message}</div>
-                            </div>
-                            <div class="message-actions">
-                                <button class="btn btn-primary send-message-btn"
-                                        data-profile-url="${item.profile.url}"
-                                        data-message="${item.message.replace(/"/g, '&quot;')}"
-                                        data-profile-name="${item.profile.name}">
-                                    📤 Send Message Automatically
-                                </button>
-                                <div class="message-status" style="display: none;">
-                                    <span class="status-text"></span>
-                                </div>
+                            <div class="profile-status">
+                                <span class="status-indicator">⏳ Waiting</span>
                             </div>
                         </div>
                     `).join('')}
@@ -1370,21 +1407,159 @@ const Step4Manager = {
             </div>
         `;
 
-        // Add event listeners for send message buttons
-        this.setupSendMessageListeners();
+        // Add event listeners for bulk send button
+        this.setupBulkSendListeners();
     },
 
-    setupSendMessageListeners() {
-        const sendButtons = document.querySelectorAll('.send-message-btn');
-        sendButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const profileUrl = e.target.getAttribute('data-profile-url');
-                const message = e.target.getAttribute('data-message');
-                const profileName = e.target.getAttribute('data-profile-name');
-
-                this.sendMessageToProfile(profileUrl, message, profileName, e.target);
+    setupBulkSendListeners() {
+        // Add event listener for bulk send button
+        const bulkSendBtn = document.querySelector('#bulk-send-messages');
+        if (bulkSendBtn) {
+            bulkSendBtn.addEventListener('click', () => {
+                this.startBulkMessageSending();
             });
-        });
+        }
+    },
+
+    async startBulkMessageSending() {
+        const bulkSendBtn = document.querySelector('#bulk-send-messages');
+        const bulkProgress = document.querySelector('#bulk-progress');
+        const progressFill = document.querySelector('#progress-fill');
+        const progressText = document.querySelector('#progress-text');
+
+        // Check if we have selected profiles instead of pre-generated messages
+        if (!Step4Manager.selectedProfiles || Step4Manager.selectedProfiles.length === 0) {
+            Utils.showNotification('No profiles selected', 'warning');
+            return;
+        }
+
+        // Disable bulk send button and show progress
+        bulkSendBtn.disabled = true;
+        bulkSendBtn.textContent = '⏳ Processing Profiles...';
+        bulkProgress.classList.remove('hidden');
+
+        const totalProfiles = Step4Manager.selectedProfiles.length;
+        let completedProfiles = 0;
+
+        try {
+            // Process each selected profile sequentially - one complete workflow at a time
+            for (let i = 0; i < Step4Manager.selectedProfiles.length; i++) {
+                const profileIndex = Step4Manager.selectedProfiles[i];
+                const profile = AppState.collectedProfiles[profileIndex];
+
+                // Update progress
+                progressText.textContent = `Processing ${i + 1} of ${totalProfiles} profiles: ${profile.name}`;
+                progressFill.style.width = `${(i / totalProfiles) * 100}%`;
+
+                try {
+                    // Step 1: Generate message for this profile using API
+                    progressText.textContent = `Step 1/4: Generating message for ${profile.name}`;
+                    const response = await APIService.generateMessage(profile.url);
+                    console.log('Bulk API Response for', profile.name, ':', response);
+
+                    // Extract message from API response
+                    let message = "Hello dear"; // Default fallback message
+
+                    if (response) {
+                        if (typeof response === 'string') {
+                            message = response;
+                        } else if (response.messages && response.messages.message1) {
+                            // Use message1 from the API response structure
+                            message = response.messages.message1;
+                        } else if (response.message) {
+                            message = response.message;
+                        } else if (response.content) {
+                            message = response.content;
+                        } else if (response.text) {
+                            message = response.text;
+                        } else if (response.data && response.data.message) {
+                            message = response.data.message;
+                        } else {
+                            console.warn('Bulk API response structure unclear for', profile.name, '- using default message');
+                        }
+                    }
+
+                    // Step 2: Open profile URL
+                    progressText.textContent = `Step 2/4: Opening profile for ${profile.name}`;
+                    await this.openProfileAndSendMessage(profile.url, message, profile.name);
+
+                    completedProfiles++;
+
+                    // Step 3: Wait before processing next profile
+                    progressText.textContent = `Step 4/4: Completed ${profile.name}, moving to next...`;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                } catch (error) {
+                    console.error(`Failed to process ${profile.name}:`, error);
+                    // Continue with next profile even if this one fails
+                }
+            }
+
+            // Update final progress
+            progressFill.style.width = '100%';
+            progressText.textContent = `Completed! Processed ${completedProfiles} of ${totalProfiles} profiles`;
+
+            // Show completion notification
+            Utils.showNotification(`Bulk processing completed! ${completedProfiles}/${totalProfiles} profiles processed successfully`, 'success');
+
+        } catch (error) {
+            console.error('Bulk processing error:', error);
+            Utils.showNotification('Error during bulk processing', 'error');
+        } finally {
+            // Re-enable bulk send button
+            setTimeout(() => {
+                bulkSendBtn.disabled = false;
+                bulkSendBtn.textContent = '🚀 Send All Messages Automatically';
+                bulkProgress.classList.add('hidden');
+            }, 3000);
+        }
+    },
+
+    async openProfileAndSendMessage(profileUrl, message, profileName) {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            if (tab) {
+                // Step 1: Navigate to profile URL
+                await chrome.tabs.update(tab.id, { url: profileUrl });
+
+                // Step 2: Wait for page to load
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Step 3: Send message through content script
+                await chrome.tabs.sendMessage(tab.id, {
+                    action: 'sendDirectMessage',
+                    message: message,
+                    profileName: profileName,
+                    profileUrl: profileUrl
+                });
+
+                // Step 4: Wait for message to be sent and chat to close
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error in complete profile workflow:', error);
+            throw error;
+        }
+    },
+
+    async sendMessageToProfileDirect(profileUrl, message, profileName) {
+        try {
+            // Send message directly to content script (legacy method)
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            if (tab) {
+                await chrome.tabs.sendMessage(tab.id, {
+                    action: 'sendDirectMessage',
+                    message: message,
+                    profileName: profileName,
+                    profileUrl: profileUrl
+                });
+            }
+        } catch (error) {
+            console.error('Error sending message to profile:', error);
+            throw error;
+        }
     },
 
     async sendMessageToProfile(profileUrl, message, profileName, buttonElement) {
@@ -1491,6 +1666,17 @@ const Step4Manager = {
 
     regenerateMessages() {
         this.generateMessages();
+    },
+
+    skipToBulkSend() {
+        if (this.selectedProfiles.length === 0) {
+            Utils.showNotification('Please select at least one profile', 'warning');
+            return;
+        }
+
+        // Skip message generation and go directly to bulk send interface
+        this.showSendMessageInterface();
+        Utils.showNotification(`Ready to process ${this.selectedProfiles.length} profiles`, 'success');
     }
 };
 
