@@ -460,8 +460,10 @@ const WizardManager = {
             'csv-upload-btn-2': () => DOMCache.get('csv-file-input')?.click(),
             'show-filters': () => chrome.tabs.create({ url: CONSTANTS.URLS.PEOPLE_SEARCH }),
             'start-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.start(); },
+            'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
             'show-network-filters': () => NetworkManager.openSearch(),
             'start-network-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startCollecting(); },
+            'start-network-multi-page-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startMultiPageCollecting(); },
             'browse-connections': () => NetworkManager.browseConnections(),
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
@@ -574,6 +576,10 @@ const RealTimeProfileHandler = {
                 this.handleRealTimeProfiles(message.profiles);
                 sendResponse({ success: true });
                 return true;
+            } else if (message.action === 'collectionStatusUpdate' && message.message) {
+                this.handleCollectionStatus(message.message);
+                sendResponse({ success: true });
+                return true;
             }
         });
     },
@@ -626,6 +632,24 @@ const RealTimeProfileHandler = {
             counterElement.textContent = AppState.collectedProfiles.length;
         }
         Utils.showNotification(`✅ Added ${newProfileCount} new profiles (Total: ${AppState.collectedProfiles.length})`, 'success');
+    },
+
+    handleCollectionStatus(statusMessage) {
+        // Update the collection status indicator
+        const autoDetectionIndicator = DOMCache.get('auto-detection-indicator');
+        if (autoDetectionIndicator) {
+            const statusSpan = autoDetectionIndicator.querySelector('span:last-child');
+            if (statusSpan) {
+                statusSpan.textContent = `🔄 ${statusMessage}`;
+            }
+            Utils.show(autoDetectionIndicator);
+        }
+
+        // Also show as notification for important status updates
+        if (statusMessage.includes('complete') || statusMessage.includes('error')) {
+            const notificationType = statusMessage.includes('error') ? 'error' : 'success';
+            Utils.showNotification(statusMessage, notificationType);
+        }
     }
 };
 
@@ -1630,6 +1654,85 @@ const Step4Manager = {
     }
 };
 
+const ProfileCollector = {
+    start() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            Utils.showNotification('Starting single page profile collection...', 'info');
+            this.startSearch(tab.id, { type: 'single-page', realTime: true });
+        });
+    },
+
+    startMultiPage() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
+            this.startMultiPageSearch(tab.id, { type: 'multi-page', maxPages: 4, realTime: true });
+        });
+    },
+
+    async startSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startRealTimeCollection',
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
+    },
+
+    async startMultiPageSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startMultiPageCollection',
+                        maxPages: searchCriteria.maxPages || 4,
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
+    }
+};
+
 const NetworkManager = {
     openSearch() {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -1674,6 +1777,33 @@ const NetworkManager = {
         });
     },
 
+    startMultiPageCollecting() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com')) {
+                Utils.showNotification('Please navigate to LinkedIn first', 'error');
+                return;
+            }
+
+            const campaignModal = DOMCache.get('campaign-modal');
+            if (campaignModal) {
+                Utils.show(campaignModal);
+                WizardManager.showStep(3, 'collecting');
+            }
+            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
+
+            if (tab.url.includes('search/results/people') && tab.url.includes('network')) {
+                this.startMultiPageSearch(tab.id, { type: 'search', maxPages: 4, realTime: true });
+            } else if (tab.url.includes('mynetwork') || tab.url.includes('connections')) {
+                this.startMultiPageSearch(tab.id, { type: 'connections', maxPages: 4, realTime: true });
+            } else {
+                this.openSearch();
+                setTimeout(() => this.startMultiPageSearch(tab.id, { type: 'search', maxPages: 4, realTime: true }), 3000);
+            }
+        });
+    },
+
     async startSearch(tabId, searchCriteria) {
         try {
             await chrome.scripting.executeScript({
@@ -1690,6 +1820,31 @@ const NetworkManager = {
                 } catch (error) {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
+        }
+    },
+
+    async startMultiPageSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    Utils.sendTabMessage(tabId, {
+                        action: 'startMultiPageCollection',
+                        maxPages: searchCriteria.maxPages || 4,
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
             }, 500);
         } catch (error) {

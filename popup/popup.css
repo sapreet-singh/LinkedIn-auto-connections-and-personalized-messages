@@ -524,6 +524,19 @@ footer {
     gap: 10px;
 }
 
+.collection-options {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.collection-options .btn {
+    flex: 1;
+    min-width: 150px;
+    font-size: 13px;
+    padding: 10px 12px;
+}
+
 /* Collection Status */
 .collection-status {
     padding: 20px;

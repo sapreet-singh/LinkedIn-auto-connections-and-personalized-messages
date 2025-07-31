@@ -229,7 +229,8 @@ class LinkedInAutomation {
     }
 
     async collectAndSendProfiles() {
-        const profiles = await this.collectCurrentPageOnly();
+        // Use multi-page collection by default
+        const profiles = await this.collectMultiplePages(4);
 
         if (profiles.length > 0) {
             this.sendProfilesRealTime(profiles);
@@ -358,6 +359,19 @@ class LinkedInAutomation {
 
                 sendResponse({ success: true });
                 return true;
+            case 'startMultiPageCollection':
+                this.isRealTimeMode = true;
+                const maxPages = message.maxPages || 4;
+                setTimeout(() => {
+                    this.collectMultiplePages(maxPages).then(profiles => {
+                        console.log(`Multi-page collection completed: ${profiles.length} profiles`);
+                        sendResponse({ success: true, totalProfiles: profiles.length });
+                    }).catch(error => {
+                        console.error('Error in multi-page collection:', error);
+                        sendResponse({ success: false, error: error.message });
+                    });
+                }, 1000);
+                return true; // Keep message channel open for async response
             case 'stopRealTimeCollection':
                 this.isRealTimeMode = false;
                 this.currentPageCollected = false;
@@ -964,6 +978,462 @@ class LinkedInAutomation {
         });
 
         return limitedProfiles;
+    }
+
+    async collectMultiplePages(maxPages = 4) {
+        const allProfiles = [];
+        const baseUrl = window.location.href.split('&page=')[0].split('?page=')[0];
+        let currentPage = 1;
+
+        console.log(`Starting multi-page collection for ${maxPages} pages`);
+
+        try {
+            // Send status update
+            this.sendCollectionStatus(`Starting collection from ${maxPages} pages...`);
+
+            while (currentPage <= maxPages) {
+                console.log(`=== Starting collection for page ${currentPage}/${maxPages} ===`);
+                this.sendCollectionStatus(`Processing page ${currentPage}/${maxPages}...`);
+
+                // Navigate to specific page if not on page 1
+                if (currentPage > 1) {
+                    console.log(`Attempting to navigate to page ${currentPage}...`);
+                    this.sendCollectionStatus(`Navigating to page ${currentPage}...`);
+
+                    let navigationSuccess = false;
+                    let attempts = 0;
+                    const maxAttempts = 3;
+
+                    while (!navigationSuccess && attempts < maxAttempts) {
+                        attempts++;
+                        console.log(`Navigation attempt ${attempts}/${maxAttempts} for page ${currentPage}`);
+
+                        // Try clicking the pagination button
+                        const clickSuccess = await this.clickPaginationButton(currentPage);
+
+                        if (clickSuccess) {
+                            // Verify we're on the correct page
+                            await this.delay(2000);
+                            const verifiedPage = this.getCurrentPageNumber();
+                            console.log(`Page verification: Expected ${currentPage}, Current ${verifiedPage}`);
+
+                            if (verifiedPage === currentPage) {
+                                navigationSuccess = true;
+                                console.log(`Successfully navigated to page ${currentPage}`);
+                            } else {
+                                console.log(`Page verification failed, expected ${currentPage} but got ${verifiedPage}`);
+                            }
+                        }
+
+                        if (!navigationSuccess && attempts < maxAttempts) {
+                            console.log(`Navigation attempt ${attempts} failed, waiting before retry...`);
+                            await this.delay(2000);
+                        }
+                    }
+
+                    // Final fallback: URL navigation
+                    if (!navigationSuccess) {
+                        console.log(`All navigation attempts failed, trying URL navigation as final fallback`);
+                        const pageUrl = this.buildPageUrl(baseUrl, currentPage);
+                        window.location.href = pageUrl;
+                        await this.waitForPageLoad();
+                        await this.delay(3000);
+                        await this.waitForSearchResults();
+                    }
+                }
+
+                // Send status update
+                this.sendCollectionStatus(`Collecting profiles from page ${currentPage}/${maxPages}...`);
+
+                // Collect profiles from current page with retry logic
+                let pageProfiles = [];
+                let retryCount = 0;
+                const maxRetries = 2;
+
+                while (retryCount <= maxRetries) {
+                    console.log(`Attempting to collect profiles from page ${currentPage} (attempt ${retryCount + 1})`);
+                    pageProfiles = await this.collectProfiles();
+
+                    if (pageProfiles.length > 0) {
+                        console.log(`Successfully collected ${pageProfiles.length} profiles on attempt ${retryCount + 1}`);
+                        break; // Successfully collected profiles
+                    }
+
+                    if (retryCount < maxRetries) {
+                        console.log(`No profiles found on page ${currentPage}, retry ${retryCount + 1}/${maxRetries}`);
+                        this.sendCollectionStatus(`Retrying page ${currentPage} (${retryCount + 1}/${maxRetries})...`);
+                        await this.delay(2000); // Wait before retry
+                        retryCount++;
+                    } else {
+                        console.log(`No profiles found on page ${currentPage} after ${maxRetries} retries`);
+                        break;
+                    }
+                }
+
+                if (pageProfiles.length > 0) {
+                    // Add page info to profiles
+                    pageProfiles.forEach(profile => {
+                        profile.collectedFromPage = currentPage;
+                        profile.collectionTimestamp = new Date().toISOString();
+                    });
+
+                    allProfiles.push(...pageProfiles);
+
+                    // Send profiles in real-time
+                    this.sendProfilesRealTime(pageProfiles);
+
+                    console.log(`Collected ${pageProfiles.length} profiles from page ${currentPage}`);
+                } else {
+                    console.log(`No profiles found on page ${currentPage} - continuing to next page`);
+                    // Continue to next page instead of breaking - some pages might be empty
+                }
+
+                currentPage++;
+                console.log(`=== Finished page ${currentPage - 1}, moving to page ${currentPage} ===`);
+
+                // Add delay between pages to avoid rate limiting
+                if (currentPage <= maxPages) {
+                    console.log(`Waiting 2 seconds before processing page ${currentPage}...`);
+                    await this.delay(2000);
+                }
+            }
+
+            // Send final status
+            const pagesProcessed = currentPage - 1;
+            this.sendCollectionStatus(`Collection complete! Found ${allProfiles.length} profiles from ${pagesProcessed} pages (requested ${maxPages} pages).`);
+
+            console.log(`Multi-page collection complete. Total profiles: ${allProfiles.length} from ${pagesProcessed} pages`);
+            return allProfiles;
+
+        } catch (error) {
+            console.error('Error in multi-page collection:', error);
+            this.sendCollectionStatus(`Collection error: ${error.message}`);
+            return allProfiles; // Return what we collected so far
+        }
+    }
+
+    async clickPaginationButton(pageNumber) {
+        try {
+            console.log(`Looking for pagination button for page ${pageNumber}`);
+
+            // First, let's debug what pagination elements exist
+            this.debugPaginationElements();
+
+            // Multiple selectors to find pagination buttons
+            const selectors = [
+                `button[aria-label="Page ${pageNumber}"]`,
+                `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
+                `[data-test-pagination-page-btn="${pageNumber}"]`,
+                `.pagination button[aria-label="Page ${pageNumber}"]`,
+                `button[data-test-pagination-page-btn="${pageNumber}"]`
+            ];
+
+            let pageButton = null;
+
+            // Try each selector
+            for (const selector of selectors) {
+                try {
+                    pageButton = document.querySelector(selector);
+                    if (pageButton) {
+                        console.log(`Found pagination button using selector: ${selector}`);
+                        break;
+                    }
+                } catch (e) {
+                    // Some selectors might not work, continue to next
+                    continue;
+                }
+            }
+
+            // If no button found with aria-label, try finding by text content
+            if (!pageButton) {
+                console.log('Trying to find pagination button by text content...');
+                const allButtons = document.querySelectorAll('button');
+                console.log(`Checking ${allButtons.length} buttons for page ${pageNumber}`);
+
+                for (const button of allButtons) {
+                    const buttonText = button.textContent.trim();
+                    const span = button.querySelector('span');
+                    const spanText = span ? span.textContent.trim() : '';
+
+                    // Check if button text or span text matches the page number
+                    if (buttonText === pageNumber.toString() || spanText === pageNumber.toString()) {
+                        console.log(`Found potential button: text="${buttonText}", span="${spanText}", class="${button.className}"`);
+
+                        // Additional checks to ensure it's a pagination button
+                        const ariaLabel = button.getAttribute('aria-label');
+                        const parentClass = button.parentElement ? button.parentElement.className : '';
+
+                        // Check if it's likely a pagination button
+                        const isPaginationButton =
+                            (ariaLabel && ariaLabel.includes('Page')) ||
+                            parentClass.includes('pagination') ||
+                            button.className.includes('pagination') ||
+                            /^\d+$/.test(buttonText) || // Just a number
+                            /^\d+$/.test(spanText);     // Span contains just a number
+
+                        if (isPaginationButton) {
+                            pageButton = button;
+                            console.log(`Selected pagination button for page ${pageNumber}: aria-label="${ariaLabel}"`);
+                            break;
+                        }
+                    }
+                }
+
+                if (!pageButton) {
+                    console.log(`No pagination button found for page ${pageNumber} by text content`);
+                }
+            }
+
+            if (pageButton) {
+                console.log(`Clicking pagination button for page ${pageNumber}`);
+
+                // Scroll button into view
+                pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.delay(500);
+
+                // Click the button
+                pageButton.click();
+
+                // Wait for navigation to complete
+                await this.delay(3000);
+
+                // Wait for page content to load
+                await this.waitForSearchResults();
+
+                console.log(`Successfully navigated to page ${pageNumber}`);
+                return true;
+            } else {
+                console.log(`Pagination button for page ${pageNumber} not found`);
+
+                // Try alternative approach: use "Next" button multiple times
+                if (pageNumber > 1) {
+                    console.log(`Trying alternative: clicking Next button to reach page ${pageNumber}`);
+                    return await this.clickNextButtonToPage(pageNumber);
+                }
+
+                return false;
+            }
+
+        } catch (error) {
+            console.error(`Error clicking pagination button for page ${pageNumber}:`, error);
+            return false;
+        }
+    }
+
+    getCurrentPageNumber() {
+        try {
+            // Look for the current page button (aria-current="true")
+            const currentPageButton = document.querySelector('button[aria-current="true"]');
+            if (currentPageButton) {
+                const span = currentPageButton.querySelector('span');
+                if (span) {
+                    const pageNum = parseInt(span.textContent.trim());
+                    if (!isNaN(pageNum)) {
+                        return pageNum;
+                    }
+                }
+            }
+
+            // Fallback: check URL for page parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageParam = urlParams.get('page');
+            if (pageParam) {
+                const pageNum = parseInt(pageParam);
+                if (!isNaN(pageNum)) {
+                    return pageNum;
+                }
+            }
+
+            // Default to page 1 if no page indicator found
+            return 1;
+        } catch (error) {
+            console.error('Error getting current page number:', error);
+            return 1;
+        }
+    }
+
+    async clickNextButtonToPage(targetPage) {
+        try {
+            const currentPage = this.getCurrentPageNumber();
+            console.log(`Current page: ${currentPage}, Target page: ${targetPage}`);
+
+            if (currentPage >= targetPage) {
+                console.log('Already on or past target page');
+                return true;
+            }
+
+            const clicksNeeded = targetPage - currentPage;
+            console.log(`Need to click Next button ${clicksNeeded} times`);
+
+            for (let i = 0; i < clicksNeeded; i++) {
+                console.log(`Clicking Next button (${i + 1}/${clicksNeeded})`);
+
+                // Find Next button
+                const nextButton = this.findNextButton();
+                if (!nextButton) {
+                    console.log('Next button not found');
+                    return false;
+                }
+
+                // Click Next button
+                nextButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.delay(500);
+                nextButton.click();
+
+                // Wait for navigation
+                await this.delay(3000);
+                await this.waitForSearchResults();
+
+                // Verify we moved to the next page
+                const newPage = this.getCurrentPageNumber();
+                console.log(`After click ${i + 1}: now on page ${newPage}`);
+
+                if (newPage === targetPage) {
+                    console.log(`Successfully reached target page ${targetPage}`);
+                    return true;
+                }
+            }
+
+            return this.getCurrentPageNumber() === targetPage;
+
+        } catch (error) {
+            console.error('Error in clickNextButtonToPage:', error);
+            return false;
+        }
+    }
+
+    findNextButton() {
+        const nextSelectors = [
+            'button[aria-label="Next"]',
+            'button[aria-label="Next page"]',
+            'button:contains("Next")',
+            '.artdeco-pagination__button--next',
+            'button[data-test-pagination-page-btn="next"]'
+        ];
+
+        for (const selector of nextSelectors) {
+            try {
+                const button = document.querySelector(selector);
+                if (button && !button.disabled) {
+                    return button;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        // Fallback: look for buttons with "Next" text
+        const allButtons = document.querySelectorAll('button');
+        for (const button of allButtons) {
+            if (button.textContent.toLowerCase().includes('next') && !button.disabled) {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    debugPaginationElements() {
+        console.log('=== DEBUGGING PAGINATION ELEMENTS ===');
+
+        // Find all pagination-related elements
+        const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="artdeco-pagination"]');
+        console.log(`Found ${paginationContainers.length} pagination containers`);
+
+        paginationContainers.forEach((container, index) => {
+            console.log(`Pagination container ${index}:`, container.className);
+            const buttons = container.querySelectorAll('button');
+            console.log(`  - Contains ${buttons.length} buttons`);
+
+            buttons.forEach((button, btnIndex) => {
+                const ariaLabel = button.getAttribute('aria-label');
+                const ariaCurrent = button.getAttribute('aria-current');
+                const textContent = button.textContent.trim();
+                const span = button.querySelector('span');
+                const spanText = span ? span.textContent.trim() : '';
+
+                console.log(`    Button ${btnIndex}: aria-label="${ariaLabel}", aria-current="${ariaCurrent}", text="${textContent}", span="${spanText}"`);
+            });
+        });
+
+        // Also check for any buttons that might contain numbers
+        const allButtons = document.querySelectorAll('button');
+        const numberButtons = [];
+        allButtons.forEach(button => {
+            const text = button.textContent.trim();
+            if (/^\d+$/.test(text)) {
+                numberButtons.push({
+                    text: text,
+                    ariaLabel: button.getAttribute('aria-label'),
+                    ariaCurrent: button.getAttribute('aria-current'),
+                    className: button.className
+                });
+            }
+        });
+
+        console.log('Number buttons found:', numberButtons);
+        console.log('=== END PAGINATION DEBUG ===');
+    }
+
+    buildPageUrl(baseUrl, pageNumber) {
+        const separator = baseUrl.includes('?') ? '&' : '?';
+        return `${baseUrl}${separator}page=${pageNumber}`;
+    }
+
+    async waitForPageLoad() {
+        return new Promise((resolve) => {
+            if (document.readyState === 'complete') {
+                resolve();
+            } else {
+                window.addEventListener('load', resolve, { once: true });
+                // Fallback timeout
+                setTimeout(resolve, 5000);
+            }
+        });
+    }
+
+    async waitForSearchResults() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            const checkForResults = () => {
+                attempts++;
+
+                // Check for LinkedIn search result containers
+                const searchResults = document.querySelector('.search-results-container') ||
+                                    document.querySelector('[data-view-name="search-entity-result-universal-template"]') ||
+                                    document.querySelector('.reusable-search__result-container') ||
+                                    document.querySelector('.search-result__wrapper') ||
+                                    document.querySelector('.entity-result');
+
+                if (searchResults || attempts >= maxAttempts) {
+                    console.log(`Search results ${searchResults ? 'found' : 'not found'} after ${attempts} attempts`);
+                    resolve();
+                } else {
+                    setTimeout(checkForResults, 500);
+                }
+            };
+
+            checkForResults();
+        });
+    }
+
+    sendCollectionStatus(message) {
+        try {
+            if (chrome.runtime?.id) {
+                chrome.runtime.sendMessage({
+                    action: 'collectionStatus',
+                    message: message
+                }).catch(() => {
+                    console.log('Status update:', message);
+                });
+            }
+        } catch (error) {
+            console.log('Status update:', message);
+        }
     }
 
     sendProfilesRealTime(profiles) {
