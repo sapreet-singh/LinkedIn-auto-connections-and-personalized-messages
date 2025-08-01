@@ -666,6 +666,69 @@ class LinkedInAutomation {
         return limitedProfiles;
     }
 
+    async collectProfilesWithScrolling() {
+        const profiles = [];
+        const maxScrollAttempts = 5;
+        let scrollAttempts = 0;
+
+        // Initial collection without scrolling
+        let searchResults = this.getSearchResultElements();
+        searchResults.forEach((card) => {
+            if (profiles.length < 20) {
+                const profile = this.extractProfileFromCard(card);
+                if (profile && profile.name && profile.url) {
+                    profile.source = 'network-search';
+                    profiles.push(profile);
+                }
+            }
+        });
+
+        // Scroll to load more profiles
+        while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
+            scrollAttempts++;
+            const initialCount = profiles.length;
+
+            if (scrollAttempts <= 3) {
+                // Scroll down to load more content
+                window.scrollBy(0, window.innerHeight);
+                await this.delay(2000);
+                window.scrollTo(0, document.body.scrollHeight);
+            } else {
+                // Scroll back up
+                window.scrollBy(0, -window.innerHeight);
+                await this.delay(2000);
+
+                if (scrollAttempts === maxScrollAttempts) {
+                    window.scrollTo(0, 0);
+                }
+            }
+
+            await this.delay(2000);
+
+            // Collect newly loaded profiles
+            searchResults = this.getSearchResultElements();
+            searchResults.forEach((card) => {
+                if (profiles.length < 20) {
+                    const profile = this.extractProfileFromCard(card);
+                    if (profile && profile.name && profile.url) {
+                        const isDuplicate = profiles.some(p => p.url === profile.url);
+                        if (!isDuplicate) {
+                            profile.source = 'network-search';
+                            profiles.push(profile);
+                        }
+                    }
+                }
+            });
+
+            // If no new profiles were found, break early
+            if (profiles.length === initialCount) {
+                break;
+            }
+        }
+
+        return profiles;
+    }
+
     async collectMultiplePages(maxPages = 4) {
         const allProfiles = [];
         const baseUrl = window.location.href.split('&page=')[0].split('?page=')[0];
@@ -677,54 +740,12 @@ class LinkedInAutomation {
             while (currentPage <= maxPages) {
                 this.sendCollectionStatus(`Processing page ${currentPage}`);
 
-                if (currentPage > 1) {
-                    this.sendCollectionStatus(`Navigating to page ${currentPage}`);
-                    let navigationSuccess = false;
-                    let attempts = 0;
-                    const maxAttempts = 3;
-
-                    while (!navigationSuccess && attempts < maxAttempts) {
-                        attempts++;
-                        const clickSuccess = await this.clickPaginationButton(currentPage);
-
-                        if (clickSuccess) {
-                            await this.delay(2000);
-                            const verifiedPage = this.getCurrentPageNumber();
-                            if (verifiedPage === currentPage) {
-                                navigationSuccess = true;
-                            }
-                        }
-
-                        if (!navigationSuccess && attempts < maxAttempts) {
-                            await this.delay(2000);
-                        }
-                    }
-
-                    if (!navigationSuccess) {
-                        const pageUrl = this.buildPageUrl(baseUrl, currentPage);
-                        window.location.href = pageUrl;
-                        await this.waitForPageLoad();
-                        await this.delay(3000);
-                        await this.waitForSearchResults();
-
-                        const finalVerifiedPage = this.getCurrentPageNumber();
-                        if (finalVerifiedPage === currentPage) {
-                            navigationSuccess = true;
-                        }
-                    }
-
-                    if (!navigationSuccess) {
-                        this.sendCollectionStatus(`Page ${currentPage} navigation failed - skipping`);
-                        currentPage++;
-                        continue;
-                    }
-                }
-
-                this.sendCollectionStatus(`Collecting from page ${currentPage}`);
+                // First scroll and collect profiles from current page
+                this.sendCollectionStatus(`Scrolling and collecting from page ${currentPage}`);
                 let pageProfiles = [];
 
                 try {
-                    pageProfiles = await this.collectProfiles();
+                    pageProfiles = await this.collectProfilesWithScrolling();
                     if (!Array.isArray(pageProfiles)) pageProfiles = [];
 
                     if (pageProfiles.length === 0) {
@@ -745,11 +766,55 @@ class LinkedInAutomation {
 
                     allProfiles.push(...pageProfiles);
                     this.sendProfilesRealTime(pageProfiles);
-                    this.sendCollectionStatus(`Completed page ${currentPage}`);
+                    this.sendCollectionStatus(`Completed page ${currentPage} with ${pageProfiles.length} profiles`);
+                }
+
+                // Navigate to next page if not the last page
+                if (currentPage < maxPages) {
+                    const nextPage = currentPage + 1;
+                    this.sendCollectionStatus(`Navigating to page ${nextPage}`);
+                    let navigationSuccess = false;
+                    let attempts = 0;
+                    const maxAttempts = 3;
+
+                    while (!navigationSuccess && attempts < maxAttempts) {
+                        attempts++;
+                        const clickSuccess = await this.clickPaginationButton(nextPage);
+
+                        if (clickSuccess) {
+                            await this.delay(2000);
+                            const verifiedPage = this.getCurrentPageNumber();
+                            if (verifiedPage === nextPage) {
+                                navigationSuccess = true;
+                            }
+                        }
+
+                        if (!navigationSuccess && attempts < maxAttempts) {
+                            await this.delay(2000);
+                        }
+                    }
+
+                    if (!navigationSuccess) {
+                        const pageUrl = this.buildPageUrl(baseUrl, nextPage);
+                        window.location.href = pageUrl;
+                        await this.waitForPageLoad();
+                        await this.delay(3000);
+                        await this.waitForSearchResults();
+
+                        const finalVerifiedPage = this.getCurrentPageNumber();
+                        if (finalVerifiedPage === nextPage) {
+                            navigationSuccess = true;
+                        }
+                    }
+
+                    if (!navigationSuccess) {
+                        this.sendCollectionStatus(`Navigation to page ${nextPage} failed - stopping collection`);
+                        break;
+                    }
                 }
 
                 currentPage++;
-                if (currentPage <= maxPages) await this.delay(2000);
+                if (currentPage <= maxPages) await this.delay(1000);
             }
 
             const pagesProcessed = currentPage - 1;
