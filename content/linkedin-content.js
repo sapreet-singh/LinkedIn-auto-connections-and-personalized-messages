@@ -17,39 +17,27 @@ class LinkedInAutomation {
         this.autoProfileObserver = null;
         this.autoCollectionTimeout = null;
         this.processedProfiles = new Set();
-
         this.init();
     }
-    
+
     init() {
         chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             this.handleMessage(message, sendResponse);
         });
-        this.loadSettings();
         this.setupAutoDetection();
         this.setupAutoPopupDetection();
-    }
-    
-    loadSettings() {
-        this.actionDelay = 30 * 1000;
-        this.dailyLimit = 50;
-        this.todayCount = 0;
     }
 
     setupAutoDetection() {
         if (this.isProfilePage() && this.isAutoCollectionEnabled) {
-            setTimeout(() => {
-                this.startAutoCollection();
-            }, 2000);
+            setTimeout(() => this.startAutoCollection(), 2000);
         }
         this.setupPageChangeMonitoring();
     }
 
     isProfilePage() {
         const url = window.location.href;
-        if (url.includes('/in/') && !url.includes('/search/')) {
-            return false;
-        }
+        if (url.includes('/in/') && !url.includes('/search/')) return false;
         return url.includes('linkedin.com/search/results/people') ||
                url.includes('linkedin.com/search/people') ||
                url.includes('linkedin.com/mynetwork') ||
@@ -59,7 +47,6 @@ class LinkedInAutomation {
 
     setupPageChangeMonitoring() {
         let currentUrl = window.location.href;
-
         const urlObserver = new MutationObserver(() => {
             if (window.location.href !== currentUrl) {
                 currentUrl = window.location.href;
@@ -71,11 +58,7 @@ class LinkedInAutomation {
             }
         });
 
-        urlObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
+        urlObserver.observe(document.body, { childList: true, subtree: true });
         window.addEventListener('popstate', () => {
             setTimeout(() => {
                 if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
@@ -86,23 +69,17 @@ class LinkedInAutomation {
     }
 
     setupAutoPopupDetection() {
-        // Auto-open popup when LinkedIn loads
         if (document.readyState === 'complete') {
-            setTimeout(() => {
-                this.showAutoPopup();
-            }, 3000);
+            setTimeout(() => this.showAutoPopup(), 3000);
         } else {
             window.addEventListener('load', () => {
-                setTimeout(() => {
-                    this.showAutoPopup();
-                }, 3000);
+                setTimeout(() => this.showAutoPopup(), 3000);
             });
         }
     }
 
     showAutoPopup() {
         try {
-            // Create and show auto popup notification
             this.createAutoPopupNotification();
         } catch (error) {
             console.error('Error showing auto popup:', error);
@@ -110,30 +87,13 @@ class LinkedInAutomation {
     }
 
     createAutoPopupNotification() {
-        // Remove existing notification if any
         const existing = document.getElementById('linkedin-auto-popup');
-        if (existing) {
-            existing.remove();
-        }
+        if (existing) existing.remove();
 
-        // Create popup notification
         const popup = document.createElement('div');
         popup.id = 'linkedin-auto-popup';
         popup.innerHTML = `
-            <div style="
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
-                color: white;
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 8px 32px rgba(0, 119, 181, 0.3);
-                z-index: 10000;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                max-width: 350px;
-                animation: slideIn 0.5s ease-out;
-            ">
+            <div style="position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, #0077b5 0%, #005885 100%); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 119, 181, 0.3); z-index: 10000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 350px; animation: slideIn 0.5s ease-out;">
                 <div style="display: flex; align-items: center; margin-bottom: 15px;">
                     <div style="font-size: 24px; margin-right: 10px;">🚀</div>
                     <div>
@@ -142,76 +102,37 @@ class LinkedInAutomation {
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button id="open-automation-popup" style="
-                        background: white;
-                        color: #0077b5;
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 6px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        flex: 1;
-                        transition: all 0.2s;
-                    ">Open Tools</button>
-                    <button id="dismiss-popup" style="
-                        background: rgba(255,255,255,0.2);
-                        color: white;
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 6px;
-                        cursor: pointer;
-                        transition: all 0.2s;
-                    ">Dismiss</button>
+                    <button id="open-automation-popup" style="background: white; color: #0077b5; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; flex: 1; transition: all 0.2s;">Open Tools</button>
+                    <button id="dismiss-popup" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">Dismiss</button>
                 </div>
             </div>
-            <style>
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-            </style>
+            <style>@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }</style>
         `;
 
         document.body.appendChild(popup);
 
-        // Add event listeners
-        const openBtn = popup.querySelector('#open-automation-popup');
-        const dismissBtn = popup.querySelector('#dismiss-popup');
-
-        openBtn.addEventListener('click', () => {
-            // Open extension popup by clicking the extension icon programmatically
+        popup.querySelector('#open-automation-popup').addEventListener('click', () => {
             this.openExtensionPopup();
             popup.remove();
         });
 
-        dismissBtn.addEventListener('click', () => {
-            popup.remove();
-        });
+        popup.querySelector('#dismiss-popup').addEventListener('click', () => popup.remove());
 
-        // Auto-dismiss after 10 seconds
         setTimeout(() => {
-            if (popup.parentNode) {
-                popup.remove();
-            }
+            if (popup.parentNode) popup.remove();
         }, 10000);
     }
 
     openExtensionPopup() {
-        // Send message to background script to open popup
         try {
-            chrome.runtime.sendMessage({
-                action: 'openPopup'
-            });
+            chrome.runtime.sendMessage({ action: 'openPopup' });
         } catch (error) {
             console.error('Error opening popup:', error);
         }
     }
 
     async startAutoCollection() {
-        if (this.isAutoCollecting) {
-            return;
-        }
-
+        if (this.isAutoCollecting) return;
         this.isAutoCollecting = true;
 
         try {
@@ -221,17 +142,14 @@ class LinkedInAutomation {
                     url: window.location.href
                 });
             }
-        } catch (error) {
-        }
+        } catch (error) {}
 
         this.collectAndSendProfiles();
         this.setupContinuousMonitoring();
     }
 
     async collectAndSendProfiles() {
-        // Use multi-page collection by default
         const profiles = await this.collectMultiplePages(4);
-
         if (profiles.length > 0) {
             this.sendProfilesRealTime(profiles);
         }
@@ -240,17 +158,13 @@ class LinkedInAutomation {
     setupContinuousMonitoring() {
         const observer = new MutationObserver((mutations) => {
             let hasNewProfiles = false;
-
             mutations.forEach((mutation) => {
                 if (mutation.addedNodes.length > 0) {
                     mutation.addedNodes.forEach((node) => {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             const newProfileCards = node.querySelectorAll ?
                                 node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
-
-                            if (newProfileCards.length > 0) {
-                                hasNewProfiles = true;
-                            }
+                            if (newProfileCards.length > 0) hasNewProfiles = true;
                         }
                     });
                 }
@@ -258,17 +172,11 @@ class LinkedInAutomation {
 
             if (hasNewProfiles) {
                 clearTimeout(this.autoCollectionTimeout);
-                this.autoCollectionTimeout = setTimeout(() => {
-                    this.collectNewProfilesAuto();
-                }, 1500);
+                this.autoCollectionTimeout = setTimeout(() => this.collectNewProfilesAuto(), 1500);
             }
         });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
+        observer.observe(document.body, { childList: true, subtree: true });
         this.autoProfileObserver = observer;
     }
 
@@ -280,7 +188,6 @@ class LinkedInAutomation {
 
         profileCards.forEach((card) => {
             if (card.dataset.autoProcessed) return;
-
             const profile = this.extractProfileFromCard(card);
             if (profile?.name && profile?.url) {
                 newProfiles.push(profile);
@@ -288,57 +195,34 @@ class LinkedInAutomation {
             }
         });
 
-        if (newProfiles.length > 0) {
-            this.sendProfilesRealTime(newProfiles);
-        }
+        if (newProfiles.length > 0) this.sendProfilesRealTime(newProfiles);
     }
 
     stopAutoCollection() {
         this.isAutoCollecting = false;
-
         if (this.autoProfileObserver) {
             this.autoProfileObserver.disconnect();
             this.autoProfileObserver = null;
         }
-
         if (this.autoCollectionTimeout) {
             clearTimeout(this.autoCollectionTimeout);
             this.autoCollectionTimeout = null;
         }
     }
-    
     handleMessage(message, sendResponse) {
         if (!message || !message.action) {
             sendResponse({ error: 'Invalid message format' });
             return;
         }
 
-        switch (message.action) {
-            case 'startAutomation':
-                this.startAutomation(message.campaign);
-                sendResponse({ success: true });
-                break;
-            case 'stopAutomation':
-                this.stopAutomation();
-                sendResponse({ success: true });
-                break;
-            case 'getPageInfo':
-                sendResponse(this.getPageInfo());
-                break;
-            case 'collectProfiles':
-                this.collectProfiles().then(profiles => {
-                    sendResponse({ profiles });
-                });
-                return true;
-            case 'sendDirectMessage':
-                this.handleDirectMessage(message.message, message.profileName, message.profileUrl);
-                sendResponse({ success: true });
-                break;
-            case 'showAutoPopup':
-                this.showAutoPopup();
-                sendResponse({ success: true });
-                break;
-            case 'startRealTimeCollection':
+        const actions = {
+            startAutomation: () => { this.startAutomation(message.campaign); sendResponse({ success: true }); },
+            stopAutomation: () => { this.stopAutomation(); sendResponse({ success: true }); },
+            getPageInfo: () => sendResponse(this.getPageInfo()),
+            collectProfiles: () => { this.collectProfiles().then(profiles => sendResponse({ profiles })); return true; },
+            sendDirectMessage: () => { this.handleDirectMessage(message.message, message.profileName, message.profileUrl); sendResponse({ success: true }); },
+            showAutoPopup: () => { this.showAutoPopup(); sendResponse({ success: true }); },
+            startRealTimeCollection: () => {
                 this.isRealTimeMode = true;
                 this.currentPageCollected = false;
                 setTimeout(() => {
@@ -352,176 +236,116 @@ class LinkedInAutomation {
                                 this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
                             }
                         }
-                    }).catch(error => {
-                        console.error('🚀 CONTENT: Error in real-time collection:', error);
-                    });
+                    }).catch(error => console.error('Error in real-time collection:', error));
                 }, 1000);
-
                 sendResponse({ success: true });
                 return true;
-            case 'startMultiPageCollection':
+            },
+            startMultiPageCollection: () => {
                 this.isRealTimeMode = true;
                 const maxPages = message.maxPages || 4;
                 setTimeout(() => {
                     this.collectMultiplePages(maxPages).then(profiles => {
-                        console.log(`Multi-page collection completed: ${profiles.length} profiles`);
                         sendResponse({ success: true, totalProfiles: profiles.length });
                     }).catch(error => {
-                        console.error('Error in multi-page collection:', error);
                         sendResponse({ success: false, error: error.message });
                     });
                 }, 1000);
-                return true; // Keep message channel open for async response
-            case 'stopRealTimeCollection':
-                this.isRealTimeMode = false;
-                this.currentPageCollected = false;
+                return true;
+            },
+            stopRealTimeCollection: () => { this.isRealTimeMode = false; this.currentPageCollected = false; sendResponse({ success: true }); return true; },
+            stopAutoCollection: () => { this.stopAutoCollection(); sendResponse({ success: true }); return true; },
+            startAutoCollection: () => {
+                if (!this.isAutoCollecting && this.isAutoCollectionEnabled) this.startAutoCollection();
                 sendResponse({ success: true });
                 return true;
-            case 'stopAutoCollection':
-                this.stopAutoCollection();
-                sendResponse({ success: true });
-                return true;
-            case 'startAutoCollection':
-                if (!this.isAutoCollecting && this.isAutoCollectionEnabled) {
-                    this.startAutoCollection();
-                }
-                sendResponse({ success: true });
-                return true;
-            case 'enableAutoCollection':
+            },
+            enableAutoCollection: () => {
                 this.isAutoCollectionEnabled = true;
-                if (this.isProfilePage() && !this.isAutoCollecting) {
-                    this.startAutoCollection();
-                }
+                if (this.isProfilePage() && !this.isAutoCollecting) this.startAutoCollection();
                 sendResponse({ success: true });
                 return true;
-            case 'disableAutoCollection':
-                this.isAutoCollectionEnabled = false;
-                this.stopAutoCollection();
-                sendResponse({ success: true });
-                return true;
-            case 'searchByCompany':
-                this.searchByCompany(message.companyName).then(result => {
-                    sendResponse(result);
-                });
-                return true;
-            case 'searchNetwork':
+            },
+            disableAutoCollection: () => { this.isAutoCollectionEnabled = false; this.stopAutoCollection(); sendResponse({ success: true }); return true; },
+            searchByCompany: () => { this.searchByCompany(message.companyName).then(result => sendResponse(result)); return true; },
+            searchNetwork: () => {
                 this.searchNetwork(message.criteria).then(profiles => {
                     sendResponse({ profiles: profiles || [] });
                 }).catch(error => {
-                    console.error('Error in searchNetwork:', error);
                     sendResponse({ profiles: [], error: error.message });
                 });
                 return true;
-            default:
-                sendResponse({ error: 'Unknown action: ' + message.action });
-        }
+            }
+        };
+
+        return actions[message.action] ? actions[message.action]() : sendResponse({ error: 'Unknown action: ' + message.action });
     }
-    
     isSearchResultsPage() {
-        return window.location.href.includes('/search/people/') ||
-               window.location.href.includes('/search/results/people/');
+        return window.location.href.includes('/search/people/') || window.location.href.includes('/search/results/people/');
     }
-    
+
     startAutomationFromPage() {
-        if (this.todayCount >= this.dailyLimit) {
-            return;
-        }
+        if (this.todayCount >= this.dailyLimit) return;
         this.isRunning = true;
         this.processConnections();
     }
-    
+
     async processConnections() {
         if (!this.isRunning) return;
-        
         const connectButtons = this.findConnectButtons();
-        
         if (connectButtons.length === 0) {
             this.stopAutomation();
             return;
         }
 
         for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
-            if (this.todayCount >= this.dailyLimit) {
-                break;
-            }
-
+            if (this.todayCount >= this.dailyLimit) break;
             const button = connectButtons[i];
             const personInfo = this.extractPersonInfo(button);
 
             try {
                 await this.sendConnectionRequest(button, personInfo);
                 this.todayCount++;
-                if (i < connectButtons.length - 1) {
-                    await this.delay(this.actionDelay);
-                }
+                if (i < connectButtons.length - 1) await this.delay(this.actionDelay);
             } catch (error) {
                 console.error('Error sending connection request:', error);
             }
         }
-
         this.stopAutomation();
     }
-    
     findConnectButtons() {
-        const selectors = [
-            'button[aria-label*="Connect"]',
-            'button[data-control-name="connect"]',
-            '.search-result__actions button[aria-label*="Invite"]'
-        ];
-
+        const selectors = ['button[aria-label*="Connect"]', 'button[data-control-name="connect"]', '.search-result__actions button[aria-label*="Invite"]'];
         const buttons = [];
         selectors.forEach(selector => {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(el => {
-                if ((el.textContent.includes('Connect') || el.getAttribute('aria-label')?.includes('Connect'))
-                    && el.offsetParent !== null) {
+            document.querySelectorAll(selector).forEach(el => {
+                if ((el.textContent.includes('Connect') || el.getAttribute('aria-label')?.includes('Connect')) && el.offsetParent !== null) {
                     buttons.push(el);
                 }
             });
         });
-
         return buttons;
     }
-    
-    extractPersonInfo(connectButton) {
-        const resultCard = connectButton.closest('.search-result') ||
-                           connectButton.closest('.reusable-search__result-container') ||
-                           connectButton.closest('[data-chameleon-result-urn]');
-        
-        let name = 'Unknown';
-        let company = '';
-        let title = '';
-        
-        if (resultCard) {
-            const nameElement = resultCard.querySelector('.entity-result__title-text a') ||
-                               resultCard.querySelector('.search-result__result-link') ||
-                               resultCard.querySelector('[data-anonymize="person-name"]');
-            
-            if (nameElement) {
-                name = nameElement.textContent.trim();
-            }
 
-            const subtitleElement = resultCard.querySelector('.entity-result__primary-subtitle') ||
-                                   resultCard.querySelector('.search-result__truncate');
-            
-            if (subtitleElement) {
-                title = subtitleElement.textContent.trim();
-            }
+    extractPersonInfo(connectButton) {
+        const resultCard = connectButton.closest('.search-result') || connectButton.closest('.reusable-search__result-container') || connectButton.closest('[data-chameleon-result-urn]');
+        let name = 'Unknown', company = '', title = '';
+
+        if (resultCard) {
+            const nameElement = resultCard.querySelector('.entity-result__title-text a') || resultCard.querySelector('.search-result__result-link') || resultCard.querySelector('[data-anonymize="person-name"]');
+            if (nameElement) name = nameElement.textContent.trim();
+
+            const subtitleElement = resultCard.querySelector('.entity-result__primary-subtitle') || resultCard.querySelector('.search-result__truncate');
+            if (subtitleElement) title = subtitleElement.textContent.trim();
         }
-        
         return { name, company, title };
     }
-    
     async sendConnectionRequest(button, personInfo) {
         return new Promise((resolve, reject) => {
             try {
                 button.click();
-
                 setTimeout(() => {
-                    const sendButton = document.querySelector('button[aria-label*="Send without a note"]') ||
-                                     document.querySelector('button[data-control-name="send_invite"]') ||
-                                     document.querySelector('.send-invite__actions button[aria-label*="Send"]');
-                    
+                    const sendButton = document.querySelector('button[aria-label*="Send without a note"]') || document.querySelector('button[data-control-name="send_invite"]') || document.querySelector('.send-invite__actions button[aria-label*="Send"]');
+
                     if (sendButton) {
                         sendButton.click();
                         resolve();
@@ -529,10 +353,7 @@ class LinkedInAutomation {
                         const addNoteButton = document.querySelector('button[aria-label*="Add a note"]');
                         if (addNoteButton) {
                             addNoteButton.click();
-                            
-                            setTimeout(() => {
-                                this.sendCustomMessage(personInfo, resolve, reject);
-                            }, 1000);
+                            setTimeout(() => this.sendCustomMessage(personInfo, resolve, reject), 1000);
                         } else {
                             reject(new Error('Could not find send button'));
                         }
@@ -543,25 +364,19 @@ class LinkedInAutomation {
             }
         });
     }
-    
+
     async sendCustomMessage(personInfo, resolve, reject) {
         try {
-
             const messageTemplate = 'Hi {firstName}, I\'d love to connect with you!';
             const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
-
-            const messageTextarea = document.querySelector('#custom-message') ||
-                                   document.querySelector('textarea[name="message"]') ||
-                                   document.querySelector('.send-invite__custom-message textarea');
+            const messageTextarea = document.querySelector('#custom-message') || document.querySelector('textarea[name="message"]') || document.querySelector('.send-invite__custom-message textarea');
 
             if (messageTextarea) {
                 messageTextarea.value = personalizedMessage;
                 messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
 
                 setTimeout(() => {
-                    const sendButton = document.querySelector('button[aria-label*="Send invitation"]') ||
-                                     document.querySelector('.send-invite__actions button[aria-label*="Send"]');
-
+                    const sendButton = document.querySelector('button[aria-label*="Send invitation"]') || document.querySelector('.send-invite__actions button[aria-label*="Send"]');
                     if (sendButton) {
                         sendButton.click();
                         resolve();
@@ -576,19 +391,12 @@ class LinkedInAutomation {
             reject(error);
         }
     }
-    
+
     personalizeMessage(template, personInfo) {
         const firstName = personInfo.name.split(' ')[0];
         const lastName = personInfo.name.split(' ').slice(1).join(' ');
-        
-        return template
-            .replace(/{firstName}/g, firstName)
-            .replace(/{lastName}/g, lastName)
-            .replace(/{fullName}/g, personInfo.name)
-            .replace(/{company}/g, personInfo.company)
-            .replace(/{title}/g, personInfo.title);
+        return template.replace(/{firstName}/g, firstName).replace(/{lastName}/g, lastName).replace(/{fullName}/g, personInfo.name).replace(/{company}/g, personInfo.company).replace(/{title}/g, personInfo.title);
     }
-    
     startAutomation(campaign) {
         this.currentCampaign = campaign;
         this.startAutomationFromPage();
@@ -600,11 +408,8 @@ class LinkedInAutomation {
 
     async closeChatWindow() {
         try {
-            const primarySelectors = [
-                'button svg[data-test-icon="close-small"]',
-                'button .artdeco-button__icon[data-test-icon="close-small"]',
-                '[data-test-icon="close-small"]'
-            ];
+            const primarySelectors = ['button svg[data-test-icon="close-small"]', 'button .artdeco-button__icon[data-test-icon="close-small"]', '[data-test-icon="close-small"]'];
+            const fallbackSelectors = ['.msg-overlay-bubble-header__control--close', '.msg-overlay-bubble-header__control[aria-label*="Close"]', '.msg-overlay-bubble-header button[aria-label*="Close"]', '.msg-overlay-bubble-header .artdeco-button--circle', 'button[aria-label="Close conversation"]', '.msg-overlay-bubble-header button:last-child'];
 
             for (let attempt = 0; attempt < 5; attempt++) {
                 for (const selector of primarySelectors) {
@@ -619,15 +424,6 @@ class LinkedInAutomation {
                     }
                 }
 
-                const fallbackSelectors = [
-                    '.msg-overlay-bubble-header__control--close',
-                    '.msg-overlay-bubble-header__control[aria-label*="Close"]',
-                    '.msg-overlay-bubble-header button[aria-label*="Close"]',
-                    '.msg-overlay-bubble-header .artdeco-button--circle',
-                    'button[aria-label="Close conversation"]',
-                    '.msg-overlay-bubble-header button:last-child'
-                ];
-
                 for (const selector of fallbackSelectors) {
                     const closeButton = document.querySelector(selector);
                     if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
@@ -636,10 +432,8 @@ class LinkedInAutomation {
                         return true;
                     }
                 }
-
                 await this.delay(1000);
             }
-
             return false;
         } catch (error) {
             console.error('Error closing chat window:', error);
@@ -655,14 +449,12 @@ class LinkedInAutomation {
         try {
             await this.delay(2000);
             const messageButton = await this.findMessageButton();
-
             if (messageButton) {
                 messageButton.click();
                 await this.delay(4000);
                 const messageInput = await this.findMessageInput();
-                if (!messageInput) {
-                    return;
-                }
+                if (!messageInput) return;
+
                 await this.pasteMessageDirectly(messageInput, message);
                 await this.delay(1000);
                 if (!messageInput.textContent.trim() && !messageInput.value) {
@@ -678,31 +470,19 @@ class LinkedInAutomation {
                 await this.closeChatWindow();
                 await this.delay(1000);
             }
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     async findMessageButton() {
         await this.delay(2000);
-        const selectors = [
-            'button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])',
-            'button[data-control-name="message"]',
-            '.pv-s-profile-actions button[aria-label*="Message"]',
-            '.pvs-profile-actions__action button[aria-label*="Message"]',
-            '.message-anywhere-button',
-            'a[data-control-name="message"]'
-        ];
+        const selectors = ['button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])', 'button[data-control-name="message"]', '.pv-s-profile-actions button[aria-label*="Message"]', '.pvs-profile-actions__action button[aria-label*="Message"]', '.message-anywhere-button', 'a[data-control-name="message"]'];
 
         for (const selector of selectors) {
             const button = document.querySelector(selector);
             if (button) {
                 const text = button.textContent.toLowerCase().trim();
                 const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                if (!text.includes('send') &&
-                    !text.includes('share') &&
-                    !ariaLabel.includes('send') &&
-                    !ariaLabel.includes('share') &&
-                    !ariaLabel.includes('post')) {
+                if (!text.includes('send') && !text.includes('share') && !ariaLabel.includes('send') && !ariaLabel.includes('share') && !ariaLabel.includes('post')) {
                     return button;
                 }
             }
@@ -712,13 +492,7 @@ class LinkedInAutomation {
         for (const button of buttons) {
             const text = button.textContent.toLowerCase().trim();
             const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-            if ((text === 'message' || ariaLabel.includes('message')) &&
-                !ariaLabel.includes('send') &&
-                !ariaLabel.includes('share') &&
-                !ariaLabel.includes('post') &&
-                !text.includes('send') &&
-                !text.includes('share') &&
-                !text.includes('more')) {
+            if ((text === 'message' || ariaLabel.includes('message')) && !ariaLabel.includes('send') && !ariaLabel.includes('share') && !ariaLabel.includes('post') && !text.includes('send') && !text.includes('share') && !text.includes('more')) {
                 return button;
             }
         }
@@ -726,16 +500,12 @@ class LinkedInAutomation {
     }
 
     async pasteMessageDirectly(messageInput, message) {
-        if (!messageInput) {
-            return;
-        }
+        if (!messageInput) return;
         messageInput.focus();
         await this.delay(500);
 
         if (messageInput.contentEditable === 'true') {
-            messageInput.innerHTML = '';
             messageInput.innerHTML = `<p>${message}</p>`;
-
             const range = document.createRange();
             const selection = window.getSelection();
             const textNode = messageInput.querySelector('p') || messageInput;
@@ -747,13 +517,7 @@ class LinkedInAutomation {
             messageInput.value = message;
         }
 
-        const events = [
-            new Event('focus', { bubbles: true }),
-            new Event('input', { bubbles: true }),
-            new Event('change', { bubbles: true }),
-            new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }),
-            new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' })
-        ];
+        const events = [new Event('focus', { bubbles: true }), new Event('input', { bubbles: true }), new Event('change', { bubbles: true }), new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }), new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' })];
         for (const event of events) {
             messageInput.dispatchEvent(event);
             await this.delay(100);
@@ -764,31 +528,17 @@ class LinkedInAutomation {
 
     async pasteUsingClipboard(messageInput, message) {
         try {
-
             messageInput.focus();
             await this.delay(300);
-
-
             messageInput.textContent = '';
-
-            // Copy message to clipboard
             await navigator.clipboard.writeText(message);
             await this.delay(200);
 
-            // Simulate Ctrl+V paste
-            const pasteEvent = new ClipboardEvent('paste', {
-                bubbles: true,
-                cancelable: true,
-                clipboardData: new DataTransfer()
-            });
-
+            const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() });
             pasteEvent.clipboardData.setData('text/plain', message);
             messageInput.dispatchEvent(pasteEvent);
-
-            // Trigger input events
             messageInput.dispatchEvent(new Event('input', { bubbles: true }));
             messageInput.dispatchEvent(new Event('change', { bubbles: true }));
-
             await this.delay(500);
         } catch (error) {
             messageInput.textContent = message;
@@ -797,62 +547,33 @@ class LinkedInAutomation {
     }
 
     async findMessageInput() {
-        const selectors = [
-            '.msg-form__contenteditable',
-            '.msg-form__msg-content-container div[contenteditable="true"]',
-            'div[data-placeholder*="message"]',
-            '.compose-form__message-field',
-            'div[contenteditable="true"][data-placeholder]',
-            '.msg-form__msg-content-container--scrollable div[contenteditable="true"]',
-            '.msg-form__placeholder + div[contenteditable="true"]',
-            'div[contenteditable="true"][role="textbox"]',
-            '.msg-form div[contenteditable="true"]'
-        ];
+        const selectors = ['.msg-form__contenteditable', '.msg-form__msg-content-container div[contenteditable="true"]', 'div[data-placeholder*="message"]', '.compose-form__message-field', 'div[contenteditable="true"][data-placeholder]', '.msg-form__msg-content-container--scrollable div[contenteditable="true"]', '.msg-form__placeholder + div[contenteditable="true"]', 'div[contenteditable="true"][role="textbox"]', '.msg-form div[contenteditable="true"]'];
 
         for (let attempt = 0; attempt < 8; attempt++) {
             for (const selector of selectors) {
                 const input = document.querySelector(selector);
-                if (input && input.isContentEditable && input.offsetParent !== null) {
-                    return input;
-                }
+                if (input && input.isContentEditable && input.offsetParent !== null) return input;
             }
+
             const allContentEditables = document.querySelectorAll('div[contenteditable="true"]');
             for (const element of allContentEditables) {
                 if (element.offsetParent === null) continue;
-
-                const placeholder = element.getAttribute('data-placeholder') ||
-                                  element.getAttribute('aria-label') ||
-                                  element.getAttribute('placeholder');
-                if (placeholder && placeholder.toLowerCase().includes('message')) {
-                    return element;
-                }
-
+                const placeholder = element.getAttribute('data-placeholder') || element.getAttribute('aria-label') || element.getAttribute('placeholder');
+                if (placeholder && placeholder.toLowerCase().includes('message')) return element;
                 const parentContainer = element.closest('.msg-form, .compose-form');
-                if (parentContainer) {
-                    return element;
-                }
+                if (parentContainer) return element;
             }
             await this.delay(1000);
         }
-
         return null;
     }
 
     async typeText(element, text) {
-        // For contenteditable divs
         if (element.contentEditable === 'true') {
-            // Focus the element first
             element.focus();
-
-            // Clear existing content if this is the first text
-            if (!element.textContent.trim()) {
-                element.textContent = '';
-            }
-
-            // Add the text
+            if (!element.textContent.trim()) element.textContent = '';
             element.textContent += text;
 
-            // Move cursor to end
             const range = document.createRange();
             const selection = window.getSelection();
             range.selectNodeContents(element);
@@ -860,13 +581,11 @@ class LinkedInAutomation {
             selection.removeAllRanges();
             selection.addRange(range);
 
-            // Trigger comprehensive events
             element.dispatchEvent(new Event('focus', { bubbles: true }));
             element.dispatchEvent(new Event('input', { bubbles: true }));
             element.dispatchEvent(new Event('change', { bubbles: true }));
             element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
         } else {
-            // For regular input/textarea
             element.focus();
             element.value += text;
             element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -876,18 +595,8 @@ class LinkedInAutomation {
     }
 
     async clickSendButton() {
-
         await this.delay(2000);
-
-        const sendSelectors = [
-            '.msg-form__send-button',
-            'button[type="submit"]',
-            '.msg-form button[type="submit"]',
-            'button[data-control-name="send"]',
-            'button[aria-label*="Send"]:not([aria-label*="options"])',
-            '.compose-form__send-button',
-            '.msg-form__send-btn'
-        ];
+        const sendSelectors = ['.msg-form__send-button', 'button[type="submit"]', '.msg-form button[type="submit"]', 'button[data-control-name="send"]', 'button[aria-label*="Send"]:not([aria-label*="options"])', '.compose-form__send-button', '.msg-form__send-btn'];
 
         for (let attempt = 0; attempt < 10; attempt++) {
             for (const selector of sendSelectors) {
@@ -902,27 +611,20 @@ class LinkedInAutomation {
                     }
                 }
             }
+
             const buttons = document.querySelectorAll('button');
             for (const button of buttons) {
                 const text = button.textContent.toLowerCase().trim();
                 const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                if (text === 'send' &&
-                    !text.includes('options') &&
-                    !ariaLabel.includes('options') &&
-                    !button.disabled &&
-                    button.offsetParent !== null &&
-                    button.offsetWidth > 0 &&
-                    button.offsetHeight > 0) {
+                if (text === 'send' && !text.includes('options') && !ariaLabel.includes('options') && !button.disabled && button.offsetParent !== null && button.offsetWidth > 0 && button.offsetHeight > 0) {
                     button.click();
                     await this.delay(1000);
                     return;
                 }
             }
-
             await this.delay(500);
         }
     }
-    
     getPageInfo() {
         return {
             url: window.location.href,
@@ -934,18 +636,9 @@ class LinkedInAutomation {
 
     async collectProfiles() {
         const profiles = [];
+        if (window.location.href.includes('/mynetwork/')) return this.collectNetworkProfiles();
 
-        if (window.location.href.includes('/mynetwork/')) {
-            return this.collectNetworkProfiles();
-        }
-
-        const selectors = [
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            '.search-result',
-            '.entity-result'
-        ];
-
+        const selectors = ['.reusable-search__result-container', '[data-chameleon-result-urn]', '.search-result', '.entity-result'];
         let profileCards = [];
         for (const selector of selectors) {
             profileCards = document.querySelectorAll(selector);
@@ -954,9 +647,7 @@ class LinkedInAutomation {
 
         profileCards.forEach((card) => {
             const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-            }
+            if (profile?.name && profile?.url) profiles.push(profile);
         });
 
         if (profiles.length === 0) {
@@ -965,20 +656,13 @@ class LinkedInAutomation {
                 profiles.push(...alternativeProfiles);
             }
         }
-
         return profiles;
     }
 
     async collectCurrentPageOnly() {
-        // Use existing collectProfiles method but limit results and send real-time
         const allProfiles = await this.collectProfiles();
         const limitedProfiles = allProfiles.slice(0, 10);
-
-        // Send profiles in real-time as they're collected
-        limitedProfiles.forEach(profile => {
-            this.sendProfilesRealTime([profile]);
-        });
-
+        limitedProfiles.forEach(profile => this.sendProfilesRealTime([profile]));
         return limitedProfiles;
     }
 
@@ -987,112 +671,71 @@ class LinkedInAutomation {
         const baseUrl = window.location.href.split('&page=')[0].split('?page=')[0];
         let currentPage = 1;
 
-        console.log(`Starting multi-page collection for ${maxPages} pages`);
-
         try {
-            // Send status update
             this.sendCollectionStatus(`🚀 Starting collection from ${maxPages} pages...`);
 
             while (currentPage <= maxPages) {
-                console.log(`=== Starting collection for page ${currentPage}/${maxPages} ===`);
                 this.sendCollectionStatus(`Processing page ${currentPage}`);
 
-                // Navigate to specific page if not on page 1
                 if (currentPage > 1) {
-                    console.log(`Attempting to navigate to page ${currentPage}...`);
                     this.sendCollectionStatus(`Navigating to page ${currentPage}`);
-
                     let navigationSuccess = false;
                     let attempts = 0;
                     const maxAttempts = 3;
 
                     while (!navigationSuccess && attempts < maxAttempts) {
                         attempts++;
-                        console.log(`Navigation attempt ${attempts}/${maxAttempts} for page ${currentPage}`);
-
-                        // Try clicking the pagination button
                         const clickSuccess = await this.clickPaginationButton(currentPage);
 
                         if (clickSuccess) {
-                            // Verify we're on the correct page
                             await this.delay(2000);
                             const verifiedPage = this.getCurrentPageNumber();
-                            console.log(`Page verification: Expected ${currentPage}, Current ${verifiedPage}`);
-
                             if (verifiedPage === currentPage) {
                                 navigationSuccess = true;
-                                console.log(`Successfully navigated to page ${currentPage}`);
-                            } else {
-                                console.log(`Page verification failed, expected ${currentPage} but got ${verifiedPage}`);
                             }
                         }
 
                         if (!navigationSuccess && attempts < maxAttempts) {
-                            console.log(`Navigation attempt ${attempts} failed, waiting before retry...`);
                             await this.delay(2000);
                         }
                     }
 
-                    // Final fallback: URL navigation
                     if (!navigationSuccess) {
-                        console.log(`All navigation attempts failed, trying URL navigation as final fallback`);
                         const pageUrl = this.buildPageUrl(baseUrl, currentPage);
                         window.location.href = pageUrl;
                         await this.waitForPageLoad();
                         await this.delay(3000);
                         await this.waitForSearchResults();
 
-                        // Verify URL navigation worked
                         const finalVerifiedPage = this.getCurrentPageNumber();
                         if (finalVerifiedPage === currentPage) {
                             navigationSuccess = true;
-                            console.log(`URL navigation successful - now on page ${currentPage}`);
-                        } else {
-                            console.log(`URL navigation failed - expected page ${currentPage}, got page ${finalVerifiedPage}`);
                         }
                     }
 
-                    // Skip this page if navigation completely failed
                     if (!navigationSuccess) {
-                        console.log(`Failed to navigate to page ${currentPage} - skipping this page`);
                         this.sendCollectionStatus(`Page ${currentPage} navigation failed - skipping`);
                         currentPage++;
-                        continue; // Skip to next page
+                        continue;
                     }
                 }
 
-                // Send status update
                 this.sendCollectionStatus(`Collecting from page ${currentPage}`);
-
-                // Collect profiles from current page (single attempt only)
                 let pageProfiles = [];
-
-                console.log(`Collecting profiles from page ${currentPage}`);
 
                 try {
                     pageProfiles = await this.collectProfiles();
+                    if (!Array.isArray(pageProfiles)) pageProfiles = [];
 
-                    // Ensure pageProfiles is always an array
-                    if (!Array.isArray(pageProfiles)) {
-                        console.warn('collectProfiles returned non-array:', pageProfiles);
-                        pageProfiles = [];
-                    }
-
-                    if (pageProfiles.length > 0) {
-                        console.log(`Successfully collected ${pageProfiles.length} profiles from page ${currentPage}`);
-                    } else {
-                        console.log(`No profiles found on page ${currentPage} - skipping to next page`);
+                    if (pageProfiles.length === 0) {
                         this.sendCollectionStatus(`Page ${currentPage} completed (no profiles)`);
                     }
                 } catch (error) {
-                    console.error('Error collecting profiles:', error);
                     pageProfiles = [];
-                    console.log(`Collection failed on page ${currentPage} - skipping to next page`);
                     this.sendCollectionStatus(`Page ${currentPage} failed - skipping`);
                 }
 
                 if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
-                    // Add page info to profiles
                     pageProfiles.forEach(profile => {
                         if (profile && typeof profile === 'object') {
                             profile.collectedFromPage = currentPage;
@@ -1100,40 +743,20 @@ class LinkedInAutomation {
                         }
                     });
 
-                    // Safely add profiles to allProfiles array
                     allProfiles.push(...pageProfiles);
-
-                    // Send profiles in real-time
                     this.sendProfilesRealTime(pageProfiles);
-
-                    console.log(`Collected ${pageProfiles.length} profiles from page ${currentPage}`);
                     this.sendCollectionStatus(`Completed page ${currentPage}`);
-                } else {
-                    console.log(`No profiles found on page ${currentPage} - continuing to next page`);
-                    // Continue to next page instead of breaking - some pages might be empty
                 }
 
                 currentPage++;
-                console.log(`=== Finished page ${currentPage - 1}, moving to page ${currentPage} ===`);
-
-                // Add delay between pages to avoid rate limiting
-                if (currentPage <= maxPages) {
-                    console.log(`Waiting 2 seconds before processing page ${currentPage}...`);
-                    await this.delay(2000);
-                }
+                if (currentPage <= maxPages) await this.delay(2000);
             }
 
-            // Send final status
             const pagesProcessed = currentPage - 1;
             this.sendCollectionStatus(`All pages completed (${pagesProcessed}/${maxPages})`);
-
-            console.log(`Multi-page collection complete. Total profiles: ${allProfiles.length} from ${pagesProcessed} pages`);
             return allProfiles;
 
         } catch (error) {
-            console.error('Error in multi-page collection:', error);
-
-            // Send more user-friendly error message
             let errorMessage = 'Collection error occurred';
             if (error.message.includes('iterable') || error.message.includes('Symbol.iterator')) {
                 errorMessage = 'Profile data format error - collection stopped';
@@ -1144,113 +767,55 @@ class LinkedInAutomation {
             }
 
             this.sendCollectionStatus(errorMessage);
-
-            // Return collected profiles so far instead of empty array
             return Array.isArray(allProfiles) ? allProfiles : [];
         }
     }
 
     async clickPaginationButton(pageNumber) {
         try {
-            console.log(`Looking for pagination button for page ${pageNumber}`);
-
-            // First, let's debug what pagination elements exist
-            this.debugPaginationElements();
-
-            // Multiple selectors to find pagination buttons
-            const selectors = [
-                `button[aria-label="Page ${pageNumber}"]`,
-                `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
-                `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
-                `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
-                `[data-test-pagination-page-btn="${pageNumber}"]`,
-                `.pagination button[aria-label="Page ${pageNumber}"]`,
-                `button[data-test-pagination-page-btn="${pageNumber}"]`
-            ];
+            const selectors = [`button[aria-label="Page ${pageNumber}"]`, `button[aria-current="false"][aria-label="Page ${pageNumber}"]`, `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`, `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`, `[data-test-pagination-page-btn="${pageNumber}"]`, `.pagination button[aria-label="Page ${pageNumber}"]`, `button[data-test-pagination-page-btn="${pageNumber}"]`];
 
             let pageButton = null;
-
-            // Try each selector
             for (const selector of selectors) {
                 try {
                     pageButton = document.querySelector(selector);
-                    if (pageButton) {
-                        console.log(`Found pagination button using selector: ${selector}`);
-                        break;
-                    }
+                    if (pageButton) break;
                 } catch (e) {
-                    // Some selectors might not work, continue to next
                     continue;
                 }
             }
 
-            // If no button found with aria-label, try finding by text content
             if (!pageButton) {
-                console.log('Trying to find pagination button by text content...');
                 const allButtons = document.querySelectorAll('button');
-                console.log(`Checking ${allButtons.length} buttons for page ${pageNumber}`);
-
                 for (const button of allButtons) {
                     const buttonText = button.textContent.trim();
                     const span = button.querySelector('span');
                     const spanText = span ? span.textContent.trim() : '';
 
-                    // Check if button text or span text matches the page number
                     if (buttonText === pageNumber.toString() || spanText === pageNumber.toString()) {
-                        console.log(`Found potential button: text="${buttonText}", span="${spanText}", class="${button.className}"`);
-
-                        // Additional checks to ensure it's a pagination button
                         const ariaLabel = button.getAttribute('aria-label');
                         const parentClass = button.parentElement ? button.parentElement.className : '';
-
-                        // Check if it's likely a pagination button
-                        const isPaginationButton =
-                            (ariaLabel && ariaLabel.includes('Page')) ||
-                            parentClass.includes('pagination') ||
-                            button.className.includes('pagination') ||
-                            /^\d+$/.test(buttonText) || // Just a number
-                            /^\d+$/.test(spanText);     // Span contains just a number
+                        const isPaginationButton = (ariaLabel && ariaLabel.includes('Page')) || parentClass.includes('pagination') || button.className.includes('pagination') || /^\d+$/.test(buttonText) || /^\d+$/.test(spanText);
 
                         if (isPaginationButton) {
                             pageButton = button;
-                            console.log(`Selected pagination button for page ${pageNumber}: aria-label="${ariaLabel}"`);
                             break;
                         }
                     }
                 }
-
-                if (!pageButton) {
-                    console.log(`No pagination button found for page ${pageNumber} by text content`);
-                }
             }
 
             if (pageButton) {
-                console.log(`Clicking pagination button for page ${pageNumber}`);
-
-                // Scroll button into view
                 pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 await this.delay(500);
-
-                // Click the button
                 pageButton.click();
-
-                // Wait for navigation to complete
                 await this.delay(3000);
-
-                // Wait for page content to load
                 await this.waitForSearchResults();
-
-                console.log(`Successfully navigated to page ${pageNumber}`);
                 return true;
             } else {
-                console.log(`Pagination button for page ${pageNumber} not found`);
-
-                // Try alternative approach: use "Next" button multiple times
                 if (pageNumber > 1) {
-                    console.log(`Trying alternative: clicking Next button to reach page ${pageNumber}`);
                     return await this.clickNextButtonToPage(pageNumber);
                 }
-
                 return false;
             }
 
@@ -1373,47 +938,7 @@ class LinkedInAutomation {
         return null;
     }
 
-    debugPaginationElements() {
-        console.log('=== DEBUGGING PAGINATION ELEMENTS ===');
 
-        // Find all pagination-related elements
-        const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="artdeco-pagination"]');
-        console.log(`Found ${paginationContainers.length} pagination containers`);
-
-        paginationContainers.forEach((container, index) => {
-            console.log(`Pagination container ${index}:`, container.className);
-            const buttons = container.querySelectorAll('button');
-            console.log(`  - Contains ${buttons.length} buttons`);
-
-            buttons.forEach((button, btnIndex) => {
-                const ariaLabel = button.getAttribute('aria-label');
-                const ariaCurrent = button.getAttribute('aria-current');
-                const textContent = button.textContent.trim();
-                const span = button.querySelector('span');
-                const spanText = span ? span.textContent.trim() : '';
-
-                console.log(`    Button ${btnIndex}: aria-label="${ariaLabel}", aria-current="${ariaCurrent}", text="${textContent}", span="${spanText}"`);
-            });
-        });
-
-        // Also check for any buttons that might contain numbers
-        const allButtons = document.querySelectorAll('button');
-        const numberButtons = [];
-        allButtons.forEach(button => {
-            const text = button.textContent.trim();
-            if (/^\d+$/.test(text)) {
-                numberButtons.push({
-                    text: text,
-                    ariaLabel: button.getAttribute('aria-label'),
-                    ariaCurrent: button.getAttribute('aria-current'),
-                    className: button.className
-                });
-            }
-        });
-
-        console.log('Number buttons found:', numberButtons);
-        console.log('=== END PAGINATION DEBUG ===');
-    }
 
     buildPageUrl(baseUrl, pageNumber) {
         const separator = baseUrl.includes('?') ? '&' : '?';
@@ -1475,33 +1000,17 @@ class LinkedInAutomation {
     }
 
     sendProfilesRealTime(profiles) {
-        if (!this.isAutoCollectionEnabled) {
-            return;
-        }
+        if (!this.isAutoCollectionEnabled || profiles.length === 0) return;
 
-        if (profiles.length > 0) {
-            if (!chrome.runtime?.id) {
-                this.storeProfilesForPopup(profiles);
-                return;
-            }
-            try {
-                chrome.runtime.sendMessage({
-                    action: 'addProfilesRealTime',
-                    profiles: profiles
-                }).catch(() => {
-                    this.storeProfilesForPopup(profiles);
-                });
-            } catch (error) {
-                this.storeProfilesForPopup(profiles);
-            }
-        }
+        if (!chrome.runtime?.id) return;
+
+        try {
+            chrome.runtime.sendMessage({
+                action: 'addProfilesRealTime',
+                profiles: profiles
+            }).catch(() => {});
+        } catch (error) {}
     }
-
-    storeProfilesForPopup() {
-        // Storage removed - profiles are handled in memory only
-    }
-
-    // Removed duplicate startContinuousCollection() and collectNewProfiles() - functionality exists in setupContinuousMonitoring() and collectNewProfilesAuto()
 
     fixProfileData(profile) {
         if (!profile.name ||
@@ -1556,30 +1065,19 @@ class LinkedInAutomation {
     }
 
     extractProfilesAlternative() {
-        // Alternative extraction method for edge cases
         const profiles = [];
-
-        // Try alternative selectors for profile cards
-        const alternativeSelectors = [
-            '.search-results-container .result-card',
-            '.search-results .search-result__wrapper',
-            '.artdeco-list .artdeco-list__item',
-            '.pvs-list .pvs-list__item'
-        ];
+        const alternativeSelectors = ['.search-results-container .result-card', '.search-results .search-result__wrapper', '.artdeco-list .artdeco-list__item', '.pvs-list .pvs-list__item'];
 
         for (const selector of alternativeSelectors) {
             const cards = document.querySelectorAll(selector);
             if (cards.length > 0) {
                 cards.forEach(card => {
                     const profile = this.extractProfileFromCard(card);
-                    if (profile?.name && profile?.url) {
-                        profiles.push(profile);
-                    }
+                    if (profile?.name && profile?.url) profiles.push(profile);
                 });
-                break; // Stop after finding profiles with first working selector
+                break;
             }
         }
-
         return profiles;
     }
 
@@ -1913,25 +1411,15 @@ class LinkedInAutomation {
     }
 
     getSearchResultElements() {
-        let elements = document.querySelectorAll('.search-result');
-        if (elements.length > 0) return elements;
+        const selectors = ['.search-result', '.reusable-search__result-container', '[data-chameleon-result-urn]', 'li[data-reusable-search-result]', '.entity-result'];
 
-        elements = document.querySelectorAll('.reusable-search__result-container');
-        if (elements.length > 0) return elements;
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) return elements;
+        }
 
-        elements = document.querySelectorAll('[data-chameleon-result-urn]');
-        if (elements.length > 0) return elements;
-
-        elements = document.querySelectorAll('li[data-reusable-search-result]');
-        if (elements.length > 0) return elements;
-
-        elements = document.querySelectorAll('.entity-result');
-        if (elements.length > 0) return elements;
-
-        elements = document.querySelectorAll('li');
-        return Array.from(elements).filter(li => {
-            return li.querySelector('a[href*="/in/"]') || li.querySelector('a[href*="linkedin.com/in/"]');
-        });
+        const elements = document.querySelectorAll('li');
+        return Array.from(elements).filter(li => li.querySelector('a[href*="/in/"]') || li.querySelector('a[href*="linkedin.com/in/"]'));
     }
 
 }
