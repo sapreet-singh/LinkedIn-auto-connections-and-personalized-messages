@@ -40,9 +40,10 @@ class LinkedInAutomation {
         if (url.includes('/in/') && !url.includes('/search/')) return false;
         return url.includes('linkedin.com/search/results/people') ||
                url.includes('linkedin.com/search/people') ||
+               url.includes('linkedin.com/sales/search/people') ||
                url.includes('linkedin.com/mynetwork') ||
                url.includes('linkedin.com/connections') ||
-               (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result'));
+               (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result, .artdeco-entity-lockup'));
     }
 
     setupPageChangeMonitoring() {
@@ -281,7 +282,9 @@ class LinkedInAutomation {
         return actions[message.action] ? actions[message.action]() : sendResponse({ error: 'Unknown action: ' + message.action });
     }
     isSearchResultsPage() {
-        return window.location.href.includes('/search/people/') || window.location.href.includes('/search/results/people/');
+        return window.location.href.includes('/search/people/') ||
+               window.location.href.includes('/search/results/people/') ||
+               window.location.href.includes('/sales/search/people');
     }
 
     startAutomationFromPage() {
@@ -637,6 +640,7 @@ class LinkedInAutomation {
     async collectProfiles() {
         const profiles = [];
         if (window.location.href.includes('/mynetwork/')) return this.collectNetworkProfiles();
+        if (window.location.href.includes('/sales/search/people')) return this.collectSalesNavigatorProfiles();
 
         const selectors = ['.reusable-search__result-container', '[data-chameleon-result-urn]', '.search-result', '.entity-result'];
         let profileCards = [];
@@ -1173,6 +1177,127 @@ class LinkedInAutomation {
         return profiles;
     }
 
+    async collectSalesNavigatorProfiles() {
+        const profiles = [];
+
+        // Sales Navigator specific selectors
+        const selectors = [
+            '.artdeco-entity-lockup',
+            '[data-chameleon-result-urn]',
+            '.search-results__result-item',
+            '.result-lockup',
+            '.entity-result'
+        ];
+
+        let profileCards = [];
+        for (const selector of selectors) {
+            profileCards = document.querySelectorAll(selector);
+            if (profileCards.length > 0) break;
+        }
+
+        profileCards.forEach(card => {
+            const profile = this.extractSalesNavigatorProfile(card);
+            if (profile?.name && profile?.url) {
+                profile.source = 'sales-navigator';
+                profiles.push(profile);
+            }
+        });
+
+        return profiles;
+    }
+
+    extractSalesNavigatorProfile(card) {
+        const profile = {
+            name: '',
+            url: '',
+            company: '',
+            title: '',
+            location: '',
+            industry: '',
+            profilePic: '',
+            collectedAt: new Date().toISOString(),
+            source: 'sales-navigator'
+        };
+
+        try {
+            // Sales Navigator name and URL extraction
+            const nameSelectors = [
+                '.artdeco-entity-lockup__title a',
+                '.result-lockup__name a',
+                'a[href*="/sales/lead/"]',
+                'a[href*="/in/"]'
+            ];
+
+            let nameElement = null;
+            for (const selector of nameSelectors) {
+                nameElement = card.querySelector(selector);
+                if (nameElement) break;
+            }
+
+            if (nameElement) {
+                profile.name = nameElement.textContent?.trim() || '';
+                profile.url = nameElement.href || '';
+            }
+
+            // Company and title extraction
+            const titleSelectors = [
+                '.artdeco-entity-lockup__subtitle',
+                '.result-lockup__highlight-keyword',
+                '.entity-result__primary-subtitle'
+            ];
+
+            for (const selector of titleSelectors) {
+                const titleElement = card.querySelector(selector);
+                if (titleElement) {
+                    const titleText = titleElement.textContent?.trim() || '';
+                    if (titleText.includes(' at ')) {
+                        const parts = titleText.split(' at ');
+                        profile.title = parts[0]?.trim() || '';
+                        profile.company = parts[1]?.trim() || '';
+                    } else {
+                        profile.title = titleText;
+                    }
+                    break;
+                }
+            }
+
+            // Location extraction
+            const locationSelectors = [
+                '.artdeco-entity-lockup__caption',
+                '.result-lockup__misc-item',
+                '.entity-result__secondary-subtitle'
+            ];
+
+            for (const selector of locationSelectors) {
+                const locationElement = card.querySelector(selector);
+                if (locationElement) {
+                    profile.location = locationElement.textContent?.trim() || '';
+                    break;
+                }
+            }
+
+            // Profile picture extraction
+            const imgSelectors = [
+                '.artdeco-entity-lockup__image img',
+                '.result-lockup__image img',
+                '.entity-result__image img'
+            ];
+
+            for (const selector of imgSelectors) {
+                const imgElement = card.querySelector(selector);
+                if (imgElement) {
+                    profile.profilePic = imgElement.src || '';
+                    break;
+                }
+            }
+
+        } catch (error) {
+            console.error('Error extracting Sales Navigator profile:', error);
+        }
+
+        return profile;
+    }
+
     extractProfileFromCard(card, isNetworkPage = false) {
         const profile = {
             name: '',
@@ -1377,7 +1502,58 @@ class LinkedInAutomation {
 
             this.setupContinuousMonitoring();
 
-            if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
+            if (criteria.type === 'sales-navigator' || window.location.href.includes('sales/search/people')) {
+
+                let searchResults = this.getSalesNavigatorResultElements();
+
+                searchResults.forEach((card) => {
+                    if (profiles.length < 20) {
+                        const profile = this.extractSalesNavigatorProfile(card);
+                        if (profile && profile.name && profile.url) {
+                            profile.source = 'sales-navigator';
+                            profiles.push(profile);
+                        }
+                    }
+                });
+
+                while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
+                    scrollAttempts++;
+                    const initialCount = profiles.length;
+
+                    if (scrollAttempts <= 3) {
+                        window.scrollBy(0, window.innerHeight);
+                        await this.delay(2000);
+                        window.scrollTo(0, document.body.scrollHeight);
+                    } else {
+                        window.scrollBy(0, -window.innerHeight);
+                        await this.delay(2000);
+                        if (scrollAttempts === maxScrollAttempts) {
+                            window.scrollTo(0, 0);
+                        }
+                    }
+
+                    await this.delay(2000);
+                    searchResults = this.getSalesNavigatorResultElements();
+                    searchResults.forEach((card) => {
+                        if (profiles.length < 20) {
+                            const profile = this.extractSalesNavigatorProfile(card);
+                            if (profile && profile.name && profile.url) {
+                                const isDuplicate = profiles.some(p => p.url === profile.url);
+                                if (!isDuplicate) {
+                                    profile.source = 'sales-navigator';
+                                    profiles.push(profile);
+                                }
+                            }
+                        }
+                    });
+
+                    const newProfilesCount = profiles.length - initialCount;
+                    if (newProfilesCount === 0 && scrollAttempts >= 2) {
+                        break;
+                    }
+                }
+
+            } else if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
 
                 let searchResults = this.getSearchResultElements();
 
@@ -1485,6 +1661,30 @@ class LinkedInAutomation {
 
         const elements = document.querySelectorAll('li');
         return Array.from(elements).filter(li => li.querySelector('a[href*="/in/"]') || li.querySelector('a[href*="linkedin.com/in/"]'));
+    }
+
+    getSalesNavigatorResultElements() {
+        const selectors = [
+            '.artdeco-entity-lockup',
+            '[data-chameleon-result-urn]',
+            '.search-results__result-item',
+            '.result-lockup',
+            '.entity-result',
+            'li[data-test-result-item]'
+        ];
+
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) return elements;
+        }
+
+        // Fallback for Sales Navigator
+        const elements = document.querySelectorAll('li');
+        return Array.from(elements).filter(li =>
+            li.querySelector('a[href*="/sales/lead/"]') ||
+            li.querySelector('a[href*="/in/"]') ||
+            li.querySelector('.artdeco-entity-lockup')
+        );
     }
 
 }

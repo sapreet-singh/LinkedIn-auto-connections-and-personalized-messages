@@ -718,6 +718,11 @@ footer {
     padding: 20px;
 }
 
+/* Sales Navigator Search Styles */
+.sales-navigator-search-options {
+    padding: 20px;
+}
+
 /* Removed unused search option styles - not used in HTML */
 
 /* Removed unused network-instructions styles - not used in HTML */
