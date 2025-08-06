@@ -45,7 +45,7 @@ class SalesNavigatorFloatingUI {
                 position: fixed !important;
                 top: 20px !important;
                 right: 20px !important;
-                width: 350px !important;
+                width: 420px !important;
                 max-height: 80vh !important;
                 background: white !important;
                 border-radius: 12px !important;
@@ -370,7 +370,12 @@ class SalesNavigatorFloatingUI {
     
             if (!nameElement) return null;
     
-            const name = nameElement.textContent?.trim();
+            let name = nameElement.textContent?.trim();
+            // Remove "is reachable" text from names
+            if (name && name.includes(' is reachable')) {
+                name = name.replace(' is reachable', '').trim();
+            }
+            
             const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
             const location = locationElement?.textContent?.trim() || '';
             const profilePic = imageElement?.src || '';
@@ -395,6 +400,8 @@ class SalesNavigatorFloatingUI {
                 name,
                 url,
                 title,
+                company,
+                location,
                 profilePic,
                 timestamp: Date.now(),
                 source: 'sales-navigator'
@@ -468,13 +475,14 @@ class SalesNavigatorFloatingUI {
             <div class="profile-item">
                 <div class="profile-image">
                     ${profile.profilePic ? 
-                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` : 
+                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` : 
                         `<div class="profile-initial">${profile.name ? profile.name.charAt(0).toUpperCase() : '?'}</div>`
                     }
                 </div>
                 <div class="profile-info">
                     <div class="profile-name" title="${profile.name}">${profile.name}</div>
                     <div class="profile-title" title="${profile.title}">${profile.title}</div>
+                    ${profile.company ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>` : ''}
                     <div class="profile-url" title="${profile.url}" onclick="salesNavUI.copyProfileUrl('${profile.url}')" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
                 </div>
                 <div class="profile-actions">
