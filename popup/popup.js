@@ -462,20 +462,24 @@ const WizardManager = {
             'csv-upload-btn-2': () => DOMCache.get('csv-file-input')?.click(),
             'show-filters': () => chrome.tabs.create({ url: CONSTANTS.URLS.PEOPLE_SEARCH }),
             'start-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.start(); },
-            'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
+             'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
             'show-network-filters': () => NetworkManager.openSearch(),
             'start-network-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startCollecting(); },
             'start-network-multi-page-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startMultiPageCollecting(); },
             'browse-connections': () => NetworkManager.browseConnections(),
             'show-sales-navigator-filters': () => SalesNavigatorManager.openSearch(),
             'start-sales-navigator-collecting': () => { this.showStep(3, 'collecting'); SalesNavigatorManager.startCollecting(); },
-            'start-sales-navigator-multi-page-collecting': () => { this.showStep(3, 'collecting'); SalesNavigatorManager.startMultiPageCollecting(); },
+
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
             'cancel-duplicates': () => DuplicateManager.cancel(),
             'single-message-radio': () => Utils.hideById('follow-up-config'),
             'multi-step-radio': () => Utils.showById('follow-up-config'),
-            'generate-messages': () => MessageGenerator.generateMessages()
+            'generate-messages': () => MessageGenerator.generateMessages(),
+            'collecting-profile': () => {
+                NetworkManager.openSearch();
+                setTimeout(() => NetworkManager.startMultiPageCollecting(), 1000); // Delay to allow filters to open
+            },
         };
 
         Utils.setupEventListeners(eventMap);
@@ -758,10 +762,33 @@ const LaunchManager = {
             launchInterface.classList.add('hidden');
             mainInterface.classList.remove('hidden');
             console.log('Successfully switched to main interface');
+
+            // Setup main interface event listeners
+            this.setupMainInterfaceListeners();
         } else {
             console.error('Could not find interface elements');
             console.error('Launch interface found:', !!launchInterface);
             console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    setupMainInterfaceListeners() {
+        // Setup Sales Navigator button
+        const salesNavBtn = document.getElementById('sales-navigator-btn');
+        if (salesNavBtn && !salesNavBtn.dataset.listenerAttached) {
+            salesNavBtn.addEventListener('click', () => {
+                SalesNavigatorFloatingManager.launch();
+            });
+            salesNavBtn.dataset.listenerAttached = 'true';
+        }
+
+        // Setup Create Campaign button
+        const createCampaignBtn = document.getElementById('create-campaign');
+        if (createCampaignBtn && !createCampaignBtn.dataset.listenerAttached) {
+            createCampaignBtn.addEventListener('click', () => {
+                ModalManager.openCampaignModal();
+            });
+            createCampaignBtn.dataset.listenerAttached = 'true';
         }
     },
 
@@ -909,7 +936,10 @@ const CampaignManager = {
         campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
-
+    create() {
+        // Open the campaign creation modal
+        ModalManager.openCampaignModal();
+    },
 
     finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
@@ -1142,7 +1172,8 @@ const Step4Manager = {
                     const response = await APIService.generateMessage(profile.url);
                     console.log('API Response for', profile.name, ':', response);
 
-                    let message = "Hii";
+                    // Extract message from API response
+                    let message = "Hello dear"; // Default fallback message
 
                     if (response) {
                         if (typeof response === 'string') {
@@ -1944,6 +1975,49 @@ const NetworkManager = {
         if (campaignModal) {
             Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
+        }
+    }
+};
+
+const SalesNavigatorFloatingManager = {
+    async launch() {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const currentTab = tabs[0];
+
+            await chrome.tabs.update(currentTab.id, {
+                url: 'https://www.linkedin.com/sales/search/people?viewAllFilters=true'
+            });
+
+            Utils.showNotification('Opening Sales Navigator...', 'info');
+
+            const checkAndInject = async (attempt = 1) => {
+                try {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: currentTab.id },
+                        files: ['content/linkedin-content.js']
+                    });
+
+                    await chrome.scripting.executeScript({
+                        target: { tabId: currentTab.id },
+                        files: ['content/sales-navigator-ui.js']
+                    });
+
+                    Utils.showNotification('Sales Navigator floating UI launched!', 'success');
+
+                } catch (error) {
+                    if (attempt < 3) {
+                        setTimeout(() => checkAndInject(attempt + 1), 2000);
+                    } else {
+                        Utils.showNotification('Please refresh the page and try again.', 'error');
+                    }
+                }
+            };
+
+            setTimeout(() => checkAndInject(), 3000);
+
+        } catch (error) {
+            Utils.showNotification('Error launching Sales Navigator', 'error');
         }
     }
 };

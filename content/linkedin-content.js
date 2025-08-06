@@ -26,6 +26,74 @@ class LinkedInAutomation {
         });
         this.setupAutoDetection();
         this.setupAutoPopupDetection();
+        this.initSalesNavigatorUI();
+        this.setupPageChangeDetection();
+    }
+
+    setupPageChangeDetection() {
+        // Monitor for page changes during multi-page collection
+        let lastUrl = location.href;
+        const pageChangeObserver = new MutationObserver(() => {
+            const currentUrl = location.href;
+            if (currentUrl !== lastUrl) {
+                lastUrl = currentUrl;
+
+                // If we're in multi-page collection mode, re-initialize
+                if (this.isRealTimeMode && currentUrl.includes('linkedin.com')) {
+                    console.log('Page change detected during collection, re-initializing...');
+                    setTimeout(() => {
+                        this.handlePageChangeInCollection();
+                    }, 2000);
+                }
+            }
+        });
+
+        pageChangeObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    handlePageChangeInCollection() {
+        try {
+            // Re-setup auto detection
+            this.setupAutoDetection();
+
+            // Ensure message listeners are still active
+            if (!window.linkedInPageChangeHandled) {
+                chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+                    this.handleMessage(message, sendResponse);
+                });
+                window.linkedInPageChangeHandled = true;
+            }
+
+            console.log('Page change handling completed');
+        } catch (error) {
+            console.error('Error handling page change:', error);
+        }
+    }
+
+    initSalesNavigatorUI() {
+        if (window.location.href.includes('/sales/search/people') || window.location.href.includes('linkedin.com/sales')) {
+            const script = document.createElement('script');
+            script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
+            document.head.appendChild(script);
+        }
+
+        let lastUrl = location.href;
+        const observer = new MutationObserver(() => {
+            const url = location.href;
+            if (url !== lastUrl) {
+                lastUrl = url;
+                if ((url.includes('/sales/search/people') || url.includes('linkedin.com/sales')) && !document.querySelector('script[src*="sales-navigator-ui.js"]')) {
+                    const script = document.createElement('script');
+                    script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
+                    document.head.appendChild(script);
+                }
+            }
+        });
+
+        observer.observe(document, { subtree: true, childList: true });
     }
 
     setupAutoDetection() {
@@ -150,6 +218,7 @@ class LinkedInAutomation {
     }
 
     async collectAndSendProfiles() {
+        //const profiles = await this.collectProfiles();
         const profiles = await this.collectMultiplePages(4);
         if (profiles.length > 0) {
             this.sendProfilesRealTime(profiles);
@@ -242,7 +311,7 @@ class LinkedInAutomation {
                 sendResponse({ success: true });
                 return true;
             },
-            startMultiPageCollection: () => {
+       startMultiPageCollection: () => {
                 this.isRealTimeMode = true;
                 const maxPages = message.maxPages || 4;
                 setTimeout(() => {
@@ -749,15 +818,30 @@ class LinkedInAutomation {
                 let pageProfiles = [];
 
                 try {
+                    // Wait for page to fully load before collecting
+                    await this.delay(2000);
+                    await this.waitForSearchResults();
+
                     pageProfiles = await this.collectProfilesWithScrolling();
                     if (!Array.isArray(pageProfiles)) pageProfiles = [];
 
                     if (pageProfiles.length === 0) {
-                        this.sendCollectionStatus(`Page ${currentPage} completed (no profiles)`);
+                        // Try alternative collection method
+                        this.sendCollectionStatus(`No profiles found with scrolling, trying alternative method...`);
+                        const alternativeProfiles = this.extractProfilesAlternative();
+                        if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
+                            pageProfiles = alternativeProfiles.slice(0, 10);
+                            this.sendCollectionStatus(`Found ${pageProfiles.length} profiles using alternative method`);
+                        } else {
+                            this.sendCollectionStatus(`Page ${currentPage} completed (no profiles found)`);
+                        }
+                    } else {
+                        this.sendCollectionStatus(`Found ${pageProfiles.length} profiles on page ${currentPage}`);
                     }
                 } catch (error) {
+                    console.error(`Error collecting from page ${currentPage}:`, error);
                     pageProfiles = [];
-                    this.sendCollectionStatus(`Page ${currentPage} failed - skipping`);
+                    this.sendCollectionStatus(`Page ${currentPage} failed - ${error.message}`);
                 }
 
                 if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
@@ -783,37 +867,85 @@ class LinkedInAutomation {
 
                     while (!navigationSuccess && attempts < maxAttempts) {
                         attempts++;
+                        this.sendCollectionStatus(`Attempt ${attempts}/${maxAttempts} to navigate to page ${nextPage}`);
+
                         const clickSuccess = await this.clickPaginationButton(nextPage);
 
                         if (clickSuccess) {
-                            await this.delay(2000);
+                            await this.delay(3000); // Increased wait time
+                            await this.waitForSearchResults(); // Wait for results to load
+
                             const verifiedPage = this.getCurrentPageNumber();
                             if (verifiedPage === nextPage) {
                                 navigationSuccess = true;
+                                this.sendCollectionStatus(`Successfully clicked to page ${nextPage}`);
+                            } else {
+                                this.sendCollectionStatus(`Click navigation failed: expected page ${nextPage}, got ${verifiedPage}`);
                             }
+                        } else {
+                            this.sendCollectionStatus(`Failed to click pagination button for page ${nextPage}`);
                         }
 
                         if (!navigationSuccess && attempts < maxAttempts) {
-                            await this.delay(2000);
+                            await this.delay(3000); // Increased delay between attempts
                         }
                     }
 
                     if (!navigationSuccess) {
                         const pageUrl = this.buildPageUrl(baseUrl, nextPage);
+                        this.sendCollectionStatus(`Direct navigation to page ${nextPage}`);
+
+                        // Store current state before navigation
+                        const currentState = {
+                            isRealTimeMode: this.isRealTimeMode,
+                            isAutoCollecting: this.isAutoCollecting,
+                            processedProfiles: Array.from(this.processedProfiles)
+                        };
+
                         window.location.href = pageUrl;
                         await this.waitForPageLoad();
-                        await this.delay(3000);
+                        await this.delay(5000); // Increased wait time
                         await this.waitForSearchResults();
+
+                        // Re-initialize after page change
+                        this.reinitializeAfterPageChange(currentState);
+                        await this.delay(2000);
 
                         const finalVerifiedPage = this.getCurrentPageNumber();
                         if (finalVerifiedPage === nextPage) {
                             navigationSuccess = true;
+                            this.sendCollectionStatus(`Successfully navigated to page ${nextPage}`);
+                        } else {
+                            this.sendCollectionStatus(`Page verification failed: expected ${nextPage}, got ${finalVerifiedPage}`);
                         }
                     }
 
                     if (!navigationSuccess) {
-                        this.sendCollectionStatus(`Navigation to page ${nextPage} failed - stopping collection`);
-                        break;
+                        this.sendCollectionStatus(`Navigation to page ${nextPage} failed - trying recovery...`);
+
+                        // Try one more recovery attempt with direct URL navigation
+                        try {
+                            const recoveryUrl = this.buildPageUrl(baseUrl, nextPage);
+                            this.sendCollectionStatus(`Recovery attempt: navigating to ${recoveryUrl}`);
+
+                            window.location.href = recoveryUrl;
+                            await this.waitForPageLoad();
+                            await this.delay(6000); // Extra wait time for recovery
+                            await this.waitForSearchResults();
+
+                            const recoveryPage = this.getCurrentPageNumber();
+                            if (recoveryPage === nextPage) {
+                                this.sendCollectionStatus(`Recovery successful - now on page ${nextPage}`);
+                                navigationSuccess = true;
+                            } else {
+                                this.sendCollectionStatus(`Recovery failed - stopping collection at page ${currentPage}`);
+                                break;
+                            }
+                        } catch (recoveryError) {
+                            this.sendCollectionStatus(`Recovery attempt failed - stopping collection`);
+                            console.error('Recovery error:', recoveryError);
+                            break;
+                        }
                     }
                 }
 
@@ -842,21 +974,43 @@ class LinkedInAutomation {
 
     async clickPaginationButton(pageNumber) {
         try {
-            const selectors = [`button[aria-label="Page ${pageNumber}"]`, `button[aria-current="false"][aria-label="Page ${pageNumber}"]`, `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`, `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`, `[data-test-pagination-page-btn="${pageNumber}"]`, `.pagination button[aria-label="Page ${pageNumber}"]`, `button[data-test-pagination-page-btn="${pageNumber}"]`];
+            console.log(`Attempting to click pagination button for page ${pageNumber}`);
+
+            // Enhanced selectors for different LinkedIn layouts
+            const selectors = [
+                `button[aria-label="Page ${pageNumber}"]`,
+                `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
+                `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
+                `[data-test-pagination-page-btn="${pageNumber}"]`,
+                `.pagination button[aria-label="Page ${pageNumber}"]`,
+                `button[data-test-pagination-page-btn="${pageNumber}"]`,
+                `.artdeco-pagination__pages button[aria-label="Page ${pageNumber}"]`,
+                `button[data-test-id="pagination-page-${pageNumber}"]`
+            ];
 
             let pageButton = null;
+
+            // First try direct selectors
             for (const selector of selectors) {
                 try {
                     pageButton = document.querySelector(selector);
-                    if (pageButton) break;
+                    if (pageButton && !pageButton.disabled) {
+                        console.log(`Found pagination button using selector: ${selector}`);
+                        break;
+                    }
                 } catch (e) {
                     continue;
                 }
             }
 
+            // Fallback: search through all buttons
             if (!pageButton) {
+                console.log('Direct selectors failed, searching through all buttons...');
                 const allButtons = document.querySelectorAll('button');
                 for (const button of allButtons) {
+                    if (button.disabled) continue;
+
                     const buttonText = button.textContent.trim();
                     const span = button.querySelector('span');
                     const spanText = span ? span.textContent.trim() : '';
@@ -864,10 +1018,18 @@ class LinkedInAutomation {
                     if (buttonText === pageNumber.toString() || spanText === pageNumber.toString()) {
                         const ariaLabel = button.getAttribute('aria-label');
                         const parentClass = button.parentElement ? button.parentElement.className : '';
-                        const isPaginationButton = (ariaLabel && ariaLabel.includes('Page')) || parentClass.includes('pagination') || button.className.includes('pagination') || /^\d+$/.test(buttonText) || /^\d+$/.test(spanText);
+                        const buttonClass = button.className;
+
+                        const isPaginationButton =
+                            (ariaLabel && ariaLabel.toLowerCase().includes('page')) ||
+                            parentClass.includes('pagination') ||
+                            buttonClass.includes('pagination') ||
+                            /^\d+$/.test(buttonText) ||
+                            /^\d+$/.test(spanText);
 
                         if (isPaginationButton) {
                             pageButton = button;
+                            console.log(`Found pagination button through text search: ${buttonText || spanText}`);
                             break;
                         }
                     }
@@ -875,13 +1037,27 @@ class LinkedInAutomation {
             }
 
             if (pageButton) {
+                console.log(`Clicking pagination button for page ${pageNumber}`);
+
+                // Ensure button is visible and clickable
                 pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.delay(500);
-                pageButton.click();
-                await this.delay(3000);
+                await this.delay(1000);
+
+                // Try multiple click methods
+                try {
+                    pageButton.click();
+                } catch (clickError) {
+                    console.log('Regular click failed, trying dispatch event');
+                    pageButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                }
+
+                await this.delay(4000); // Increased wait time
                 await this.waitForSearchResults();
+
+                console.log(`Successfully clicked pagination button for page ${pageNumber}`);
                 return true;
             } else {
+                console.log(`Pagination button not found for page ${pageNumber}, trying Next button approach`);
                 if (pageNumber > 1) {
                     return await this.clickNextButtonToPage(pageNumber);
                 }
@@ -1029,7 +1205,7 @@ class LinkedInAutomation {
     async waitForSearchResults() {
         return new Promise((resolve) => {
             let attempts = 0;
-            const maxAttempts = 10;
+            const maxAttempts = 15; // Increased attempts
 
             const checkForResults = () => {
                 attempts++;
@@ -1039,18 +1215,46 @@ class LinkedInAutomation {
                                     document.querySelector('[data-view-name="search-entity-result-universal-template"]') ||
                                     document.querySelector('.reusable-search__result-container') ||
                                     document.querySelector('.search-result__wrapper') ||
-                                    document.querySelector('.entity-result');
+                                    document.querySelector('.entity-result') ||
+                                    document.querySelector('.search-result') ||
+                                    document.querySelector('[data-test-id="search-result"]');
 
                 if (searchResults || attempts >= maxAttempts) {
                     console.log(`Search results ${searchResults ? 'found' : 'not found'} after ${attempts} attempts`);
                     resolve();
                 } else {
-                    setTimeout(checkForResults, 500);
+                    setTimeout(checkForResults, 800); // Increased interval
                 }
             };
 
             checkForResults();
         });
+    }
+
+    reinitializeAfterPageChange(previousState) {
+        try {
+            // Restore previous state
+            this.isRealTimeMode = previousState.isRealTimeMode;
+            this.isAutoCollecting = previousState.isAutoCollecting;
+            this.processedProfiles = new Set(previousState.processedProfiles);
+
+            // Re-setup message listeners
+            if (!window.linkedInAutomationReinitialized) {
+                chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+                    this.handleMessage(message, sendResponse);
+                });
+                window.linkedInAutomationReinitialized = true;
+            }
+
+            // Re-setup auto detection if needed
+            if (this.isAutoCollecting) {
+                this.setupAutoDetection();
+            }
+
+            console.log('LinkedIn automation re-initialized after page change');
+        } catch (error) {
+            console.error('Error during re-initialization:', error);
+        }
     }
 
     sendCollectionStatus(message) {

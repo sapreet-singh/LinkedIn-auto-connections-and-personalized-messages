@@ -27,7 +27,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["assets/*"],
+      "resources": ["assets/*", "content/sales-navigator-ui.css", "content/sales-navigator-ui.js"],
       "matches": ["https://www.linkedin.com/*"]
     }
   ]
