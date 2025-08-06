@@ -2076,8 +2076,10 @@ const SalesNavigatorManager = {
 
             Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
 
+            // DISABLE multi-page collection for Sales Navigator
             if (tab.url.includes('sales/search/people')) {
-                this.startMultiPageSearch(tab.id, { type: 'sales-navigator', maxPages: 4, realTime: true });
+                Utils.showNotification('Multi-page collection is disabled for Sales Navigator. Only collecting from the current page.', 'warning');
+                this.startSearch(tab.id, { type: 'sales-navigator', realTime: true });
             } else {
                 this.openSearch();
                 setTimeout(() => this.startMultiPageSearch(tab.id, { type: 'sales-navigator', maxPages: 4, realTime: true }), 3000);
@@ -2100,7 +2102,7 @@ const SalesNavigatorManager = {
                     Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
                 } catch (error) {
                     console.error('Message sending error:', error);
-                    Utils.showNotification('Real-time collection started. Profiles will appear as they are found.', 'info');
+                    Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
             }, 500);
         } catch (error) {

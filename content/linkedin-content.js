@@ -218,8 +218,13 @@ class LinkedInAutomation {
     }
 
     async collectAndSendProfiles() {
-        //const profiles = await this.collectProfiles();
-        const profiles = await this.collectMultiplePages(4);
+        // Only use collectMultiplePages for non-Sales Navigator pages
+        let profiles = [];
+        if (!window.location.href.includes('sales/search/people')) {
+            profiles = await this.collectMultiplePages(4);
+        } else {
+            profiles = await this.collectCurrentPageOnly();
+        }
         if (profiles.length > 0) {
             this.sendProfilesRealTime(profiles);
         }
@@ -709,7 +714,6 @@ class LinkedInAutomation {
     async collectProfiles() {
         const profiles = [];
         if (window.location.href.includes('/mynetwork/')) return this.collectNetworkProfiles();
-        if (window.location.href.includes('/sales/search/people')) return this.collectSalesNavigatorProfiles();
 
         const selectors = ['.reusable-search__result-container', '[data-chameleon-result-urn]', '.search-result', '.entity-result'];
         let profileCards = [];
@@ -1701,8 +1705,8 @@ class LinkedInAutomation {
         try {
 
             const profiles = [];
-            let scrollAttempts = 0;
-            const maxScrollAttempts = 5;
+            // let scrollAttempts = 0;
+            // const maxScrollAttempts = 5;
 
             this.setupContinuousMonitoring();
 
@@ -1719,43 +1723,8 @@ class LinkedInAutomation {
                         }
                     }
                 });
-
-                while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
-                    scrollAttempts++;
-                    const initialCount = profiles.length;
-
-                    if (scrollAttempts <= 3) {
-                        window.scrollBy(0, window.innerHeight);
-                        await this.delay(2000);
-                        window.scrollTo(0, document.body.scrollHeight);
-                    } else {
-                        window.scrollBy(0, -window.innerHeight);
-                        await this.delay(2000);
-                        if (scrollAttempts === maxScrollAttempts) {
-                            window.scrollTo(0, 0);
-                        }
-                    }
-
-                    await this.delay(2000);
-                    searchResults = this.getSalesNavigatorResultElements();
-                    searchResults.forEach((card) => {
-                        if (profiles.length < 20) {
-                            const profile = this.extractSalesNavigatorProfile(card);
-                            if (profile && profile.name && profile.url) {
-                                const isDuplicate = profiles.some(p => p.url === profile.url);
-                                if (!isDuplicate) {
-                                    profile.source = 'sales-navigator';
-                                    profiles.push(profile);
-                                }
-                            }
-                        }
-                    });
-
-                    const newProfilesCount = profiles.length - initialCount;
-                    if (newProfilesCount === 0 && scrollAttempts >= 2) {
-                        break;
-                    }
-                }
+                // Removed pagination automation: do not scroll or load more pages for Sales Navigator
+                // Only collect profiles from the first page
 
             } else if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
 
