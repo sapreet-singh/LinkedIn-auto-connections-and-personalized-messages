@@ -363,21 +363,39 @@ class SalesNavigatorFloatingUI {
 
     extractProfileData(element) {
         try {
-            const nameElement = element.querySelector('a[href*="/sales/lead/"], a[href*="/in/"], .artdeco-entity-lockup__title a, .result-lockup__name a');
-            const titleElement = element.querySelector('.artdeco-entity-lockup__subtitle, .result-lockup__highlight-keyword, .search-result__info .subline-level-1');
-            
+            const nameElement = element.querySelector('a[href*="/sales/lead/"], a[href*="/in/"]');
+            const titleBlock = element.querySelector('.artdeco-entity-lockup__subtitle');
+            const locationElement = element.querySelector('.artdeco-entity-lockup__caption');
+            const imageElement = element.querySelector('img[src*="profile"]');
+    
             if (!nameElement) return null;
-
+    
             const name = nameElement.textContent?.trim();
-            const url = nameElement.href;
-            const title = titleElement?.textContent?.trim() || '';
+            const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
+            const location = locationElement?.textContent?.trim() || '';
+            const profilePic = imageElement?.src || '';
             
-            if (!name || !url) return null;
-
+            let title = '';
+            let company = '';
+    
+            if (titleBlock) {
+                const raw = titleBlock.innerText.trim();
+    
+                // Try to split title from company using " at " separator if present
+                if (raw.includes(' at ')) {
+                    const parts = raw.split(' at ');
+                    title = parts[0]?.trim() || '';
+                    company = parts[1]?.trim() || '';
+                } else {
+                    title = raw;
+                }
+            }
+    
             return {
                 name,
                 url,
                 title,
+                profilePic,
                 timestamp: Date.now(),
                 source: 'sales-navigator'
             };
@@ -396,6 +414,7 @@ class SalesNavigatorFloatingUI {
 
     addProfile(profile) {
         this.profiles.push(profile);
+
         this.updateProfilesList();
         this.updateProfilesCount();
         this.sendProfileToExtension(profile);
@@ -409,7 +428,7 @@ class SalesNavigatorFloatingUI {
                 source: 'sales-navigator-ui'
             });
         } catch (error) {
-            // Extension context might not be available
+
         }
     }
 
@@ -447,17 +466,48 @@ class SalesNavigatorFloatingUI {
 
         listElement.innerHTML = this.profiles.map(profile => `
             <div class="profile-item">
-                <div class="profile-avatar">${profile.name.charAt(0).toUpperCase()}</div>
+                <div class="profile-image">
+                    ${profile.profilePic ? 
+                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` : 
+                        `<div class="profile-initial">${profile.name ? profile.name.charAt(0).toUpperCase() : '?'}</div>`
+                    }
+                </div>
                 <div class="profile-info">
                     <div class="profile-name" title="${profile.name}">${profile.name}</div>
                     <div class="profile-title" title="${profile.title}">${profile.title}</div>
+                    <div class="profile-url" title="${profile.url}" onclick="salesNavUI.copyProfileUrl('${profile.url}')" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
                 </div>
                 <div class="profile-actions">
-                    <button class="profile-action-btn view-profile-btn" onclick="window.open('${profile.url}', '_blank')" title="View Profile">👁</button>
                     <button class="profile-action-btn remove-profile-btn" onclick="salesNavUI.removeProfile('${profile.url}')" title="Remove">✕</button>
                 </div>
             </div>
         `).join('');
+    }
+
+    shortenUrl(url) {
+        if (!url) return '';
+
+        const match = url.match(/\/in\/([^\/\?]+)/);
+        if (match) {
+            return `linkedin.com/in/${match[1]}`;
+        }
+        return url.length > 30 ? url.substring(0, 30) + '...' : url;
+    }
+
+    copyProfileUrl(url) {
+        navigator.clipboard.writeText(url).then(() => {
+
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed; top: 20px; right: 20px; background: #28a745; color: white; 
+                padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;
+            `;
+            notification.textContent = 'Profile URL copied!';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 2000);
+        }).catch(err => {
+            console.error('Failed to copy URL:', err);
+        });
     }
 
     removeProfile(url) {
@@ -474,5 +524,8 @@ class SalesNavigatorFloatingUI {
         }
     }
 }
+
+// Create global instance
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
+window.salesNavUI = new SalesNavigatorFloatingUI();
 }
