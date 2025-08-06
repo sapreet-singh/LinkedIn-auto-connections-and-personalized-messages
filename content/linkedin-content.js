@@ -8,7 +8,7 @@ class LinkedInAutomation {
         this.isRunning = false;
         this.currentCampaign = null;
         this.actionDelay = 30000;
-        this.dailyLimit = 50;
+        this.dailyLimit = 20;
         this.todayCount = 0;
         this.isRealTimeMode = false;
         this.isAutoCollecting = false;

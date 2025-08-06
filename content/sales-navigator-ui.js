@@ -1,4 +1,3 @@
-if (typeof window.SalesNavigatorFloatingUI === 'undefined') {
 class SalesNavigatorFloatingUI {
     constructor() {
         this.isCollecting = false;
@@ -475,4 +474,3 @@ class SalesNavigatorFloatingUI {
     }
 }
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
-}
