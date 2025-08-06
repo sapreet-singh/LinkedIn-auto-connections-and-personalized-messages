@@ -1,3 +1,4 @@
+if (typeof window.SalesNavigatorFloatingUI === 'undefined') {
 class SalesNavigatorFloatingUI {
     constructor() {
         this.isCollecting = false;
@@ -473,21 +474,5 @@ class SalesNavigatorFloatingUI {
         }
     }
 }
-
-function initializeSalesNavUI() {
-    if (window.location.href.includes('linkedin.com/sales')) {
-        if (!window.salesNavUI) {
-            window.salesNavUI = new SalesNavigatorFloatingUI();
-        }
-    }
+window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
 }
-
-initializeSalesNavUI();
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeSalesNavUI);
-} else {
-    initializeSalesNavUI();
-}
-
-setTimeout(initializeSalesNavUI, 3000);

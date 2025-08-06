@@ -75,9 +75,10 @@ class LinkedInAutomation {
 
     initSalesNavigatorUI() {
         if (window.location.href.includes('/sales/search/people') || window.location.href.includes('linkedin.com/sales')) {
-            const script = document.createElement('script');
-            script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
-            document.head.appendChild(script);
+            // Directly initialize the floating UI in the content script context
+            if (!window.salesNavigatorFloatingUI) {
+                window.salesNavigatorFloatingUI = new SalesNavigatorFloatingUI();
+            }
         }
 
         let lastUrl = location.href;
@@ -85,10 +86,8 @@ class LinkedInAutomation {
             const url = location.href;
             if (url !== lastUrl) {
                 lastUrl = url;
-                if ((url.includes('/sales/search/people') || url.includes('linkedin.com/sales')) && !document.querySelector('script[src*="sales-navigator-ui.js"]')) {
-                    const script = document.createElement('script');
-                    script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
-                    document.head.appendChild(script);
+                if ((url.includes('/sales/search/people') || url.includes('linkedin.com/sales')) && !window.salesNavigatorFloatingUI) {
+                    window.salesNavigatorFloatingUI = new SalesNavigatorFloatingUI();
                 }
             }
         });
