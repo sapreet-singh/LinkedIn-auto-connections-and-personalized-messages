@@ -203,12 +203,18 @@ const Utils = {
     },
 
     // Centralized message handling to eliminate duplication
-    sendTabMessage: async (tabId, message) => {
-        try {
-            return await chrome.tabs.sendMessage(tabId, message);
-        } catch (error) {
-            console.error('Error sending tab message:', error);
-            throw error;
+    sendTabMessage: async (tabId, message, retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await chrome.tabs.sendMessage(tabId, message);
+            } catch (error) {
+                if (i === retries - 1) {
+                    console.error('Error sending tab message after retries:', error);
+                    throw error;
+                }
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
     },
 
@@ -838,6 +844,9 @@ const LaunchManager = {
                 target: { tabId },
                 files: ['content/linkedin-content.js']
             });
+
+            // Wait for content script to initialize
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
             // Send message to show auto popup
             await Utils.sendTabMessage(tabId, {
@@ -1737,7 +1746,7 @@ const ProfileCollector = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -1746,7 +1755,7 @@ const ProfileCollector = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1761,7 +1770,7 @@ const ProfileCollector = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startMultiPageCollection',
                         maxPages: searchCriteria.maxPages || 4,
                         criteria: searchCriteria
@@ -1771,7 +1780,7 @@ const ProfileCollector = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1862,7 +1871,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -1871,7 +1880,7 @@ const NetworkManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1886,7 +1895,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startMultiPageCollection',
                         maxPages: searchCriteria.maxPages || 4,
                         criteria: searchCriteria
@@ -1896,7 +1905,7 @@ const NetworkManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -2029,7 +2038,7 @@ const SalesNavigatorManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -2038,7 +2047,7 @@ const SalesNavigatorManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');
@@ -2053,7 +2062,7 @@ const SalesNavigatorManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startMultiPageCollection',
                         maxPages: searchCriteria.maxPages || 4,
                         criteria: searchCriteria
@@ -2063,7 +2072,7 @@ const SalesNavigatorManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');

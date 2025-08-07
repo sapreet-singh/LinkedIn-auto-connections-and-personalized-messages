@@ -1,6 +1,8 @@
 
-if (window.linkedInAutomationInjected) return;
-window.linkedInAutomationInjected = true;
+if (window.linkedInAutomationInjected) {
+    // Script already injected, exit early
+} else {
+    window.linkedInAutomationInjected = true;
 
 class LinkedInAutomation {
     constructor() {
@@ -21,7 +23,7 @@ class LinkedInAutomation {
 
     init() {
         chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-            this.handleMessage(message, sendResponse);
+            return this.handleMessage(message, sendResponse);
         });
         this.setupAutoDetection();
         this.setupAutoPopupDetection();
@@ -59,7 +61,7 @@ class LinkedInAutomation {
             // Ensure message listeners are still active
             if (!window.linkedInPageChangeHandled) {
                 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-                    this.handleMessage(message, sendResponse);
+                    return this.handleMessage(message, sendResponse);
                 });
                 window.linkedInPageChangeHandled = true;
             }
@@ -371,7 +373,7 @@ class LinkedInAutomation {
                 sendResponse({ success: true });
                 return true;
             },
-       startMultiPageCollection: () => {
+            startMultiPageCollection: () => {
                 this.isRealTimeMode = true;
                 const maxPages = message.maxPages || 4;
                 setTimeout(() => {
@@ -1295,7 +1297,7 @@ class LinkedInAutomation {
             // Re-setup message listeners
             if (!window.linkedInAutomationReinitialized) {
                 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-                    this.handleMessage(message, sendResponse);
+                    return this.handleMessage(message, sendResponse);
                 });
                 window.linkedInAutomationReinitialized = true;
             }
@@ -1908,10 +1910,11 @@ class LinkedInAutomation {
 
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            window.linkedInAutomation = new LinkedInAutomation();
+        });
+    } else {
         window.linkedInAutomation = new LinkedInAutomation();
-    });
-} else {
-    window.linkedInAutomation = new LinkedInAutomation();
+    }
 }
