@@ -1,23 +1,73 @@
-if (typeof window.SalesNavigatorFloatingUI === 'undefined') {
 class SalesNavigatorFloatingUI {
     constructor() {
+        console.log('Sales Navigator UI: Constructor called');
+
         this.isCollecting = false;
         this.profiles = [];
         this.observer = null;
         this.collectingInterval = null;
         this.ui = null;
-        this.init();
+        this.currentWorkflowStep = 'collecting'; // 'collecting', 'processing'
+        this.currentProfileIndex = 0;
+        this.generatedMessage = null;
+
+        // Only initialize if on the right page
+        if (this.isSalesNavigatorSearchPage()) {
+            console.log('Sales Navigator UI: On correct page, initializing...');
+            this.init();
+        } else {
+            console.log('Sales Navigator UI: Not on search page, skipping initialization');
+        }
+    }
+
+    isSalesNavigatorSearchPage() {
+        const url = window.location.href;
+        const isSalesNavPage = url.includes('/sales/search/people') &&
+                              url.includes('linkedin.com');
+
+        console.log('Sales Navigator UI: URL check -', url, 'Is Sales Nav Search Page:', isSalesNavPage);
+        return isSalesNavPage;
     }
 
     init() {
+        // Double-check we're on the right page before proceeding
+        if (!this.isSalesNavigatorSearchPage()) {
+            console.log('Sales Navigator UI: Page validation failed in init()');
+            return;
+        }
+
         this.injectCSS();
         this.createUI();
         this.setupEventListeners();
         this.startAutoDetection();
 
-        setTimeout(() => {
-            this.showUI();
-        }, 1000);
+        // Restore workflow state if present
+        const saved = localStorage.getItem('salesNavWorkflow');
+        if (saved) {
+            try {
+                const state = JSON.parse(saved);
+                console.log('Restoring workflow state:', state);
+                this.currentWorkflowStep = state.currentWorkflowStep || 'collecting';
+                this.currentProfileIndex = state.currentProfileIndex || 0;
+                this.profiles = state.profiles || [];
+                this.generatedMessage = state.generatedMessage || null;
+                this.showUI();
+                this.updateProfilesList();
+                this.updateProfilesCount();
+                this.updateUI();
+                if (this.currentWorkflowStep === 'processing') {
+                    console.log('Resuming workflow processing...');
+                    setTimeout(() => this.processNextProfile(), 1000);
+                }
+            } catch (e) {
+                console.error('Error restoring workflow state:', e);
+                localStorage.removeItem('salesNavWorkflow');
+            }
+        } else {
+            setTimeout(() => {
+                this.showUI();
+            }, 1000);
+        }
     }
 
     injectCSS() {
@@ -88,6 +138,77 @@ class SalesNavigatorFloatingUI {
                 background: #ffc107 !important;
                 color: #212529 !important;
             }
+            .sales-nav-btn.next {
+                background: #007bff !important;
+                color: white !important;
+                margin-top: 12px !important;
+            }
+            .sales-nav-btn.next:hover {
+                background: #0056b3 !important;
+            }
+            .workflow-status {
+                background: #e3f2fd !important;
+                border: 1px solid #bbdefb !important;
+                border-radius: 8px !important;
+                padding: 12px 16px !important;
+                margin: 12px 0 !important;
+                text-align: center !important;
+                font-size: 14px !important;
+                color: #1976d2 !important;
+            }
+            .three-dot-menu {
+                position: relative !important;
+                display: inline-block !important;
+            }
+            .three-dot-btn {
+                background: #f8f9fa !important;
+                border: 1px solid #dee2e6 !important;
+                border-radius: 4px !important;
+                padding: 4px 8px !important;
+                cursor: pointer !important;
+                font-size: 12px !important;
+            }
+            .three-dot-menu-content {
+                display: none !important;
+                position: absolute !important;
+                right: 0 !important;
+                background-color: white !important;
+                min-width: 160px !important;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.2) !important;
+                z-index: 10001 !important;
+                border-radius: 4px !important;
+                border: 1px solid #dee2e6 !important;
+            }
+            .three-dot-menu-content.show {
+                display: block !important;
+            }
+            .three-dot-menu-content a {
+                color: #333 !important;
+                padding: 8px 12px !important;
+                text-decoration: none !important;
+                display: block !important;
+                font-size: 12px !important;
+            }
+            .three-dot-menu-content a:hover {
+                background-color: #f8f9fa !important;
+            }
+            .connect-btn {
+                background: #28a745 !important;
+                color: white !important;
+                border: none !important;
+                border-radius: 4px !important;
+                padding: 6px 12px !important;
+                cursor: pointer !important;
+                font-size: 12px !important;
+                margin-top: 8px !important;
+            }
+            .connect-btn:hover {
+                background: #218838 !important;
+            }
+            .connect-btn:disabled {
+                background: #6c757d !important;
+                cursor: not-allowed !important;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -133,6 +254,14 @@ class SalesNavigatorFloatingUI {
                         </div>
                     </div>
                 </div>
+
+                <button class="sales-nav-btn next" id="next-button" style="display: none;">
+                    Next: Process Profiles (0)
+                </button>
+
+                <div class="workflow-status" id="workflow-status" style="display: none;">
+                    <div id="workflow-text">Ready to process profiles</div>
+                </div>
             </div>
         `;
 
@@ -142,6 +271,7 @@ class SalesNavigatorFloatingUI {
     setupEventListeners() {
         const startBtn = this.ui.querySelector('#start-collecting');
         const pauseBtn = this.ui.querySelector('#pause-collecting');
+        const nextBtn = this.ui.querySelector('#next-button');
         const closeBtn = this.ui.querySelector('.sales-nav-close');
         const minimizeBtn = this.ui.querySelector('.sales-nav-minimize');
         const clearBtn = this.ui.querySelector('#clear-profiles');
@@ -149,6 +279,7 @@ class SalesNavigatorFloatingUI {
 
         startBtn.addEventListener('click', () => this.startCollecting());
         pauseBtn.addEventListener('click', () => this.pauseCollecting());
+        nextBtn.addEventListener('click', () => this.startWorkflow());
         closeBtn.addEventListener('click', () => this.closeUI());
         minimizeBtn.addEventListener('click', () => this.toggleMinimize());
         clearBtn.addEventListener('click', () => this.clearProfiles());
@@ -206,7 +337,8 @@ class SalesNavigatorFloatingUI {
     }
 
     startAutoDetection() {
-        if (window.location.href.includes('/sales/search/people')) {
+        // Show UI on any LinkedIn Sales Navigator page (search or profile)
+        if (window.location.href.includes('/sales/') || window.location.href.includes('/in/')) {
             setTimeout(() => this.showUI(), 2000);
         }
 
@@ -215,7 +347,7 @@ class SalesNavigatorFloatingUI {
             const url = location.href;
             if (url !== lastUrl) {
                 lastUrl = url;
-                if (url.includes('/sales/search/people')) {
+                if (url.includes('/sales/') || url.includes('/sales/search/people')) {
                     setTimeout(() => this.showUI(), 2000);
                 }
             }
@@ -224,13 +356,13 @@ class SalesNavigatorFloatingUI {
         urlObserver.observe(document, { subtree: true, childList: true });
 
         window.addEventListener('popstate', () => {
-            if (window.location.href.includes('/sales/search/people')) {
+            if (window.location.href.includes('/sales/') || window.location.href.includes('/sales/search/people')) {
                 setTimeout(() => this.showUI(), 2000);
             }
         });
 
         setTimeout(() => {
-            if (window.location.href.includes('/sales/search/people')) {
+            if (window.location.href.includes('/sales/') || window.location.href.includes('/sales/search/people')) {
                 this.showUI();
             }
         }, 5000);
@@ -442,6 +574,7 @@ class SalesNavigatorFloatingUI {
     updateUI() {
         const startBtn = this.ui.querySelector('#start-collecting');
         const pauseBtn = this.ui.querySelector('#pause-collecting');
+        const nextBtn = this.ui.querySelector('#next-button');
         const statusDot = this.ui.querySelector('#status-dot');
         const statusText = this.ui.querySelector('#status-text');
 
@@ -455,12 +588,30 @@ class SalesNavigatorFloatingUI {
             pauseBtn.disabled = true;
             statusDot.className = 'status-dot paused';
             statusText.textContent = 'Collection paused';
+            
+            // Show Next button if profiles are collected
+            if (this.profiles.length > 0) {
+                nextBtn.style.display = 'block';
+                nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+            } else {
+                nextBtn.style.display = 'none';
+            }
         }
     }
 
     updateProfilesCount() {
         const countElement = this.ui.querySelector('#profiles-count');
+        const nextBtn = this.ui.querySelector('#next-button');
+        
         countElement.textContent = this.profiles.length;
+        
+        // Show Next button if profiles are collected and not currently collecting
+        if (this.profiles.length > 0 && !this.isCollecting) {
+            nextBtn.style.display = 'block';
+            nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+        } else if (this.profiles.length === 0) {
+            nextBtn.style.display = 'none';
+        }
     }
 
     updateProfilesList() {
@@ -529,11 +680,312 @@ class SalesNavigatorFloatingUI {
             this.profiles = [];
             this.updateProfilesList();
             this.updateProfilesCount();
+            this.updateUI();
         }
+    }
+
+    // New workflow methods
+    startWorkflow() {
+        if (this.profiles.length === 0) {
+            alert('No profiles to process');
+            return;
+        }
+
+        console.log('Starting workflow with', this.profiles.length, 'profiles');
+        this.currentWorkflowStep = 'processing';
+        this.currentProfileIndex = 0;
+        this.generatedMessage = null;
+        
+        this.updateWorkflowUI();
+        this.processNextProfile();
+    }
+
+    updateWorkflowUI() {
+        const workflowStatus = this.ui.querySelector('#workflow-status');
+        const workflowText = this.ui.querySelector('#workflow-text');
+        const nextBtn = this.ui.querySelector('#next-button');
+
+        workflowStatus.style.display = 'block';
+        nextBtn.style.display = 'none';
+
+        if (this.currentWorkflowStep === 'processing') {
+            const currentProfile = this.profiles[this.currentProfileIndex];
+            workflowText.textContent = `Processing: ${currentProfile.name} (${this.currentProfileIndex + 1}/${this.profiles.length})`;
+        }
+    }
+
+    async processNextProfile() {
+        if (this.currentProfileIndex >= this.profiles.length) {
+            this.completeWorkflow();
+            return;
+        }
+
+        const profile = this.profiles[this.currentProfileIndex];
+        console.log('Processing profile:', profile.name, 'at index:', this.currentProfileIndex);
+        this.updateWorkflowUI();
+
+        try {
+            // Check if we're already on the profile page
+            const currentUrl = window.location.href;
+            const isOnProfilePage = currentUrl.includes(profile.url) || 
+                                  (currentUrl.includes('/in/') && currentUrl.includes(profile.name?.toLowerCase().replace(/\s+/g, '')));
+
+            console.log('Current URL:', currentUrl);
+            console.log('Profile URL:', profile.url);
+            console.log('Is on profile page:', isOnProfilePage);
+
+            if (!isOnProfilePage) {
+                // Step 1: Open profile URL
+                console.log('Not on profile page, navigating...');
+                await this.openProfileUrl(profile.url);
+                return; // Navigation will trigger page reload, workflow will continue on new page
+            } else {
+                // We're already on the profile page, continue with workflow
+                console.log('Already on profile page, continuing workflow...');
+                
+                // Step 2: Wait for page to load
+                await this.waitForPageLoad();
+                
+                // Step 3: Show three-dot menu and copy URL
+                await this.showThreeDotMenu();
+                
+                // Step 4: Call API to generate message
+                await this.generateMessageFromAPI(profile.url);
+                
+                // Step 5: Show three-dot menu again
+                await this.showThreeDotMenu();
+                
+                // Step 6: Click connect button
+                await this.clickConnectButton();
+                
+                // Step 7: Wait and move to next profile
+                await this.wait(2000);
+                this.currentProfileIndex++;
+                this.processNextProfile();
+            }
+
+        } catch (error) {
+            console.error('Error processing profile:', error);
+            this.currentProfileIndex++;
+            this.processNextProfile();
+        }
+    }
+
+    async openProfileUrl(url) {
+        const workflowText = this.ui.querySelector('#workflow-text');
+        workflowText.textContent = 'Opening profile URL...';
+        console.log('Navigating to profile URL:', url);
+        
+        // Save workflow state before navigation
+        const state = {
+            currentWorkflowStep: this.currentWorkflowStep,
+            currentProfileIndex: this.currentProfileIndex,
+            profiles: this.profiles,
+            generatedMessage: this.generatedMessage
+        };
+        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+        console.log('Saved workflow state before navigation:', state);
+        
+        window.location.href = url;
+    }
+
+    async waitForPageLoad() {
+        const workflowText = this.ui.querySelector('#workflow-text');
+        workflowText.textContent = 'Waiting for page to load...';
+        
+        return new Promise(resolve => {
+            setTimeout(resolve, 3000);
+        });
+    }
+
+    async showThreeDotMenu() {
+        const workflowText = this.ui.querySelector('#workflow-text');
+        workflowText.textContent = 'Looking for three-dot menu...';
+        
+        // Look for three-dot menu button with more comprehensive selectors
+        const threeDotSelectors = [
+            'button[aria-label*="More"]',
+            'button[aria-label*="more"]',
+            'button[aria-label*="More actions"]',
+            'button[aria-label*="more actions"]',
+            '.artdeco-dropdown__trigger',
+            '[data-control-name="profile_more_actions"]',
+            'button[data-control-name="profile_more_actions"]',
+            'button[data-control-name="more_actions"]',
+            'button[aria-label*="More actions for"]',
+            'button[aria-label*="more actions for"]',
+            'button[data-control-name="profile_actions"]',
+            'button[aria-label*="More options"]',
+            'button[aria-label*="more options"]',
+            '.artdeco-button[aria-label*="More"]',
+            '.artdeco-button[aria-label*="more"]'
+        ];
+
+        let threeDotButton = null;
+        for (const selector of threeDotSelectors) {
+            threeDotButton = document.querySelector(selector);
+            if (threeDotButton) {
+                console.log('Found three-dot button with selector:', selector);
+                break;
+            }
+        }
+
+        if (threeDotButton) {
+            threeDotButton.click();
+            await this.wait(1000);
+            
+            // Look for "Copy profile URL" option with more comprehensive selectors
+            const copyUrlSelectors = [
+                'a[href*="copy-profile-url"]',
+                'a[aria-label*="Copy profile URL"]',
+                'a[aria-label*="copy profile url"]',
+                'a[data-control-name="copy_profile_url"]',
+                'a[data-control-name="copy_profile_link"]',
+                'a[aria-label*="Copy link"]',
+                'a[aria-label*="copy link"]',
+                'a[aria-label*="Copy profile link"]',
+                'a[aria-label*="copy profile link"]',
+                'a:contains("Copy profile URL")',
+                'a:contains("copy profile url")',
+                'a:contains("Copy link")',
+                'a:contains("copy link")',
+                'a:contains("Copy profile link")',
+                'a:contains("copy profile link")'
+            ];
+
+            let copyUrlLink = null;
+            for (const selector of copyUrlSelectors) {
+                copyUrlLink = document.querySelector(selector);
+                if (copyUrlLink) {
+                    console.log('Found copy URL link with selector:', selector);
+                    break;
+                }
+            }
+
+            if (copyUrlLink) {
+                copyUrlLink.click();
+                workflowText.textContent = 'Profile URL copied';
+                await this.wait(500);
+            } else {
+                console.log('Copy URL link not found');
+                workflowText.textContent = 'Copy URL link not found';
+                await this.wait(500);
+            }
+        } else {
+            console.log('Three-dot button not found');
+            workflowText.textContent = 'Three-dot menu not found';
+            await this.wait(500);
+        }
+    }
+
+    async generateMessageFromAPI(profileUrl) {
+        const workflowText = this.ui.querySelector('#workflow-text');
+        workflowText.textContent = 'Generating message from API...';
+
+        try {
+            const response = await fetch('http://localhost:7008/api/linkedin/messages', {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: profileUrl
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            // Store the message in message1 variable
+            this.generatedMessage = data;
+            
+            workflowText.textContent = 'Message generated successfully';
+            await this.wait(1000);
+
+        } catch (error) {
+            console.error('Error generating message:', error);
+            workflowText.textContent = 'Failed to generate message';
+            await this.wait(1000);
+        }
+    }
+
+    async clickConnectButton() {
+        const workflowText = this.ui.querySelector('#workflow-text');
+        workflowText.textContent = 'Looking for connect button...';
+        
+        // Look for connect button with more comprehensive selectors
+        const connectSelectors = [
+            'button[aria-label*="Connect"]',
+            'button[aria-label*="connect"]',
+            'button[data-control-name="connect"]',
+            'button[data-control-name="invite"]',
+            '.artdeco-button[data-control-name="connect"]',
+            '.artdeco-button[data-control-name="invite"]',
+            'button[data-control-name="connect_with_message"]',
+            'button[data-control-name="invite_with_message"]',
+            '.artdeco-button[data-control-name="connect_with_message"]',
+            '.artdeco-button[data-control-name="invite_with_message"]',
+            'button:contains("Connect")',
+            'button:contains("connect")',
+            'button:contains("Invite")',
+            'button:contains("invite")',
+            'button[aria-label*="Invite"]',
+            'button[aria-label*="invite"]',
+            'button[aria-label*="Send invitation"]',
+            'button[aria-label*="send invitation"]',
+            'button[aria-label*="Send invite"]',
+            'button[aria-label*="send invite"]'
+        ];
+
+        let connectButton = null;
+        for (const selector of connectSelectors) {
+            connectButton = document.querySelector(selector);
+            if (connectButton) {
+                console.log('Found connect button with selector:', selector);
+                break;
+            }
+        }
+
+        if (connectButton) {
+            connectButton.click();
+            workflowText.textContent = 'Connect button clicked';
+            await this.wait(1000);
+        } else {
+            console.log('Connect button not found');
+            workflowText.textContent = 'Connect button not found';
+            await this.wait(1000);
+        }
+    }
+
+    async wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    completeWorkflow() {
+        const workflowStatus = this.ui.querySelector('#workflow-status');
+        const workflowText = this.ui.querySelector('#workflow-text');
+        const nextBtn = this.ui.querySelector('#next-button');
+
+        workflowText.textContent = `Workflow completed! Processed ${this.profiles.length} profiles`;
+        workflowStatus.style.background = '#d4edda';
+        workflowStatus.style.borderColor = '#c3e6cb';
+        workflowStatus.style.color = '#155724';
+
+        // Clear workflow state
+        localStorage.removeItem('salesNavWorkflow');
+
+        setTimeout(() => {
+            workflowStatus.style.display = 'none';
+            nextBtn.style.display = 'block';
+            nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+        }, 3000);
     }
 }
 
-// Create global instance
+// Expose class globally but don't auto-instantiate
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
-window.salesNavUI = new SalesNavigatorFloatingUI();
-}
+console.log('Sales Navigator UI: Class exposed globally', !!window.SalesNavigatorFloatingUI);

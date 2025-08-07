@@ -73,26 +73,110 @@ class LinkedInAutomation {
         }
     }
 
-    initSalesNavigatorUI() {
-        if (window.location.href.includes('/sales/search/people') || window.location.href.includes('linkedin.com/sales')) {
-            // Directly initialize the floating UI in the content script context
-            if (!window.salesNavigatorFloatingUI) {
-                window.salesNavigatorFloatingUI = new SalesNavigatorFloatingUI();
-            }
+    async initSalesNavigatorUI() {
+        console.log('LinkedIn Automation: initSalesNavigatorUI called');
+        // Only initialize on Sales Navigator search pages
+        if (this.isSalesNavigatorSearchPage()) {
+            console.log('LinkedIn Automation: On Sales Navigator page, loading UI...');
+            await this.loadSalesNavigatorUI();
+        } else {
+            console.log('LinkedIn Automation: Not on Sales Navigator page, skipping UI initialization');
         }
 
+        // Monitor for page changes to Sales Navigator search pages
         let lastUrl = location.href;
-        const observer = new MutationObserver(() => {
+        const observer = new MutationObserver(async () => {
             const url = location.href;
             if (url !== lastUrl) {
                 lastUrl = url;
-                if ((url.includes('/sales/search/people') || url.includes('linkedin.com/sales')) && !window.salesNavigatorFloatingUI) {
-                    window.salesNavigatorFloatingUI = new SalesNavigatorFloatingUI();
+
+                // Only create UI on Sales Navigator search pages
+                if (this.isSalesNavigatorSearchPage() && !window.salesNavigatorFloatingUI) {
+                    await this.loadSalesNavigatorUI();
+                } else if (!this.isSalesNavigatorSearchPage() && window.salesNavigatorFloatingUI) {
+                    // Remove UI when leaving Sales Navigator search pages
+                    if (window.salesNavigatorFloatingUI.ui) {
+                        window.salesNavigatorFloatingUI.ui.remove();
+                    }
+                    window.salesNavigatorFloatingUI = null;
                 }
             }
         });
 
         observer.observe(document, { subtree: true, childList: true });
+    }
+
+    async loadSalesNavigatorUI() {
+        try {
+            console.log('LinkedIn Automation: loadSalesNavigatorUI called');
+            console.log('LinkedIn Automation: SalesNavigatorFloatingUI exists?', !!window.SalesNavigatorFloatingUI);
+            console.log('LinkedIn Automation: Is Sales Nav page?', this.isSalesNavigatorSearchPage());
+
+            // Only load if not already loaded and we're on the right page
+            if (window.SalesNavigatorFloatingUI) {
+                console.log('LinkedIn Automation: SalesNavigatorFloatingUI already loaded, creating instance');
+                if (!window.salesNavigatorFloatingUI) {
+                    window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
+                }
+                return;
+            }
+
+            if (!this.isSalesNavigatorSearchPage()) {
+                console.log('LinkedIn Automation: Not on Sales Navigator page, skipping UI load');
+                return;
+            }
+
+            console.log('LinkedIn Automation: Loading Sales Navigator UI script...');
+
+            // Use the simpler script loading method
+            const script = document.createElement('script');
+            script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
+
+            script.onload = () => {
+                console.log('LinkedIn Automation: Sales Navigator UI script loaded');
+
+                // Add multiple checks with increasing delays
+                const checkAndCreate = (attempt = 1) => {
+                    console.log(`LinkedIn Automation: Attempt ${attempt} - Checking for SalesNavigatorFloatingUI...`);
+                    console.log('LinkedIn Automation: window.SalesNavigatorFloatingUI available?', !!window.SalesNavigatorFloatingUI);
+
+                    if (window.SalesNavigatorFloatingUI && !window.salesNavigatorFloatingUI) {
+                        console.log('LinkedIn Automation: Creating SalesNavigatorFloatingUI instance');
+                        try {
+                            window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
+                            console.log('LinkedIn Automation: SalesNavigatorFloatingUI instance created successfully');
+                        } catch (error) {
+                            console.error('LinkedIn Automation: Error creating SalesNavigatorFloatingUI instance:', error);
+                        }
+                    } else if (!window.SalesNavigatorFloatingUI && attempt < 5) {
+                        // Try again with longer delay
+                        setTimeout(() => checkAndCreate(attempt + 1), attempt * 100);
+                    } else {
+                        console.log('LinkedIn Automation: Failed to create instance after', attempt, 'attempts - class available?', !!window.SalesNavigatorFloatingUI, 'instance exists?', !!window.salesNavigatorFloatingUI);
+                    }
+                };
+
+                // Start checking immediately, then with delays
+                checkAndCreate();
+            };
+
+            script.onerror = (error) => {
+                console.error('LinkedIn Automation: Error loading Sales Navigator UI script:', error);
+            };
+
+            document.head.appendChild(script);
+        } catch (error) {
+            console.error('Error loading Sales Navigator UI:', error);
+        }
+    }
+
+    isSalesNavigatorSearchPage() {
+        const url = window.location.href;
+        const isSalesNavPage = url.includes('/sales/search/people') &&
+                              url.includes('linkedin.com');
+
+        console.log('LinkedIn Automation: URL check -', url, 'Is Sales Nav Search Page:', isSalesNavPage);
+        return isSalesNavPage;
     }
 
     setupAutoDetection() {

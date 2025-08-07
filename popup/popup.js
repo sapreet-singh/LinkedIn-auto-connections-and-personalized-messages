@@ -1985,36 +1985,18 @@ const SalesNavigatorFloatingManager = {
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const currentTab = tabs[0];
 
+            // Navigate to Sales Navigator search page
             await chrome.tabs.update(currentTab.id, {
                 url: 'https://www.linkedin.com/sales/search/people?viewAllFilters=true'
             });
 
             Utils.showNotification('Opening Sales Navigator...', 'info');
 
-            const checkAndInject = async (attempt = 1) => {
-                try {
-                    await chrome.scripting.executeScript({
-                        target: { tabId: currentTab.id },
-                        files: ['content/linkedin-content.js']
-                    });
-
-                    await chrome.scripting.executeScript({
-                        target: { tabId: currentTab.id },
-                        files: ['content/sales-navigator-ui.js']
-                    });
-
-                    Utils.showNotification('Sales Navigator floating UI launched!', 'success');
-
-                } catch (error) {
-                    if (attempt < 3) {
-                        setTimeout(() => checkAndInject(attempt + 1), 2000);
-                    } else {
-                        Utils.showNotification('Please refresh the page and try again.', 'error');
-                    }
-                }
-            };
-
-            setTimeout(() => checkAndInject(), 3000);
+            // Wait for page to load, then the content script will automatically detect
+            // it's on a Sales Navigator page and load the UI
+            setTimeout(() => {
+                Utils.showNotification('Sales Navigator opened! The floating UI will appear automatically.', 'success');
+            }, 3000);
 
         } catch (error) {
             Utils.showNotification('Error launching Sales Navigator', 'error');

@@ -397,6 +397,47 @@
     transition: transform 0.1s ease;
 }
 
+/* Next button styles */
+.sales-nav-btn.next {
+    background: #007bff;
+    color: white;
+    margin-top: 12px;
+    width: 100%;
+}
+
+.sales-nav-btn.next:hover {
+    background: #0056b3;
+}
+
+.sales-nav-btn.next:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+/* Workflow status styles */
+.workflow-status {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    text-align: center;
+    font-size: 14px;
+    color: #1976d2;
+}
+
+.workflow-status.completed {
+    background: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.workflow-status.error {
+    background: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
 
 .profile-initial {
   width: 40px;
