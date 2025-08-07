@@ -1,7 +1,6 @@
 const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
-
     URLS: {
         NETWORK_SEARCH: 'https://www.linkedin.com/search/results/people/?network=%5B%22F%22%5D&origin=FACETED_SEARCH',
         CONNECTIONS: 'https://www.linkedin.com/mynetwork/invite-connect/connections/',
@@ -10,9 +9,7 @@ const CONSTANTS = {
     },
     API: {
         BASE_URL: 'http://localhost:7008/api/linkedin',
-        ENDPOINTS: {
-            MESSAGES: '/messages'
-        }
+        ENDPOINTS: { MESSAGES: '/messages' }
     }
 };
 
@@ -67,7 +64,6 @@ const APIService = {
     }
 };
 
-// Message Generator for AI-powered personalized messages
 const MessageGenerator = {
     async generateMessages() {
         const generateBtn = DOMCache.get('generate-messages');
@@ -697,78 +693,52 @@ const RealTimeProfileHandler = {
 // Launch Interface Manager
 const LaunchManager = {
     init() {
-        console.log('LaunchManager initializing...');
         this.setupLaunchButton();
-        // Use setTimeout to ensure DOM is ready
         setTimeout(() => {
             this.checkCurrentState();
         }, 100);
     },
 
     async checkCurrentState() {
-        console.log('Checking current state...');
         try {
-            // Check if we have chrome.tabs API available
             if (typeof chrome !== 'undefined' && chrome.tabs) {
                 const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
-                console.log('Found LinkedIn tabs:', tabs.length);
-
                 if (tabs.length > 0) {
-                    console.log('LinkedIn is open, showing main interface');
                     this.showMainInterface();
                 } else {
-                    console.log('LinkedIn not open, showing launch interface');
                     this.showLaunchInterface();
                 }
             } else {
-                console.log('Chrome tabs API not available, showing launch interface');
                 this.showLaunchInterface();
             }
         } catch (error) {
             console.error('Error checking current state:', error);
-            console.log('Fallback: showing launch interface');
             this.showLaunchInterface();
         }
     },
 
     showLaunchInterface() {
-        console.log('showLaunchInterface called');
         const launchInterface = document.getElementById('launch-interface');
         const mainInterface = document.getElementById('main-interface');
-
-        console.log('Launch interface element:', launchInterface);
-        console.log('Main interface element:', mainInterface);
 
         if (launchInterface && mainInterface) {
             launchInterface.classList.remove('hidden');
             mainInterface.classList.add('hidden');
-            console.log('Successfully switched to launch interface');
         } else {
             console.error('Could not find interface elements');
-            console.error('Launch interface found:', !!launchInterface);
-            console.error('Main interface found:', !!mainInterface);
         }
     },
 
     showMainInterface() {
-        console.log('showMainInterface called');
         const launchInterface = document.getElementById('launch-interface');
         const mainInterface = document.getElementById('main-interface');
-
-        console.log('Launch interface element:', launchInterface);
-        console.log('Main interface element:', mainInterface);
 
         if (launchInterface && mainInterface) {
             launchInterface.classList.add('hidden');
             mainInterface.classList.remove('hidden');
-            console.log('Successfully switched to main interface');
-
-            // Setup main interface event listeners
             this.setupMainInterfaceListeners();
         } else {
             console.error('Could not find interface elements');
-            console.error('Launch interface found:', !!launchInterface);
-            console.error('Main interface found:', !!mainInterface);
         }
     },
 
@@ -819,21 +789,16 @@ const LaunchManager = {
                 return;
             }
 
-            console.log('Getting current tab...');
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const currentTab = tabs[0];
-            console.log('Current tab:', currentTab);
 
             if (currentTab && currentTab.url && currentTab.url.includes('linkedin.com')) {
-                console.log('Already on LinkedIn, showing main interface');
                 this.showMainInterface();
             } else {
-                console.log('Navigating to LinkedIn...');
                 await chrome.tabs.update(currentTab.id, {
                     url: 'https://www.linkedin.com/feed/'
                 });
 
-                console.log('Navigation initiated, showing main interface');
                 this.showMainInterface();
 
                 // Set up listener for when LinkedIn loads to auto-open popup
@@ -841,7 +806,6 @@ const LaunchManager = {
             }
         } catch (error) {
             console.error('Error launching LinkedIn:', error);
-            console.log('Fallback: showing main interface anyway');
             this.showMainInterface();
         }
     },
@@ -885,26 +849,14 @@ const LaunchManager = {
     }
 };
 
-// Add immediate initialization for debugging
-console.log('popup.js loaded, document.readyState:', document.readyState);
-
-// Initialize immediately if DOM is already ready
 if (document.readyState === 'loading') {
-    console.log('Document still loading, waiting for DOMContentLoaded');
     document.addEventListener('DOMContentLoaded', initializeExtension);
 } else {
-    console.log('Document already loaded, initializing immediately');
     initializeExtension();
 }
 
 function initializeExtension() {
-    console.log('initializeExtension called');
-
-    // Initialize launch manager first
-    console.log('Initializing LaunchManager...');
     LaunchManager.init();
-
-    console.log('Initializing other managers...');
     ModalManager.init();
     RealTimeProfileHandler.init();
 
@@ -1170,7 +1122,7 @@ const Step4Manager = {
 
                 try {
                     const response = await APIService.generateMessage(profile.url);
-                    console.log('API Response for', profile.name, ':', response);
+        
 
                     // Extract message from API response
                     let message = "Hello dear"; // Default fallback message
@@ -1501,7 +1453,7 @@ const Step4Manager = {
                     // Step 1: Generate message for this profile using API
                     progressText.textContent = `Step 1/4: Generating message for ${profile.name}`;
                     const response = await APIService.generateMessage(profile.url);
-                    console.log('Bulk API Response for', profile.name, ':', response);
+        
 
                     // Extract message from API response
                     let message = "Hello dear"; // Default fallback message

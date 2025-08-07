@@ -73,7 +73,6 @@ app.post('/api/linkedin/messages', async (req, res) => {
     }
 });
 
-// Start server
 app.listen(PORT, () => {
     console.log(`🚀 Proxy server running on http://localhost:${PORT}`);
 });

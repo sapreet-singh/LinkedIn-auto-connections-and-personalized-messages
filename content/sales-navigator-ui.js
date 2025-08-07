@@ -1,38 +1,26 @@
 class SalesNavigatorFloatingUI {
     constructor() {
-        console.log('Sales Navigator UI: Constructor called');
-
         this.isCollecting = false;
         this.profiles = [];
         this.observer = null;
         this.collectingInterval = null;
         this.ui = null;
-        this.currentWorkflowStep = 'collecting'; // 'collecting', 'processing'
+        this.currentWorkflowStep = 'collecting';
         this.currentProfileIndex = 0;
         this.generatedMessage = null;
 
-        // Only initialize if on the right page
         if (this.isSalesNavigatorSearchPage()) {
-            console.log('Sales Navigator UI: On correct page, initializing...');
             this.init();
-        } else {
-            console.log('Sales Navigator UI: Not on search page, skipping initialization');
         }
     }
 
     isSalesNavigatorSearchPage() {
         const url = window.location.href;
-        const isSalesNavPage = url.includes('/sales/search/people') &&
-                              url.includes('linkedin.com');
-
-        console.log('Sales Navigator UI: URL check -', url, 'Is Sales Nav Search Page:', isSalesNavPage);
-        return isSalesNavPage;
+        return url.includes('/sales/search/people') && url.includes('linkedin.com');
     }
 
     init() {
-        // Double-check we're on the right page before proceeding
         if (!this.isSalesNavigatorSearchPage()) {
-            console.log('Sales Navigator UI: Page validation failed in init()');
             return;
         }
 
@@ -46,7 +34,6 @@ class SalesNavigatorFloatingUI {
         if (saved) {
             try {
                 const state = JSON.parse(saved);
-                console.log('Restoring workflow state:', state);
                 this.currentWorkflowStep = state.currentWorkflowStep || 'collecting';
                 this.currentProfileIndex = state.currentProfileIndex || 0;
                 this.profiles = state.profiles || [];
@@ -56,7 +43,6 @@ class SalesNavigatorFloatingUI {
                 this.updateProfilesCount();
                 this.updateUI();
                 if (this.currentWorkflowStep === 'processing') {
-                    console.log('Resuming workflow processing...');
                     setTimeout(() => this.processNextProfile(), 1000);
                 }
             } catch (e) {
@@ -691,7 +677,7 @@ class SalesNavigatorFloatingUI {
             return;
         }
 
-        console.log('Starting workflow with', this.profiles.length, 'profiles');
+
         this.currentWorkflowStep = 'processing';
         this.currentProfileIndex = 0;
         this.generatedMessage = null;
@@ -721,7 +707,6 @@ class SalesNavigatorFloatingUI {
         }
 
         const profile = this.profiles[this.currentProfileIndex];
-        console.log('Processing profile:', profile.name, 'at index:', this.currentProfileIndex);
         this.updateWorkflowUI();
 
         try {
@@ -730,18 +715,10 @@ class SalesNavigatorFloatingUI {
             const isOnProfilePage = currentUrl.includes(profile.url) || 
                                   (currentUrl.includes('/in/') && currentUrl.includes(profile.name?.toLowerCase().replace(/\s+/g, '')));
 
-            console.log('Current URL:', currentUrl);
-            console.log('Profile URL:', profile.url);
-            console.log('Is on profile page:', isOnProfilePage);
-
             if (!isOnProfilePage) {
-                // Step 1: Open profile URL
-                console.log('Not on profile page, navigating...');
                 await this.openProfileUrl(profile.url);
-                return; // Navigation will trigger page reload, workflow will continue on new page
+                return;
             } else {
-                // We're already on the profile page, continue with workflow
-                console.log('Already on profile page, continuing workflow...');
                 
                 // Step 2: Wait for page to load
                 await this.waitForPageLoad();
@@ -774,9 +751,7 @@ class SalesNavigatorFloatingUI {
     async openProfileUrl(url) {
         const workflowText = this.ui.querySelector('#workflow-text');
         workflowText.textContent = 'Opening profile URL...';
-        console.log('Navigating to profile URL:', url);
         
-        // Save workflow state before navigation
         const state = {
             currentWorkflowStep: this.currentWorkflowStep,
             currentProfileIndex: this.currentProfileIndex,
@@ -784,7 +759,6 @@ class SalesNavigatorFloatingUI {
             generatedMessage: this.generatedMessage
         };
         localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
-        console.log('Saved workflow state before navigation:', state);
         
         window.location.href = url;
     }
@@ -824,58 +798,49 @@ class SalesNavigatorFloatingUI {
         let threeDotButton = null;
         for (const selector of threeDotSelectors) {
             threeDotButton = document.querySelector(selector);
-            if (threeDotButton) {
-                console.log('Found three-dot button with selector:', selector);
-                break;
-            }
+            if (threeDotButton) break;
         }
 
-        if (threeDotButton) {
-            threeDotButton.click();
-            await this.wait(1000);
-            
-            // Look for "Copy profile URL" option with more comprehensive selectors
-            const copyUrlSelectors = [
-                'a[href*="copy-profile-url"]',
-                'a[aria-label*="Copy profile URL"]',
-                'a[aria-label*="copy profile url"]',
-                'a[data-control-name="copy_profile_url"]',
-                'a[data-control-name="copy_profile_link"]',
-                'a[aria-label*="Copy link"]',
-                'a[aria-label*="copy link"]',
-                'a[aria-label*="Copy profile link"]',
-                'a[aria-label*="copy profile link"]',
-                'a:contains("Copy profile URL")',
-                'a:contains("copy profile url")',
-                'a:contains("Copy link")',
-                'a:contains("copy link")',
-                'a:contains("Copy profile link")',
-                'a:contains("copy profile link")'
-            ];
+                    if (threeDotButton) {
+                threeDotButton.click();
+                await this.wait(1000);
+                
+                const copyUrlSelectors = [
+                    'a[href*="copy-profile-url"]',
+                    'a[aria-label*="Copy profile URL"]',
+                    'a[aria-label*="copy profile url"]',
+                    'a[data-control-name="copy_profile_url"]',
+                    'a[data-control-name="copy_profile_link"]',
+                    'a[aria-label*="Copy link"]',
+                    'a[aria-label*="copy link"]',
+                    'a[aria-label*="Copy profile link"]',
+                    'a[aria-label*="copy profile link"]',
+                    'a:contains("Copy profile URL")',
+                    'a:contains("copy profile url")',
+                    'a:contains("Copy link")',
+                    'a:contains("copy link")',
+                    'a:contains("Copy profile link")',
+                    'a:contains("copy profile link")'
+                ];
 
-            let copyUrlLink = null;
-            for (const selector of copyUrlSelectors) {
-                copyUrlLink = document.querySelector(selector);
-                if (copyUrlLink) {
-                    console.log('Found copy URL link with selector:', selector);
-                    break;
+                let copyUrlLink = null;
+                for (const selector of copyUrlSelectors) {
+                    copyUrlLink = document.querySelector(selector);
+                    if (copyUrlLink) break;
                 }
-            }
 
-            if (copyUrlLink) {
-                copyUrlLink.click();
-                workflowText.textContent = 'Profile URL copied';
-                await this.wait(500);
+                if (copyUrlLink) {
+                    copyUrlLink.click();
+                    workflowText.textContent = 'Profile URL copied';
+                    await this.wait(500);
+                } else {
+                    workflowText.textContent = 'Copy URL link not found';
+                    await this.wait(500);
+                }
             } else {
-                console.log('Copy URL link not found');
-                workflowText.textContent = 'Copy URL link not found';
+                workflowText.textContent = 'Three-dot menu not found';
                 await this.wait(500);
             }
-        } else {
-            console.log('Three-dot button not found');
-            workflowText.textContent = 'Three-dot menu not found';
-            await this.wait(500);
-        }
     }
 
     async generateMessageFromAPI(profileUrl) {
@@ -944,10 +909,7 @@ class SalesNavigatorFloatingUI {
         let connectButton = null;
         for (const selector of connectSelectors) {
             connectButton = document.querySelector(selector);
-            if (connectButton) {
-                console.log('Found connect button with selector:', selector);
-                break;
-            }
+            if (connectButton) break;
         }
 
         if (connectButton) {
@@ -955,7 +917,6 @@ class SalesNavigatorFloatingUI {
             workflowText.textContent = 'Connect button clicked';
             await this.wait(1000);
         } else {
-            console.log('Connect button not found');
             workflowText.textContent = 'Connect button not found';
             await this.wait(1000);
         }
@@ -986,6 +947,4 @@ class SalesNavigatorFloatingUI {
     }
 }
 
-// Expose class globally but don't auto-instantiate
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
-console.log('Sales Navigator UI: Class exposed globally', !!window.SalesNavigatorFloatingUI);

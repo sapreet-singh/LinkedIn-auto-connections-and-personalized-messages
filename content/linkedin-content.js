@@ -1,7 +1,6 @@
 
-if (window.linkedInAutomationInjected) {
-} else {
-    window.linkedInAutomationInjected = true;
+if (window.linkedInAutomationInjected) return;
+window.linkedInAutomationInjected = true;
 
 class LinkedInAutomation {
     constructor() {
@@ -38,9 +37,7 @@ class LinkedInAutomation {
             if (currentUrl !== lastUrl) {
                 lastUrl = currentUrl;
 
-                // If we're in multi-page collection mode, re-initialize
                 if (this.isRealTimeMode && currentUrl.includes('linkedin.com')) {
-                    console.log('Page change detected during collection, re-initializing...');
                     setTimeout(() => {
                         this.handlePageChangeInCollection();
                     }, 2000);
@@ -67,20 +64,14 @@ class LinkedInAutomation {
                 window.linkedInPageChangeHandled = true;
             }
 
-            console.log('Page change handling completed');
         } catch (error) {
             console.error('Error handling page change:', error);
         }
     }
 
     async initSalesNavigatorUI() {
-        console.log('LinkedIn Automation: initSalesNavigatorUI called');
-        // Only initialize on Sales Navigator search pages
         if (this.isSalesNavigatorSearchPage()) {
-            console.log('LinkedIn Automation: On Sales Navigator page, loading UI...');
             await this.loadSalesNavigatorUI();
-        } else {
-            console.log('LinkedIn Automation: Not on Sales Navigator page, skipping UI initialization');
         }
 
         // Monitor for page changes to Sales Navigator search pages
@@ -114,7 +105,6 @@ class LinkedInAutomation {
 
             // Only load if not already loaded and we're on the right page
             if (window.SalesNavigatorFloatingUI) {
-                console.log('LinkedIn Automation: SalesNavigatorFloatingUI already loaded, creating instance');
                 if (!window.salesNavigatorFloatingUI) {
                     window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
                 }
@@ -122,37 +112,23 @@ class LinkedInAutomation {
             }
 
             if (!this.isSalesNavigatorSearchPage()) {
-                console.log('LinkedIn Automation: Not on Sales Navigator page, skipping UI load');
                 return;
             }
-
-            console.log('LinkedIn Automation: Loading Sales Navigator UI script...');
 
             // Use the simpler script loading method
             const script = document.createElement('script');
             script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
 
             script.onload = () => {
-                console.log('LinkedIn Automation: Sales Navigator UI script loaded');
-
-                // Add multiple checks with increasing delays
                 const checkAndCreate = (attempt = 1) => {
-                    console.log(`LinkedIn Automation: Attempt ${attempt} - Checking for SalesNavigatorFloatingUI...`);
-                    console.log('LinkedIn Automation: window.SalesNavigatorFloatingUI available?', !!window.SalesNavigatorFloatingUI);
-
                     if (window.SalesNavigatorFloatingUI && !window.salesNavigatorFloatingUI) {
-                        console.log('LinkedIn Automation: Creating SalesNavigatorFloatingUI instance');
                         try {
                             window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
-                            console.log('LinkedIn Automation: SalesNavigatorFloatingUI instance created successfully');
                         } catch (error) {
                             console.error('LinkedIn Automation: Error creating SalesNavigatorFloatingUI instance:', error);
                         }
                     } else if (!window.SalesNavigatorFloatingUI && attempt < 5) {
-                        // Try again with longer delay
                         setTimeout(() => checkAndCreate(attempt + 1), attempt * 100);
-                    } else {
-                        console.log('LinkedIn Automation: Failed to create instance after', attempt, 'attempts - class available?', !!window.SalesNavigatorFloatingUI, 'instance exists?', !!window.salesNavigatorFloatingUI);
                     }
                 };
 
@@ -172,11 +148,7 @@ class LinkedInAutomation {
 
     isSalesNavigatorSearchPage() {
         const url = window.location.href;
-        const isSalesNavPage = url.includes('/sales/search/people') &&
-                              url.includes('linkedin.com');
-
-        console.log('LinkedIn Automation: URL check -', url, 'Is Sales Nav Search Page:', isSalesNavPage);
-        return isSalesNavPage;
+        return url.includes('/sales/search/people') && url.includes('linkedin.com');
     }
 
     setupAutoDetection() {
@@ -1061,7 +1033,6 @@ class LinkedInAutomation {
 
     async clickPaginationButton(pageNumber) {
         try {
-            console.log(`Attempting to click pagination button for page ${pageNumber}`);
 
             // Enhanced selectors for different LinkedIn layouts
             const selectors = [
@@ -1083,7 +1054,7 @@ class LinkedInAutomation {
                 try {
                     pageButton = document.querySelector(selector);
                     if (pageButton && !pageButton.disabled) {
-                        console.log(`Found pagination button using selector: ${selector}`);
+                
                         break;
                     }
                 } catch (e) {
@@ -1093,7 +1064,7 @@ class LinkedInAutomation {
 
             // Fallback: search through all buttons
             if (!pageButton) {
-                console.log('Direct selectors failed, searching through all buttons...');
+    
                 const allButtons = document.querySelectorAll('button');
                 for (const button of allButtons) {
                     if (button.disabled) continue;
@@ -1116,7 +1087,6 @@ class LinkedInAutomation {
 
                         if (isPaginationButton) {
                             pageButton = button;
-                            console.log(`Found pagination button through text search: ${buttonText || spanText}`);
                             break;
                         }
                     }
@@ -1124,7 +1094,7 @@ class LinkedInAutomation {
             }
 
             if (pageButton) {
-                console.log(`Clicking pagination button for page ${pageNumber}`);
+    
 
                 // Ensure button is visible and clickable
                 pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1134,17 +1104,17 @@ class LinkedInAutomation {
                 try {
                     pageButton.click();
                 } catch (clickError) {
-                    console.log('Regular click failed, trying dispatch event');
+    
                     pageButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                 }
 
                 await this.delay(4000); // Increased wait time
                 await this.waitForSearchResults();
 
-                console.log(`Successfully clicked pagination button for page ${pageNumber}`);
+
                 return true;
             } else {
-                console.log(`Pagination button not found for page ${pageNumber}, trying Next button approach`);
+
                 if (pageNumber > 1) {
                     return await this.clickNextButtonToPage(pageNumber);
                 }
@@ -1208,7 +1178,7 @@ class LinkedInAutomation {
                 // Find Next button
                 const nextButton = this.findNextButton();
                 if (!nextButton) {
-                    console.log('Next button not found');
+        
                     return false;
                 }
 
@@ -1221,12 +1191,9 @@ class LinkedInAutomation {
                 await this.delay(3000);
                 await this.waitForSearchResults();
 
-                // Verify we moved to the next page
                 const newPage = this.getCurrentPageNumber();
-                console.log(`After click ${i + 1}: now on page ${newPage}`);
 
                 if (newPage === targetPage) {
-                    console.log(`Successfully reached target page ${targetPage}`);
                     return true;
                 }
             }
@@ -1307,7 +1274,7 @@ class LinkedInAutomation {
                                     document.querySelector('[data-test-id="search-result"]');
 
                 if (searchResults || attempts >= maxAttempts) {
-                    console.log(`Search results ${searchResults ? 'found' : 'not found'} after ${attempts} attempts`);
+    
                     resolve();
                 } else {
                     setTimeout(checkForResults, 800); // Increased interval
@@ -1338,7 +1305,7 @@ class LinkedInAutomation {
                 this.setupAutoDetection();
             }
 
-            console.log('LinkedIn automation re-initialized after page change');
+    
         } catch (error) {
             console.error('Error during re-initialization:', error);
         }
@@ -1350,13 +1317,9 @@ class LinkedInAutomation {
                 chrome.runtime.sendMessage({
                     action: 'collectionStatus',
                     message: message
-                }).catch(() => {
-                    console.log('Status update:', message);
-                });
+                }).catch(() => {});
             }
-        } catch (error) {
-            console.log('Status update:', message);
-        }
+        } catch (error) {}
     }
 
     sendProfilesRealTime(profiles) {
@@ -1951,6 +1914,4 @@ if (document.readyState === 'loading') {
     });
 } else {
     window.linkedInAutomation = new LinkedInAutomation();
-}
-
 }

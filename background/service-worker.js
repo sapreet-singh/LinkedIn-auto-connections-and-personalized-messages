@@ -1,4 +1,3 @@
-// LinkedIn Automation Background Service Worker
 class LinkedInAutomationBackground {
     constructor() {
         this.activeCampaigns = new Map();
@@ -20,8 +19,7 @@ class LinkedInAutomationBackground {
         }, 100);
     }
 
-    onInstalled() {
-    }
+    onInstalled() {}
     
     handleMessage(message, sender, sendResponse) {
         switch (message.action) {
@@ -222,10 +220,7 @@ class LinkedInAutomationBackground {
                 action: 'profilesCollected',
                 profiles: profiles,
                 source: 'realtime'
-            }).catch(() => {
-                // Popup might not be open, that's okay
-                console.log('Profiles collected but popup not open');
-            });
+            }).catch(() => {});
 
             sendResponse({ success: true });
         } catch (error) {
@@ -241,10 +236,7 @@ class LinkedInAutomationBackground {
                 action: 'collectionStatusUpdate',
                 message: message,
                 source: 'content'
-            }).catch(() => {
-                // Popup might not be open, that's okay
-                console.log('Collection status:', message);
-            });
+            }).catch(() => {});
 
             sendResponse({ success: true });
         } catch (error) {

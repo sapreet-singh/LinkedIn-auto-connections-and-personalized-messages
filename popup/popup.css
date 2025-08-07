@@ -25,7 +25,7 @@ body {
     color: var(--text-color);
 }
 
-/* Launch Interface Styles */
+
 .launch-container {
     display: flex;
     align-items: center;
@@ -138,7 +138,7 @@ header h1 {
     background-color: var(--light-gray);
 }
 
-/* Removed unused status states - not used in HTML */
+
 
 .tabs {
     display: flex;
@@ -280,7 +280,7 @@ textarea {
     font-style: italic;
 }
 
-/* Removed unused campaign styles - not used in HTML */
+
 
 footer {
     padding: 10px 15px;
@@ -294,7 +294,7 @@ footer {
     justify-content: space-between;
 }
 
-/* Modal styles */
+
 .modal {
     display: none;
     position: fixed;
@@ -319,7 +319,7 @@ footer {
     overflow: hidden;
 }
 
-/* Campaign Wizard Styles */
+
 .campaign-wizard {
     padding: 0;
 }
@@ -396,7 +396,7 @@ footer {
     cursor: pointer;
 }
 
-/* Add People Options */
+
 .add-people-options {
     padding: 20px;
 }
@@ -476,7 +476,7 @@ footer {
     color: #999;
 }
 
-/* Search Instructions */
+
 .search-instructions {
     padding: 20px;
     background-color: #f8f9fa;
@@ -509,12 +509,12 @@ footer {
     padding: 10px 12px;
 }
 
-/* Collection Status */
+
 .collection-status {
     padding: 20px;
 }
 
-/* Page Progress Display */
+
 .page-progress {
     margin: 15px 0;
     padding: 15px;
@@ -670,7 +670,7 @@ footer {
     color: #666;
 }
 
-/* Removed unused duplicates modal styles - not used in HTML */
+
 
 .close {
     position: absolute;
@@ -687,7 +687,7 @@ footer {
     margin-top: 20px;
 }
 
-/* Profile collection styles */
+
 .profile-item {
     padding: 10px;
     margin-bottom: 8px;
@@ -713,7 +713,7 @@ footer {
     word-break: break-all;
 }
 
-/* Form enhancements */
+
 .form-group small {
     display: block;
     font-size: 11px;
@@ -726,28 +726,28 @@ footer {
     font-size: 12px;
 }
 
-/* Quick actions section */
+
 .section h3 {
     color: var(--primary-color);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 5px;
 }
 
-/* Removed unused messaging strategy styles - not used in HTML */
 
-/* Network Search Styles */
+
+
 .network-search-options {
     padding: 20px;
 }
 
-/* Sales Navigator Search Styles */
+
 .sales-navigator-search-options {
     padding: 20px;
 }
 
-/* Removed unused search option styles - not used in HTML */
 
-/* Removed unused network-instructions styles - not used in HTML */
+
+
 
 .network-list-option {
     background-color: #f0f8ff;
@@ -769,7 +769,7 @@ footer {
     margin-bottom: 15px;
 }
 
-/* Profile URLs Modal Specific Styles */
+
 #profile-urls-modal .modal-content {
     width: 90%;
     max-width: 600px;
@@ -860,7 +860,7 @@ footer {
     border-radius: 4px;
 }
 
-/* Message Generation Styles */
+
 .message-generation-section {
     margin-top: 20px;
     padding: 15px;
@@ -919,8 +919,6 @@ footer {
     font-size: 14px;
 }
 
-/* Removed duplicate - consolidated above */
-
 .generation-summary {
     margin-top: 15px;
     padding: 10px;
@@ -930,7 +928,7 @@ footer {
     color: #2e7d32;
 }
 
-/* Step 4: Profile Selection & Message Generation */
+
 .profile-selection-section {
     padding: 15px 0;
 }
@@ -1075,7 +1073,7 @@ footer {
     margin-bottom: 15px;
 }
 
-/* Consolidated message item styles */
+
 .message-item {
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -1140,11 +1138,9 @@ footer {
 .message-status.success { color: var(--success-color); }
 .message-status.error { color: var(--error-color); }
 
-/* Removed unused message selection styles - not used in HTML */
 
-/* Removed unused profile message card styles - not used in HTML */
 
-/* Removed duplicate - consolidated above */
+
 
 .message-options h5 {
     margin: 0 0 20px 0;
@@ -1152,8 +1148,6 @@ footer {
     font-size: 18px;
     font-weight: 600;
 }
-
-/* Removed duplicate - consolidated above */
 
 .message-option input[type="radio"]:checked + .message-label::before {
     content: "✓";
@@ -1172,7 +1166,7 @@ footer {
     font-weight: bold;
 }
 
-/* Removed unused error section styles - not used in HTML */
+
 
 .selection-actions {
     display: flex;
@@ -1201,7 +1195,7 @@ footer {
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
 
-/* Removed unused campaign success styles - not used in HTML */
+
 
 .campaign-creation {
     text-align: center;
@@ -1210,7 +1204,7 @@ footer {
     border-top: 1px solid var(--border-color);
 }
 
-/* Profile Messages Section */
+
 .profile-messages-section {
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -1219,7 +1213,7 @@ footer {
     background: white;
 }
 
-/* Consolidated profile header styles */
+
 .profile-header {
     display: flex;
     justify-content: space-between;
@@ -1271,7 +1265,7 @@ footer {
     margin-bottom: 0;
 }
 
-/* Consolidated message option styles */
+
 .message-option {
     display: flex;
     align-items: flex-start;
@@ -1330,7 +1324,7 @@ footer {
     justify-content: space-between;
 }
 
-/* Send Message Interface Styles */
+
 .send-message-interface {
     padding: 20px;
     max-height: 600px;
@@ -1359,7 +1353,7 @@ footer {
     font-size: 14px;
 }
 
-/* Send message interface - consolidated with existing message-item styles */
+
 .send-message-interface .messages-list {
     display: flex;
     flex-direction: column;
@@ -1387,7 +1381,7 @@ footer {
     font-size: 16px;
 }
 
-/* Consolidated profile styles */
+
 .profile-title, .message-item .profile-details .profile-title {
     margin: 0 0 8px 0;
     color: #666;
@@ -1430,7 +1424,7 @@ footer {
     text-align: right;
 }
 
-/* Removed unused send message button styles - not used in HTML */
+
 
 
 
@@ -1445,7 +1439,7 @@ footer {
     display: inline-block;
 }
 
-/* Consolidated message status - removed duplicate above */
+
 
 .status-text {
     font-size: 12px;
@@ -1453,7 +1447,7 @@ footer {
     margin: 0;
 }
 
-/* Bulk Actions Styles */
+
 .bulk-actions {
     margin-bottom: 20px;
     padding: 15px;

@@ -1,4 +1,4 @@
-/* Sales Navigator Floating UI */
+
 .sales-navigator-floating-ui {
     position: fixed;
     top: 80px;
@@ -355,7 +355,7 @@
     100% { transform: rotate(360deg); }
 }
 
-/* Minimized state */
+
 .sales-navigator-floating-ui.minimized {
     height: auto !important;
 }
@@ -364,7 +364,7 @@
     display: none !important;
 }
 
-/* Responsive adjustments */
+
 @media (max-width: 768px) {
     .sales-navigator-floating-ui {
         width: 380px;
@@ -383,12 +383,12 @@
     }
 }
 
-/* Ensure UI stays above LinkedIn elements */
+
 .sales-navigator-floating-ui {
     z-index: 999999 !important;
 }
 
-/* Smooth transitions */
+
 .sales-nav-content {
     transition: all 0.3s ease;
 }
@@ -397,7 +397,7 @@
     transition: transform 0.1s ease;
 }
 
-/* Next button styles */
+
 .sales-nav-btn.next {
     background: #007bff;
     color: white;
@@ -414,7 +414,7 @@
     cursor: not-allowed;
 }
 
-/* Workflow status styles */
+
 .workflow-status {
     background: #e3f2fd;
     border: 1px solid #bbdefb;
