@@ -1,17 +1,15 @@
 const CONSTANTS = {
     STEPS: { CAMPAIGN_NAME: 1, SOURCE_SELECTION: 2, PROFILE_COLLECTION: 3, MESSAGING: 4 },
     SUBSTEPS: { SEARCH: 'search', NETWORK: 'network', COLLECTING: 'collecting' },
-
     URLS: {
         NETWORK_SEARCH: 'https://www.linkedin.com/search/results/people/?network=%5B%22F%22%5D&origin=FACETED_SEARCH',
         CONNECTIONS: 'https://www.linkedin.com/mynetwork/invite-connect/connections/',
-        PEOPLE_SEARCH: 'https://www.linkedin.com/search/people/'
+        PEOPLE_SEARCH: 'https://www.linkedin.com/search/results/people/',
+        SALES_NAVIGATOR: 'https://www.linkedin.com/sales/search/people'
     },
     API: {
         BASE_URL: 'http://localhost:7008/api/linkedin',
-        ENDPOINTS: {
-            MESSAGES: '/messages'
-        }
+        ENDPOINTS: { MESSAGES: '/messages' }
     }
 };
 
@@ -66,7 +64,6 @@ const APIService = {
     }
 };
 
-// Message Generator for AI-powered personalized messages
 const MessageGenerator = {
     async generateMessages() {
         const generateBtn = DOMCache.get('generate-messages');
@@ -206,12 +203,18 @@ const Utils = {
     },
 
     // Centralized message handling to eliminate duplication
-    sendTabMessage: async (tabId, message) => {
-        try {
-            return await chrome.tabs.sendMessage(tabId, message);
-        } catch (error) {
-            console.error('Error sending tab message:', error);
-            throw error;
+    sendTabMessage: async (tabId, message, retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await chrome.tabs.sendMessage(tabId, message);
+            } catch (error) {
+                if (i === retries - 1) {
+                    console.error('Error sending tab message after retries:', error);
+                    throw error;
+                }
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
     },
 
@@ -449,28 +452,36 @@ const WizardManager = {
             'back-to-step-2': () => this.showStep(2),
             'back-to-search': () => this.showStep(3, 'search'),
             'back-to-step-2-from-network': () => this.showStep(2),
+            'back-to-step-2-from-sales-navigator': () => this.showStep(2),
             'back-to-collecting': () => this.showStep(3, 'collecting'),
             'next-to-messaging': () => {
                 this.showStep(4);
             },
             'linkedin-search-option': () => this.showStep(3, 'search'),
-            'sales-navigator-option': () => Utils.showNotification('Sales Navigator integration coming soon!', 'info'),
+            'sales-navigator-option': () => this.showStep(3, 'sales-navigator'),
             'network-option': () => this.showStep(3, 'network'),
             'csv-upload-btn': () => DOMCache.get('csv-file-input')?.click(),
             'csv-upload-btn-2': () => DOMCache.get('csv-file-input')?.click(),
             'show-filters': () => chrome.tabs.create({ url: CONSTANTS.URLS.PEOPLE_SEARCH }),
             'start-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.start(); },
-            'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
+             'start-multi-page-collecting': () => { this.showStep(3, 'collecting'); ProfileCollector.startMultiPage(); },
             'show-network-filters': () => NetworkManager.openSearch(),
             'start-network-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startCollecting(); },
             'start-network-multi-page-collecting': () => { this.showStep(3, 'collecting'); NetworkManager.startMultiPageCollecting(); },
             'browse-connections': () => NetworkManager.browseConnections(),
+            'show-sales-navigator-filters': () => SalesNavigatorManager.openSearch(),
+            'start-sales-navigator-collecting': () => { this.showStep(3, 'collecting'); SalesNavigatorManager.startCollecting(); },
+
             'create-campaign-final': () => this.handleFinalStep(),
             'exclude-duplicates': () => DuplicateManager.exclude(),
             'cancel-duplicates': () => DuplicateManager.cancel(),
             'single-message-radio': () => Utils.hideById('follow-up-config'),
             'multi-step-radio': () => Utils.showById('follow-up-config'),
-            'generate-messages': () => MessageGenerator.generateMessages()
+            'generate-messages': () => MessageGenerator.generateMessages(),
+            'collecting-profile': () => {
+                NetworkManager.openSearch();
+                setTimeout(() => NetworkManager.startMultiPageCollecting(), 1000); // Delay to allow filters to open
+            },
         };
 
         Utils.setupEventListeners(eventMap);
@@ -688,75 +699,72 @@ const RealTimeProfileHandler = {
 // Launch Interface Manager
 const LaunchManager = {
     init() {
-        console.log('LaunchManager initializing...');
         this.setupLaunchButton();
-        // Use setTimeout to ensure DOM is ready
         setTimeout(() => {
             this.checkCurrentState();
         }, 100);
     },
 
     async checkCurrentState() {
-        console.log('Checking current state...');
         try {
-            // Check if we have chrome.tabs API available
             if (typeof chrome !== 'undefined' && chrome.tabs) {
                 const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
-                console.log('Found LinkedIn tabs:', tabs.length);
-
                 if (tabs.length > 0) {
-                    console.log('LinkedIn is open, showing main interface');
                     this.showMainInterface();
                 } else {
-                    console.log('LinkedIn not open, showing launch interface');
                     this.showLaunchInterface();
                 }
             } else {
-                console.log('Chrome tabs API not available, showing launch interface');
                 this.showLaunchInterface();
             }
         } catch (error) {
             console.error('Error checking current state:', error);
-            console.log('Fallback: showing launch interface');
             this.showLaunchInterface();
         }
     },
 
     showLaunchInterface() {
-        console.log('showLaunchInterface called');
         const launchInterface = document.getElementById('launch-interface');
         const mainInterface = document.getElementById('main-interface');
-
-        console.log('Launch interface element:', launchInterface);
-        console.log('Main interface element:', mainInterface);
 
         if (launchInterface && mainInterface) {
             launchInterface.classList.remove('hidden');
             mainInterface.classList.add('hidden');
-            console.log('Successfully switched to launch interface');
         } else {
             console.error('Could not find interface elements');
-            console.error('Launch interface found:', !!launchInterface);
-            console.error('Main interface found:', !!mainInterface);
         }
     },
 
     showMainInterface() {
-        console.log('showMainInterface called');
         const launchInterface = document.getElementById('launch-interface');
         const mainInterface = document.getElementById('main-interface');
-
-        console.log('Launch interface element:', launchInterface);
-        console.log('Main interface element:', mainInterface);
 
         if (launchInterface && mainInterface) {
             launchInterface.classList.add('hidden');
             mainInterface.classList.remove('hidden');
-            console.log('Successfully switched to main interface');
+            this.setupMainInterfaceListeners();
         } else {
             console.error('Could not find interface elements');
-            console.error('Launch interface found:', !!launchInterface);
-            console.error('Main interface found:', !!mainInterface);
+        }
+    },
+
+    setupMainInterfaceListeners() {
+        // Setup Sales Navigator button
+        const salesNavBtn = document.getElementById('sales-navigator-btn');
+        if (salesNavBtn && !salesNavBtn.dataset.listenerAttached) {
+            salesNavBtn.addEventListener('click', () => {
+                SalesNavigatorFloatingManager.launch();
+            });
+            salesNavBtn.dataset.listenerAttached = 'true';
+        }
+
+        // Setup Create Campaign button
+        const createCampaignBtn = document.getElementById('create-campaign');
+        if (createCampaignBtn && !createCampaignBtn.dataset.listenerAttached) {
+            createCampaignBtn.addEventListener('click', () => {
+                ModalManager.openCampaignModal();
+            });
+            createCampaignBtn.dataset.listenerAttached = 'true';
         }
     },
 
@@ -787,21 +795,16 @@ const LaunchManager = {
                 return;
             }
 
-            console.log('Getting current tab...');
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const currentTab = tabs[0];
-            console.log('Current tab:', currentTab);
 
             if (currentTab && currentTab.url && currentTab.url.includes('linkedin.com')) {
-                console.log('Already on LinkedIn, showing main interface');
                 this.showMainInterface();
             } else {
-                console.log('Navigating to LinkedIn...');
                 await chrome.tabs.update(currentTab.id, {
                     url: 'https://www.linkedin.com/feed/'
                 });
 
-                console.log('Navigation initiated, showing main interface');
                 this.showMainInterface();
 
                 // Set up listener for when LinkedIn loads to auto-open popup
@@ -809,7 +812,6 @@ const LaunchManager = {
             }
         } catch (error) {
             console.error('Error launching LinkedIn:', error);
-            console.log('Fallback: showing main interface anyway');
             this.showMainInterface();
         }
     },
@@ -843,6 +845,9 @@ const LaunchManager = {
                 files: ['content/linkedin-content.js']
             });
 
+            // Wait for content script to initialize
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
             // Send message to show auto popup
             await Utils.sendTabMessage(tabId, {
                 action: 'showAutoPopup'
@@ -853,26 +858,14 @@ const LaunchManager = {
     }
 };
 
-// Add immediate initialization for debugging
-console.log('popup.js loaded, document.readyState:', document.readyState);
-
-// Initialize immediately if DOM is already ready
 if (document.readyState === 'loading') {
-    console.log('Document still loading, waiting for DOMContentLoaded');
     document.addEventListener('DOMContentLoaded', initializeExtension);
 } else {
-    console.log('Document already loaded, initializing immediately');
     initializeExtension();
 }
 
 function initializeExtension() {
-    console.log('initializeExtension called');
-
-    // Initialize launch manager first
-    console.log('Initializing LaunchManager...');
     LaunchManager.init();
-
-    console.log('Initializing other managers...');
     ModalManager.init();
     RealTimeProfileHandler.init();
 
@@ -904,7 +897,10 @@ const CampaignManager = {
         campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
-
+    create() {
+        // Open the campaign creation modal
+        ModalManager.openCampaignModal();
+    },
 
     finalize() {
         const campaignName = DOMCache.get('campaign-name').value.trim();
@@ -1135,9 +1131,10 @@ const Step4Manager = {
 
                 try {
                     const response = await APIService.generateMessage(profile.url);
-                    console.log('API Response for', profile.name, ':', response);
+        
 
-                    let message = "Hii";
+                    // Extract message from API response
+                    let message = "Hello dear"; // Default fallback message
 
                     if (response) {
                         if (typeof response === 'string') {
@@ -1465,7 +1462,7 @@ const Step4Manager = {
                     // Step 1: Generate message for this profile using API
                     progressText.textContent = `Step 1/4: Generating message for ${profile.name}`;
                     const response = await APIService.generateMessage(profile.url);
-                    console.log('Bulk API Response for', profile.name, ':', response);
+        
 
                     // Extract message from API response
                     let message = "Hello dear"; // Default fallback message
@@ -1749,7 +1746,7 @@ const ProfileCollector = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -1758,7 +1755,7 @@ const ProfileCollector = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1773,7 +1770,7 @@ const ProfileCollector = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startMultiPageCollection',
                         maxPages: searchCriteria.maxPages || 4,
                         criteria: searchCriteria
@@ -1783,7 +1780,7 @@ const ProfileCollector = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1874,7 +1871,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startRealTimeCollection',
                         criteria: searchCriteria
                     });
@@ -1883,7 +1880,7 @@ const NetworkManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1898,7 +1895,7 @@ const NetworkManager = {
 
             setTimeout(async () => {
                 try {
-                    Utils.sendTabMessage(tabId, {
+                    await Utils.sendTabMessage(tabId, {
                         action: 'startMultiPageCollection',
                         maxPages: searchCriteria.maxPages || 4,
                         criteria: searchCriteria
@@ -1908,7 +1905,7 @@ const NetworkManager = {
                     console.error('Message sending error:', error);
                     Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
                 }
-            }, 500);
+            }, 1500);
         } catch (error) {
             console.error('Script injection error:', error);
             Utils.showNotification('Please refresh the LinkedIn page and try again.', 'error');
@@ -1932,6 +1929,167 @@ const NetworkManager = {
         }));
 
         AppState.collectedProfiles.push(...validProfiles);
+        ProfileManager.updateList();
+        DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
+        Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');
+        const campaignModal = DOMCache.get('campaign-modal');
+        if (campaignModal) {
+            Utils.show(campaignModal);
+            WizardManager.showStep(3, 'collecting');
+        }
+    }
+};
+
+const SalesNavigatorFloatingManager = {
+    async launch() {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const currentTab = tabs[0];
+
+            // Navigate to Sales Navigator search page
+            await chrome.tabs.update(currentTab.id, {
+                url: 'https://www.linkedin.com/sales/search/people?viewAllFilters=true'
+            });
+
+            Utils.showNotification('Opening Sales Navigator...', 'info');
+
+            // Wait for page to load, then the content script will automatically detect
+            // it's on a Sales Navigator page and load the UI
+            setTimeout(() => {
+                Utils.showNotification('Sales Navigator opened! The floating UI will appear automatically.', 'success');
+            }, 3000);
+
+        } catch (error) {
+            Utils.showNotification('Error launching Sales Navigator', 'error');
+        }
+    }
+};
+
+const SalesNavigatorManager = {
+    openSearch() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            chrome.tabs.update(tabs[0].id, { url: CONSTANTS.URLS.SALES_NAVIGATOR }, () => {
+                Utils.showNotification('Sales Navigator search opened. Use the advanced filters to refine your search, then click "Start Collecting People"', 'info');
+            });
+        });
+    },
+
+    startCollecting() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com/sales')) {
+                Utils.showNotification('Please navigate to Sales Navigator first', 'error');
+                return;
+            }
+
+            const campaignModal = DOMCache.get('campaign-modal');
+            if (campaignModal) {
+                Utils.show(campaignModal);
+                WizardManager.showStep(3, 'collecting');
+            }
+            Utils.showNotification('Starting real-time profile collection...', 'info');
+
+            if (tab.url.includes('sales/search/people')) {
+                this.startSearch(tab.id, { type: 'sales-navigator', realTime: true });
+            } else {
+                this.openSearch();
+                setTimeout(() => this.startSearch(tab.id, { type: 'sales-navigator', realTime: true }), 3000);
+            }
+        });
+    },
+
+    startMultiPageCollecting() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+
+            if (!tab.url.includes('linkedin.com/sales')) {
+                Utils.showNotification('Please navigate to Sales Navigator first', 'error');
+                return;
+            }
+
+            const campaignModal = DOMCache.get('campaign-modal');
+            if (campaignModal) {
+                Utils.show(campaignModal);
+                WizardManager.showStep(3, 'collecting');
+            }
+
+            // Initialize page progress display
+            ProfileCollector.initializePageProgress();
+
+            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
+
+            // DISABLE multi-page collection for Sales Navigator
+            if (tab.url.includes('sales/search/people')) {
+                Utils.showNotification('Multi-page collection is disabled for Sales Navigator. Only collecting from the current page.', 'warning');
+                this.startSearch(tab.id, { type: 'sales-navigator', realTime: true });
+            } else {
+                this.openSearch();
+                setTimeout(() => this.startMultiPageSearch(tab.id, { type: 'sales-navigator', maxPages: 4, realTime: true }), 3000);
+            }
+        });
+    },
+
+    async startSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    await Utils.sendTabMessage(tabId, {
+                        action: 'startRealTimeCollection',
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 1500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');
+        }
+    },
+
+    async startMultiPageSearch(tabId, searchCriteria) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId }, files: ['content/linkedin-content.js']
+            });
+
+            setTimeout(async () => {
+                try {
+                    await Utils.sendTabMessage(tabId, {
+                        action: 'startMultiPageCollection',
+                        maxPages: searchCriteria.maxPages || 4,
+                        criteria: searchCriteria
+                    });
+                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
+                } catch (error) {
+                    console.error('Message sending error:', error);
+                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
+                }
+            }, 1500);
+        } catch (error) {
+            console.error('Script injection error:', error);
+            Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');
+        }
+    },
+
+    addProfilesToCampaign(profiles) {
+        const validProfiles = profiles.filter(p => p.name && p.url);
+        if (validProfiles.length === 0) return;
+
+        const processedProfiles = validProfiles.map(profile => ({
+            ...profile,
+            collectedAt: new Date().toISOString(),
+            source: 'sales-navigator'
+        }));
+
+        AppState.collectedProfiles.push(...processedProfiles);
         ProfileManager.updateList();
         DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
         Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');

@@ -1,0 +1,455 @@
+
+.sales-navigator-floating-ui {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 420px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: 1px solid #e1e5e9;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    cursor: move;
+}
+
+.sales-nav-header {
+    background: linear-gradient(135deg, #0a66c2, #004182);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 12px 12px 0 0;
+    cursor: move;
+    user-select: none;
+}
+
+.sales-nav-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.sales-nav-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.sales-nav-minimize,
+.sales-nav-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    font-weight: bold;
+}
+
+.sales-nav-minimize:hover,
+.sales-nav-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.sales-nav-close {
+    font-size: 20px;
+}
+
+.sales-nav-content {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.sales-nav-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.sales-nav-btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sales-nav-btn.start {
+    background: #28a745;
+    color: white;
+}
+
+.sales-nav-btn.start:hover {
+    background: #218838;
+    transform: translateY(-1px);
+}
+
+.sales-nav-btn.pause {
+    background: #ffc107;
+    color: #212529;
+}
+
+.sales-nav-btn.pause:hover {
+    background: #e0a800;
+    transform: translateY(-1px);
+}
+
+.sales-nav-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.sales-nav-status {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #6c757d;
+}
+
+.status-dot.collecting {
+    background: #28a745;
+    animation: pulse-green 2s infinite;
+}
+
+.status-dot.paused {
+    background: #ffc107;
+}
+
+@keyframes pulse-green {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.profiles-section {
+    border-top: 1px solid #e9ecef;
+    padding-top: 16px;
+}
+
+.profiles-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.profiles-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.clear-profiles {
+    background: none;
+    border: none;
+    color: #dc3545;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.clear-profiles:hover {
+    color: #c82333;
+}
+
+.profiles-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.profile-item {
+    min-height: unset;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s ease;
+}
+
+.profile-item:last-child {
+    border-bottom: none;
+}
+
+.profile-item:hover {
+    background-color: #f8f9fa;
+}
+
+.profile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #6c757d;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.profile-info {
+    flex: 1;
+    min-width: 0;
+    margin-right: 8px;
+}
+
+.profile-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0 0 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-title {
+    font-size: 13px;
+    color: #495057;
+    margin: 0 0 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.profile-company {
+    font-size: 12px;
+    color: #6c757d;
+    margin: 0 0 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-style: italic;
+}
+
+.profile-url {
+    font-size: 11px;
+    color: #0073b1;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.profile-url:hover {
+    text-decoration: underline;
+}
+
+.profile-actions {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 4px;
+    flex-direction: column;
+    align-items: center;
+}
+
+.profile-action-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.view-profile-btn {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.view-profile-btn:hover {
+    background: #bbdefb;
+}
+
+.remove-profile-btn {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
+.remove-profile-btn:hover {
+    background: #ffcdd2;
+}
+
+.copy-url-btn {
+    background: #e8f5e8;
+    color: #2e7d32;
+}
+
+.copy-url-btn:hover {
+    background: #c8e6c9;
+}
+
+.empty-profiles {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.collecting-animation {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e9ecef;
+    border-top: 2px solid #28a745;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
+.sales-navigator-floating-ui.minimized {
+    height: auto !important;
+}
+
+.sales-navigator-floating-ui.minimized .sales-nav-content {
+    display: none !important;
+}
+
+
+@media (max-width: 768px) {
+    .sales-navigator-floating-ui {
+        width: 380px;
+        right: 10px;
+        top: 60px;
+        max-height: 70vh;
+    }
+}
+
+@media (max-width: 480px) {
+    .sales-navigator-floating-ui {
+        width: 350px;
+        right: 5px;
+        top: 50px;
+        max-height: 60vh;
+    }
+}
+
+
+.sales-navigator-floating-ui {
+    z-index: 999999 !important;
+}
+
+
+.sales-nav-content {
+    transition: all 0.3s ease;
+}
+
+.sales-navigator-floating-ui {
+    transition: transform 0.1s ease;
+}
+
+
+.sales-nav-btn.next {
+    background: #007bff;
+    color: white;
+    margin-top: 12px;
+    width: 100%;
+}
+
+.sales-nav-btn.next:hover {
+    background: #0056b3;
+}
+
+.sales-nav-btn.next:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+
+.workflow-status {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    text-align: center;
+    font-size: 14px;
+    color: #1976d2;
+}
+
+.workflow-status.completed {
+    background: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.workflow-status.error {
+    background: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+
+.profile-initial {
+  width: 40px;
+  height: 40px;
+  background: #e1e5e9;
+  color: #444;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
