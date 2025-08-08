@@ -695,11 +695,11 @@ class SalesNavigatorFloatingUI {
     showWorkflowPopup() {
         const overlay = document.createElement('div');
         overlay.id = 'workflow-popup-overlay';
-        overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.8) !important; z-index: 999999 !important; display: flex !important; justify-content: center !important; align-items: center !important; pointer-events: none !important;`;
+        overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.3) !important; z-index: 999999 !important; display: flex !important; justify-content: flex-end !important; align-items: flex-start !important; pointer-events: none !important; padding: 20px !important;`;
 
         const popup = document.createElement('div');
         popup.id = 'workflow-popup';
-        popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 500px !important; max-height: 80vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important;`;
+        popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 450px !important; max-height: 90vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important; margin-top: 20px !important;`;
 
         popup.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -1075,6 +1075,8 @@ class SalesNavigatorFloatingUI {
                         }
 
                         this.saveState();
+                        await this.wait(1000);
+                        await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
                     }
@@ -1088,6 +1090,181 @@ class SalesNavigatorFloatingUI {
         } else {
             if (statusElement) statusElement.textContent = 'Three-dot button not found';
         }
+        this.isProcessingThreeDotMenu = false;
+    }
+
+    async clickConnectButton(menuAlreadyOpen = false) {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Looking for Connect button...';
+
+        const alreadyConnected = document.querySelector('[aria-label*="Connected"]') ||
+                                document.querySelector('[data-control-name*="connected"]') ||
+                                Array.from(document.querySelectorAll('span, div')).find(el =>
+                                    el.textContent && el.textContent.toLowerCase().includes('connected')
+                                );
+
+        if (alreadyConnected) {
+            if (statusElement) statusElement.textContent = 'Already connected to this profile';
+            return;
+        }
+
+        let menu = null;
+
+        if (menuAlreadyOpen) {
+            menu = document.querySelector('#hue-menu-ember48') ||
+                   document.querySelector('[id^="hue-menu-"]') ||
+                   document.querySelector('div[role="menu"]');
+        } else {
+            document.body.click();
+            await this.wait(500);
+
+            const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
+                          document.querySelector('button[id^="hue-menu-trigger-"]') ||
+                          document.querySelector('button._overflow-menu--trigger_1xow7n');
+
+            if (button) {
+                if (statusElement) statusElement.textContent = 'Opening three-dot menu for Connect...';
+                button.click();
+                await this.wait(1000);
+
+                menu = document.querySelector('#hue-menu-ember48') ||
+                       document.querySelector('[id^="hue-menu-"]') ||
+                       document.querySelector('div[role="menu"]');
+            } else {
+                if (statusElement) statusElement.textContent = 'Three-dot button not found for Connect';
+                this.isProcessingThreeDotMenu = false;
+                return;
+            }
+        }
+
+        if (menu) {
+            if (statusElement) statusElement.textContent = 'Looking for Connect option...';
+            await this.wait(500);
+
+            const connectOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
+                const text = (el.textContent || '').toLowerCase().trim();
+                return text.includes('connect') && !text.includes('copy') && !text.includes('disconnect');
+            });
+
+            if (connectOption) {
+                if (statusElement) statusElement.textContent = 'Clicking Connect...';
+                connectOption.click();
+                await this.wait(2000);
+
+                await this.fillInvitationMessage();
+            } else {
+                if (statusElement) statusElement.textContent = 'Connect option not found in menu (may already be connected)';
+            }
+        } else {
+            if (statusElement) statusElement.textContent = 'Menu not visible after click';
+        }
+
+        this.isProcessingThreeDotMenu = false;
+    }
+
+    async fillInvitationMessage() {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
+
+        await this.wait(1500);
+
+        let textarea = document.querySelector('textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx') ||
+                      document.querySelector('textarea[id="connect-cta-form__invitation"]') ||
+                      document.querySelector('textarea[maxlength="300"]') ||
+                      document.querySelector('textarea[placeholder*="accepts your invitation"]') ||
+                      document.querySelector('textarea[placeholder*="Bruno accepts"]') ||
+                      document.querySelector('div[data-test-modal] textarea') ||
+                      document.querySelector('.send-invite textarea');
+
+        if (!textarea) {
+            await this.wait(1000);
+            textarea = document.querySelector('textarea') ||
+                      document.querySelector('input[type="text"][maxlength="300"]');
+        }
+
+        if (textarea) {
+            if (statusElement) statusElement.textContent = 'Found textarea, filling message...';
+
+            textarea.value = '';
+            textarea.focus();
+
+            const message = this.generatedMessage || 'Hello dear';
+            for (let i = 0; i < message.length; i++) {
+                textarea.value += message[i];
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+                await this.wait(30);
+            }
+s
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            textarea.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            if (statusElement) statusElement.textContent = 'Message filled! Looking for Send button...';
+            await this.wait(1000);
+
+            await this.clickSendInvitationButton();
+        } else {
+            if (statusElement) statusElement.textContent = 'Invitation textarea not found - checking for popup...';
+
+            const popup = document.querySelector('[data-test-modal]') ||
+                         document.querySelector('.send-invite') ||
+                         document.querySelector('[aria-labelledby*="send-invite"]');
+
+            if (popup) {
+                if (statusElement) statusElement.textContent = 'Popup found but textarea missing - trying alternative approach...';
+                await this.wait(1000);
+                await this.clickSendInvitationButton();
+            } else {
+                if (statusElement) statusElement.textContent = 'Send invitation popup not found';
+            }
+        }
+    }
+
+    async clickSendInvitationButton() {
+        const statusElement = document.getElementById('workflow-current-status');
+        let sendButton = document.querySelector('button[aria-label="Send invitation"]') ||
+                        document.querySelector('button[data-control-name="send_invitation"]') ||
+                        Array.from(document.querySelectorAll('button')).find(btn => {
+                            const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                            return text === 'send invitation' || text === 'send' || text.includes('send invitation');
+                        });
+
+        if (!sendButton) {
+            const modal = document.querySelector('[data-test-modal]') ||
+                         document.querySelector('.send-invite') ||
+                         document.querySelector('[aria-labelledby*="send-invite"]');
+
+            if (modal) {
+                sendButton = modal.querySelector('button[type="submit"]') ||
+                           Array.from(modal.querySelectorAll('button')).find(btn => {
+                               const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                               return text.includes('send') || text.includes('invitation');
+                           });
+            }
+        }
+
+        if (sendButton && !sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Clicking Send Invitation...';
+            sendButton.click();
+            await this.wait(3000);
+
+            const successMessage = document.querySelector('[data-test-toast-message]') ||
+                                  Array.from(document.querySelectorAll('div, span')).find(el => {
+                                      const text = el.textContent && el.textContent.toLowerCase();
+                                      return text && (text.includes('invitation sent') || text.includes('request sent'));
+                                  });
+
+            if (successMessage) {
+                if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
+            } else {
+                if (statusElement) statusElement.textContent = 'Invitation sent (no confirmation message found)';
+            }
+        } else if (sendButton && sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Send button found but disabled';
+        } else {
+            if (statusElement) statusElement.textContent = 'Send Invitation button not found';
+        }
+
         this.isProcessingThreeDotMenu = false;
     }
 
