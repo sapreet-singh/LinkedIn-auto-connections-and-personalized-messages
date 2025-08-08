@@ -1,3 +1,36 @@
+const CONSTANTS = {
+    API: {
+        BASE_URL: 'http://localhost:7008/api/linkedin',
+        ENDPOINTS: { MESSAGES: '/messages' }
+    }
+};
+
+const APIService = {
+    async generateMessage(profileUrl) {
+        try {
+            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: profileUrl
+                })
+            });
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+            const apiData = await response.json();
+            const message = apiData?.messages?.message1;
+            return { message: message };
+        } catch (error) {
+            console.error('API Service Error:', error);
+            throw error;
+        }
+    }
+};
+
 class SalesNavigatorFloatingUI {
     constructor() {
         this.isCollecting = false;
@@ -48,7 +81,7 @@ class SalesNavigatorFloatingUI {
                 this.currentWorkflowStep = state.currentWorkflowStep || 'collecting';
                 this.currentProfileIndex = state.currentProfileIndex || 0;
                 this.profiles = state.profiles || [];
-                this.generatedMessage = state.generatedMessage || "Hello dear";
+                this.generatedMessage = state.generatedMessage;
                 this.processedProfiles = state.processedProfiles || [];
                 if (this.currentWorkflowStep === 'processing') {
                     this.hideCollectionUI();
@@ -356,7 +389,7 @@ class SalesNavigatorFloatingUI {
                 this.currentWorkflowStep = state.currentWorkflowStep;
                 this.currentProfileIndex = state.currentProfileIndex;
                 this.profiles = state.profiles || [];
-                this.generatedMessage = state.generatedMessage || "Hello dear";
+                this.generatedMessage = state.generatedMessage;
                 this.processedProfiles = state.processedProfiles || [];
                 this.currentLinkedInProfileUrl = null;
                 this.showWorkflowPopup();
@@ -641,7 +674,7 @@ class SalesNavigatorFloatingUI {
         }
         this.currentWorkflowStep = 'processing';
         this.currentProfileIndex = 0;
-        this.generatedMessage = "Hello dear";
+        this.generatedMessage = null;
         this.processedProfiles = [];
         this.hideCollectionUI();
         this.saveState();
@@ -738,7 +771,9 @@ class SalesNavigatorFloatingUI {
             const currentProfile = this.profiles[this.currentProfileIndex];
             if (statusElement) statusElement.textContent = `Processing: ${currentProfile.name}`;
         }
-        if (messageElement && this.generatedMessage) messageElement.textContent = this.generatedMessage;
+        if (messageElement) {
+            messageElement.textContent = this.generatedMessage || 'Will be generated from LinkedIn profile URL';
+        }
         if (profileUrlElement) profileUrlElement.textContent = this.getCurrentProfileUrl();
         if (linkedinUrlElement) linkedinUrlElement.textContent = this.currentLinkedInProfileUrl || 'Will be captured from profile';
     }
@@ -1020,7 +1055,26 @@ class SalesNavigatorFloatingUI {
                     if (copiedUrl) {
                         this.currentLinkedInProfileUrl = copiedUrl;
                         this.updateWorkflowUI();
-                        if (statusElement) statusElement.textContent = 'LinkedIn URL captured and stored successfully!';
+                        if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
+
+                        try {
+                            const messageData = await APIService.generateMessage(copiedUrl);
+                            console.log('API Response:', messageData);
+                            if (messageData && messageData.message) {
+                                this.generatedMessage = messageData.message;
+                                this.updateWorkflowUI();
+                                if (statusElement) statusElement.textContent = 'Message generated successfully!';
+                            } else {
+                                this.generatedMessage = "Hii";
+                                if (statusElement) statusElement.textContent = 'Using default message (API response invalid)';
+                            }
+                        } catch (error) {
+                            console.error('API call failed:', error);
+                            this.generatedMessage = "Hii";
+                            if (statusElement) statusElement.textContent = 'Using default message (API failed)';
+                        }
+
+                        this.saveState();
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
                     }
@@ -1089,7 +1143,7 @@ class SalesNavigatorFloatingUI {
                 <div style="color: #155724;">
                     <div>✅ Successfully processed: ${completedCount} profiles</div>
                     ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
-                    <div>💬 Message used: "${this.generatedMessage}"</div>
+                    <div>💬 Message used: "${this.generatedMessage || 'No message generated'}"</div>
                 </div>
             `;
             popup.appendChild(summaryDiv);
