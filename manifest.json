@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Auto Connect & Message",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Automate LinkedIn connections and personalized messages",
   "permissions": [
     "activeTab",

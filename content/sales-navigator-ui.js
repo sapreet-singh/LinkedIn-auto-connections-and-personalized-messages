@@ -22,7 +22,10 @@ const APIService = {
                 throw new Error(`API request failed: ${response.status} ${response.statusText}`);
             }
             const apiData = await response.json();
-            const message = apiData?.messages?.message1;
+            const messageTest = apiData?.messages?.message1;
+            console.log("Api message", messageTest);
+            const message = "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team.";
+
             return { message: message };
         } catch (error) {
             console.error('API Service Error:', error);
@@ -1058,7 +1061,8 @@ class SalesNavigatorFloatingUI {
                         if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
 
                         try {
-                            const messageData = await APIService.generateMessage(copiedUrl);
+                            //const messageData = await APIService.generateMessage(copiedUrl);
+                            const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
                             console.log('API Response:', messageData);
                             if (messageData && messageData.message) {
                                 this.generatedMessage = messageData.message;
@@ -1163,10 +1167,11 @@ class SalesNavigatorFloatingUI {
     }
 
     async fillInvitationMessage() {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
+        try {
+            const statusElement = document.getElementById('workflow-current-status');
+            if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
 
-        await this.wait(1500);
+            await this.wait(1500);
 
         let textarea = document.querySelector('textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx') ||
                       document.querySelector('textarea[id="connect-cta-form__invitation"]') ||
@@ -1195,7 +1200,7 @@ class SalesNavigatorFloatingUI {
                 textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
                 await this.wait(30);
             }
-s
+
             textarea.dispatchEvent(new Event('change', { bubbles: true }));
             textarea.dispatchEvent(new Event('blur', { bubbles: true }));
 
@@ -1217,6 +1222,11 @@ s
             } else {
                 if (statusElement) statusElement.textContent = 'Send invitation popup not found';
             }
+        }
+        } catch (error) {
+            console.error('Error in fillInvitationMessage:', error);
+            const statusElement = document.getElementById('workflow-current-status');
+            if (statusElement) statusElement.textContent = 'Error filling invitation message';
         }
     }
 
@@ -1345,6 +1355,11 @@ s
 
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
 
-if (typeof window.salesNavUI === 'undefined') {
-    window.salesNavUI = new SalesNavigatorFloatingUI();
+// Only create instance if we're on a LinkedIn page and not already created
+if (typeof window.salesNavUI === 'undefined' && window.location.href.includes('linkedin.com')) {
+    try {
+        window.salesNavUI = new SalesNavigatorFloatingUI();
+    } catch (error) {
+        console.error('Error creating SalesNavigatorFloatingUI instance:', error);
+    }
 }
