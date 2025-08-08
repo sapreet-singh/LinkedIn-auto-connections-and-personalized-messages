@@ -1060,26 +1060,30 @@ class SalesNavigatorFloatingUI {
                         this.updateWorkflowUI();
                         if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
 
+                        let apiCallSuccessful = false;
                         try {
-                            //const messageData = await APIService.generateMessage(copiedUrl);
-                            const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
+                             const messageData = await APIService.generateMessage(copiedUrl);
+                           // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
                             console.log('API Response:', messageData);
                             if (messageData && messageData.message) {
                                 this.generatedMessage = messageData.message;
                                 this.updateWorkflowUI();
-                                if (statusElement) statusElement.textContent = 'Message generated successfully!';
+                                if (statusElement) statusElement.textContent = 'Dynamic message generated successfully!';
+                                apiCallSuccessful = true;
                             } else {
-                                this.generatedMessage = "Hii";
-                                if (statusElement) statusElement.textContent = 'Using default message (API response invalid)';
+                                this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                                if (statusElement) statusElement.textContent = 'Using static message (API response invalid)';
                             }
                         } catch (error) {
                             console.error('API call failed:', error);
-                            this.generatedMessage = "Hii";
-                            if (statusElement) statusElement.textContent = 'Using default message (API failed)';
+                            this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                            if (statusElement) statusElement.textContent = 'API error - using static message';
                         }
 
                         this.saveState();
                         await this.wait(1000);
+
+                        // Always proceed with connection, using either dynamic or static message
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
