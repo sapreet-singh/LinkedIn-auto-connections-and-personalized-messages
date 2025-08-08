@@ -10,6 +10,7 @@ class SalesNavigatorFloatingUI {
         this.workflowPaused = false;
         this.workflowPopup = null;
         this.currentLinkedInProfileUrl = null;
+        this.isProcessingThreeDotMenu = false;
 
         if (this.isSalesNavigatorSearchPage()) {
             this.init();
@@ -52,9 +53,9 @@ class SalesNavigatorFloatingUI {
                 this.processedProfiles = state.processedProfiles || [];
                 if (this.currentWorkflowStep === 'processing') {
                     this.hideCollectionUI();
-                    if (window.location.href.includes('/sales/search/people')) {
-                        setTimeout(() => this.processNextProfile(), 2000);
-                    }
+                    // Always show the workflow popup to provide controls
+                    this.showWorkflowPopup();
+                    // On search page, user can click "Start Processing" or "Next Profile"
                 } else {
                     this.showUI();
                     this.updateProfilesList();
@@ -355,9 +356,8 @@ class SalesNavigatorFloatingUI {
                             try {
                                 const state = JSON.parse(savedState);
                                 if (state.currentWorkflowStep === 'processing') {
-                                    // Don't show workflow popup on search page
-                                    // Just continue processing next profile
-                                    setTimeout(() => this.processNextProfile(), 1000);
+                                    // Show workflow popup on any page to give manual control
+                                    this.showWorkflowPopup();
                                 }
                             } catch (e) {
                                 console.error('Error checking workflow state:', e);
@@ -742,31 +742,21 @@ class SalesNavigatorFloatingUI {
 
     // New workflow methods
     startWorkflow() {
-        console.log('startWorkflow() called with', this.profiles.length, 'profiles');
         if (this.profiles.length === 0) {
             alert('No profiles to process');
             return;
         }
 
-        console.log('Starting workflow processing');
         this.currentWorkflowStep = 'processing';
         this.currentProfileIndex = 0;
         this.generatedMessage = "Hello dear";
         this.processedProfiles = [];
 
-        console.log('Hiding collection UI and saving state');
         this.hideCollectionUI();
         this.saveState();
 
-        if (this.workflowPopup) {
-            console.log('Closing existing workflow popup');
-            this.closeWorkflowPopup();
-        }
-
-        console.log('Starting profile processing in 500ms');
-        setTimeout(() => {
-            this.processNextProfile();
-        }, 500);
+        // Show the workflow popup with manual controls instead of auto-processing
+        this.showWorkflowPopup();
     }
 
     saveState() {
@@ -785,11 +775,8 @@ class SalesNavigatorFloatingUI {
     showWorkflowPopup() {
         console.log('showWorkflowPopup called on:', window.location.href);
 
-        // Only prevent popup on search pages, allow on profile pages
-        if (window.location.href.includes('/sales/search/people')) {
-            console.log('Preventing popup on search page');
-            return;
-        }
+        // Allow popup on both search and profile pages to enable manual control
+        // (previously prevented on search page)
 
         console.log('Creating workflow popup');
         const overlay = document.createElement('div');
@@ -805,7 +792,7 @@ class SalesNavigatorFloatingUI {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            pointer-events: auto !important;
+            pointer-events: none !important;
         `;
 
         // Create popup content
@@ -867,9 +854,10 @@ class SalesNavigatorFloatingUI {
             </div>
 
             <div style="margin-top: 20px; text-align: center;">
-                <button id="pause-workflow" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-right: 10px;">Pause</button>
+                <button id="start-processing" style="background: #0073b1; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500;">Start Processing</button>
+                <button id="next-profile" style="background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; display: none;">Next Profile</button>
+                <button id="pause-workflow" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-right: 10px; display: none;">Pause</button>
                 <button id="resume-workflow" style="background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; display: none;">Resume</button>
-                <button id="force-continue" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Force Continue</button>
             </div>
         `;
 
@@ -886,6 +874,14 @@ class SalesNavigatorFloatingUI {
             this.closeWorkflowPopup();
         });
 
+        document.getElementById('start-processing').addEventListener('click', () => {
+            this.startProcessing();
+        });
+
+        document.getElementById('next-profile').addEventListener('click', () => {
+            this.goToNextProfile();
+        });
+
         document.getElementById('pause-workflow').addEventListener('click', () => {
             this.pauseWorkflow();
         });
@@ -894,9 +890,7 @@ class SalesNavigatorFloatingUI {
             this.resumeWorkflow();
         });
 
-        document.getElementById('force-continue').addEventListener('click', () => {
-            this.forceContinueWorkflow();
-        });
+
 
         this.workflowPopup = overlay;
 
@@ -971,6 +965,85 @@ class SalesNavigatorFloatingUI {
         this.processNextProfile();
     }
 
+    startProcessing() {
+        // Hide start button and show appropriate buttons based on current page
+        document.getElementById('start-processing').style.display = 'none';
+
+        // Always show next profile button
+        document.getElementById('next-profile').style.display = 'inline-block';
+
+        // Check if we're on a profile page or search page for status message
+        const currentUrl = window.location.href;
+        if (currentUrl.includes('/in/') || currentUrl.includes('/sales/lead/')) {
+            this.updateCurrentStatus('On profile page. Click "Next Profile" to continue to next profile.');
+        } else {
+            this.updateCurrentStatus('Ready to start. Click "Next Profile" to open first profile.');
+        }
+    }
+
+    updateCurrentStatus(message) {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) {
+            statusElement.textContent = message;
+        }
+    }
+
+    showNextProfileButton() {
+        const nextBtn = document.getElementById('next-profile');
+        const pauseBtn = document.getElementById('pause-workflow');
+        if (nextBtn) nextBtn.style.display = 'inline-block';
+        if (pauseBtn) pauseBtn.style.display = 'none';
+    }
+
+    async goToNextProfile() {
+        // Hide next button and show pause button
+        const nextBtn = document.getElementById('next-profile');
+        const pauseBtn = document.getElementById('pause-workflow');
+        if (nextBtn) nextBtn.style.display = 'none';
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+
+        // Check if we need to navigate to the next profile
+        if (this.currentProfileIndex < this.profiles.length) {
+            const profile = this.profiles[this.currentProfileIndex];
+
+            // If we're on Sales Navigator search page, navigate to the profile
+            if (window.location.href.includes('/sales/search/people')) {
+                await this.navigateToProfile(profile.url);
+            } else {
+                // If we're already on a profile page, start processing
+                this.processNextProfile();
+            }
+        } else {
+            this.completeWorkflow();
+        }
+    }
+
+    async navigateToProfile(profileUrl) {
+        this.updateCurrentStatus('Opening profile...');
+
+        // Save current state
+        const state = {
+            currentWorkflowStep: this.currentWorkflowStep,
+            currentProfileIndex: this.currentProfileIndex,
+            profiles: this.profiles,
+            generatedMessage: this.generatedMessage,
+            processedProfiles: this.processedProfiles || []
+        };
+        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+
+        // Navigate to the profile
+        window.location.href = profileUrl;
+    }
+
+    processCurrentProfile() {
+        // Show pause button
+        const pauseBtn = document.getElementById('pause-workflow');
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+
+        // Start processing the current profile
+        this.processNextProfile();
+    }
+
     forceContinueWorkflow() {
         this.workflowPaused = false;
         this.updateProfileStatus(this.currentProfileIndex, 'Force continuing...', '⚡', '#ff9800');
@@ -1037,19 +1110,11 @@ class SalesNavigatorFloatingUI {
                 this.updateProfileStatus(this.currentProfileIndex, 'Finding menu...', '🔍', '#2196f3');
                 await this.showThreeDotMenu();
 
-                // Step 3: Generate message using captured LinkedIn profile URL
-                this.updateProfileStatus(this.currentProfileIndex, 'Generating message...', '💬', '#2196f3');
-                await this.generateMessageFromAPI();
+                // Step 3: Skipped message generation per request
 
-                // Step 4: Show three-dot menu again to access connect option
-                this.updateProfileStatus(this.currentProfileIndex, 'Preparing connect...', '🔗', '#2196f3');
-                await this.showThreeDotMenu();
+                // Step 4 & 5: Skipped auto-connect per request
 
-                // Step 5: Click connect button
-                this.updateProfileStatus(this.currentProfileIndex, 'Connecting...', '🤝', '#2196f3');
-                await this.clickConnectButton();
-
-                // Step 6: Mark as completed and navigate back to Sales Navigator
+                // Step 6: Mark as completed and wait for manual next action
                 this.updateProfileStatus(this.currentProfileIndex, 'Completed', '✅', '#4caf50');
                 this.processedProfiles.push({...profile, status: 'completed', message: this.generatedMessage});
 
@@ -1058,8 +1123,9 @@ class SalesNavigatorFloatingUI {
 
                 // Check if there are more profiles to process
                 if (this.currentProfileIndex < this.profiles.length) {
-                    // Navigate back to Sales Navigator search page to process next profile
-                    await this.navigateBackToSalesNav();
+                    // Show ready for next profile instead of auto-continuing
+                    this.updateCurrentStatus('Profile completed! Click "Next Profile" to continue.');
+                    this.showNextProfileButton();
                 } else {
                     // All profiles completed
                     this.completeWorkflow();
@@ -1084,13 +1150,10 @@ class SalesNavigatorFloatingUI {
             await this.wait(1000);
             this.currentProfileIndex++;
 
-            // Try to continue with next profile
+            // Show error and wait for manual next action
             if (this.currentProfileIndex < this.profiles.length) {
-                if (window.location.href.includes('/sales/search/people')) {
-                    this.processNextProfile();
-                } else {
-                    await this.navigateBackToSalesNav();
-                }
+                this.updateCurrentStatus('Error occurred! Click "Next Profile" to continue with next profile.');
+                this.showNextProfileButton();
             } else {
                 this.completeWorkflow();
             }
@@ -1175,221 +1238,167 @@ class SalesNavigatorFloatingUI {
     }
 
     async showThreeDotMenu() {
-        // Update popup status
+        // Prevent multiple simultaneous executions
+        if (this.isProcessingThreeDotMenu) {
+            console.log('Three-dot menu processing already in progress, skipping...');
+            return;
+        }
+
+        this.isProcessingThreeDotMenu = true;
+
         const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) {
-            statusElement.textContent = 'Looking for three-dot menu...';
-        }
+        if (statusElement) statusElement.textContent = 'Looking for three-dot menu...';
 
-        // Look for three-dot menu button with more comprehensive selectors
-        const threeDotSelectors = [
-            'button[aria-label*="More"]',
-            'button[aria-label*="more"]',
-            'button[aria-label*="More actions"]',
-            'button[aria-label*="more actions"]',
-            '.artdeco-dropdown__trigger',
-            '[data-control-name="profile_more_actions"]',
-            'button[data-control-name="profile_more_actions"]',
-            'button[data-control-name="more_actions"]',
-            'button[aria-label*="More actions for"]',
-            'button[aria-label*="more actions for"]',
-            'button[data-control-name="profile_actions"]',
-            'button[aria-label*="More options"]',
-            'button[aria-label*="more options"]',
-            '.artdeco-button[aria-label*="More"]',
-            '.artdeco-button[aria-label*="more"]'
-        ];
+        // Find the exact button you showed me
+        const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
+                      document.querySelector('button[id^="hue-menu-trigger-"]') ||
+                      document.querySelector('button._overflow-menu--trigger_1xow7n');
 
-        let threeDotButton = null;
-        for (const selector of threeDotSelectors) {
-            threeDotButton = document.querySelector(selector);
-            if (threeDotButton) break;
-        }
+        if (button) {
+            console.log('Found three-dot button:', button);
+            console.log('Button ID:', button.id);
+            console.log('Button aria-label:', button.getAttribute('aria-label'));
 
-        if (threeDotButton) {
-            threeDotButton.click();
+            if (statusElement) statusElement.textContent = 'Clicking three-dot menu...';
+
+            // Simple click
+            button.click();
+
+            if (statusElement) statusElement.textContent = 'Three-dot menu clicked!';
+            console.log('Three-dot menu clicked successfully');
+
+            // Wait for menu to appear and check
             await this.wait(1000);
 
-            const copyUrlSelectors = [
-                'a[href*="copy-profile-url"]',
-                'a[aria-label*="Copy profile URL"]',
-                'a[aria-label*="copy profile url"]',
-                'a[data-control-name="copy_profile_url"]',
-                'a[data-control-name="copy_profile_link"]',
-                'a[aria-label*="Copy link"]',
-                'a[aria-label*="copy link"]',
-                'a[aria-label*="Copy profile link"]',
-                'a[aria-label*="copy profile link"]',
+            const menu = document.querySelector('#hue-menu-ember48') ||
+                        document.querySelector('[id^="hue-menu-"]') ||
+                        document.querySelector('div[role="menu"]');
 
-            ];
+            if (menu) {
+                console.log('Menu opened successfully');
+                if (statusElement) statusElement.textContent = 'Menu opened! Looking for LinkedIn profile option...';
 
-            let copyUrlLink = null;
+                // Wait a bit for menu to fully render
+                await this.wait(500);
 
-            // First try CSS selectors
-            for (const selector of copyUrlSelectors) {
-                try {
-                    copyUrlLink = document.querySelector(selector);
-                    if (copyUrlLink) break;
-                } catch (e) {
-                    console.log('Invalid selector:', selector, e);
-                }
-            }
+                // Look for "Copy LinkedIn.com URL" option
+                const copyUrlOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
+                    const text = (el.textContent || '').toLowerCase().trim();
+                    return text.includes('copy linkedin.com url') ||
+                           text.includes('copy linkedin url') ||
+                           text.includes('copy url') ||
+                           text === 'copy linkedin.com url';
+                });
 
-            // If no link found, try finding by text content
-            if (!copyUrlLink) {
-                const allLinks = document.querySelectorAll('a');
-                for (const link of allLinks) {
-                    const text = link.textContent?.toLowerCase() || '';
-                    if (text.includes('copy link') || text.includes('copy profile') || text.includes('copy linkedin')) {
-                        copyUrlLink = link;
-                        break;
+                if (copyUrlOption) {
+                    console.log('Found Copy LinkedIn URL option');
+                    if (statusElement) statusElement.textContent = 'Extracting LinkedIn URL...';
+
+                    // Try to extract LinkedIn URL from current page first
+                    let linkedinUrl = this.extractLinkedInUrlFromPage();
+
+                    if (!linkedinUrl) {
+                        // If not found, try clipboard method
+                        if (statusElement) statusElement.textContent = 'Clicking "Copy LinkedIn.com URL"...';
+
+                        // Click the copy URL option
+                        copyUrlOption.click();
+                        console.log('Clicked "Copy LinkedIn.com URL" option');
+
+                        // Wait for copy operation to complete
+                        if (statusElement) statusElement.textContent = 'Waiting for URL to be copied...';
+                        await this.wait(2000);
+
+                        // Try to get the copied URL from clipboard
+                        try {
+                            const clipboardText = await navigator.clipboard.readText();
+                            console.log('Clipboard content:', clipboardText ? `"${clipboardText.substring(0, 100)}..."` : 'No text');
+
+                            if (clipboardText && clipboardText.includes('linkedin.com')) {
+                                // Extract LinkedIn profile URL
+                                const urlMatch = clipboardText.match(/https:\/\/[^\s]*linkedin\.com\/in\/[^\s\n\r]*/);
+                                if (urlMatch) {
+                                    linkedinUrl = urlMatch[0].trim();
+                                    console.log('Extracted LinkedIn URL from clipboard:', linkedinUrl);
+                                }
+                            }
+                        } catch (e) {
+                            console.log('Clipboard read failed:', e.message);
+                        }
                     }
-                }
-            }
 
-            if (copyUrlLink) {
-                // Clear clipboard first and set up listener to capture the copied URL
-                await this.setupClipboardCapture();
+                    const copiedUrl = linkedinUrl;
 
-                copyUrlLink.click();
-                if (statusElement) {
-                    statusElement.textContent = 'Copying LinkedIn profile URL...';
-                }
 
-                // Wait for clipboard to be populated
-                await this.wait(1000);
 
-                // Capture the copied URL from clipboard
-                const copiedUrl = await this.getCopiedUrl();
-                if (copiedUrl) {
-                    this.currentLinkedInProfileUrl = copiedUrl;
-                    if (statusElement) {
-                        statusElement.textContent = 'LinkedIn profile URL captured';
+                    if (copiedUrl) {
+                        console.log('LinkedIn URL successfully copied:', copiedUrl);
+
+                        // Store the LinkedIn URL in the workflow
+                        this.currentLinkedInProfileUrl = copiedUrl;
+
+                        // Update the workflow UI to show the captured URL
+                        this.updateWorkflowUI();
+
+                        if (statusElement) statusElement.textContent = 'LinkedIn URL captured and stored successfully!';
+                    } else {
+                        console.log('Failed to get LinkedIn URL from clipboard after', maxAttempts, 'attempts');
+                        if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
                     }
-                    // Update the popup UI with the captured URL
-                    this.updateWorkflowUI();
                 } else {
-                    if (statusElement) {
-                        statusElement.textContent = 'Failed to capture copied URL';
-                    }
-                }
+                    console.log('Copy LinkedIn URL option not found in menu');
+                    if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
 
-                await this.wait(500);
+                    // Debug: log all menu options
+                    const allOptions = Array.from(menu.querySelectorAll('a, button, div, span'))
+                        .map(el => el.textContent?.trim())
+                        .filter(text => text && text.length > 0);
+                    console.log('Available menu options:', allOptions);
+                }
             } else {
-                if (statusElement) {
-                    statusElement.textContent = 'Copy URL link not found';
-                }
-                await this.wait(500);
+                console.log('Menu not found after click');
+                if (statusElement) statusElement.textContent = 'Menu not visible after click';
             }
+
+            return;
         } else {
-            if (statusElement) {
-                statusElement.textContent = 'Three-dot menu not found';
-            }
-            await this.wait(500);
+            if (statusElement) statusElement.textContent = 'Three-dot button not found';
+            console.log('Three-dot button not found');
         }
+
+        // Reset the processing flag
+        this.isProcessingThreeDotMenu = false;
     }
 
-    async setupClipboardCapture() {
-        // Clear any previous clipboard content
+    extractLinkedInUrlFromPage() {
+        // Try to extract LinkedIn URL from the current Sales Navigator page
         try {
-            await navigator.clipboard.writeText('');
-        } catch (error) {
-            console.log('Could not clear clipboard:', error);
-        }
-    }
-
-    async getCopiedUrl() {
-        try {
-            const clipboardText = await navigator.clipboard.readText();
-
-            // Check if the clipboard contains a LinkedIn profile URL
-            if (clipboardText && (clipboardText.includes('linkedin.com/in/') || clipboardText.includes('linkedin.com/pub/'))) {
-                return clipboardText.trim();
-            }
-
-            return null;
-        } catch (error) {
-            console.error('Error reading clipboard:', error);
-            return null;
-        }
-    }
-
-    async generateMessageFromAPI() {
-        const statusElement = document.getElementById('workflow-current-status');
-
-        // Use static message as per user preference
-        this.generatedMessage = "Hello dear";
-
-        if (statusElement) {
-            statusElement.textContent = 'Using static message: "Hello dear"';
-        }
-
-        this.updateWorkflowUI();
-        await this.wait(500);
-    }
-
-    async clickConnectButton() {
-        // Update popup status
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) {
-            statusElement.textContent = 'Looking for connect button...';
-        }
-
-        // Look for connect button with valid CSS selectors
-        const connectSelectors = [
-            'button[aria-label*="Connect"]',
-            'button[aria-label*="connect"]',
-            'button[data-control-name="connect"]',
-            'button[data-control-name="invite"]',
-            '.artdeco-button[data-control-name="connect"]',
-            '.artdeco-button[data-control-name="invite"]',
-            'button[data-control-name="connect_with_message"]',
-            'button[data-control-name="invite_with_message"]',
-            '.artdeco-button[data-control-name="connect_with_message"]',
-            '.artdeco-button[data-control-name="invite_with_message"]',
-            'button[aria-label*="Invite"]',
-            'button[aria-label*="invite"]',
-            'button[aria-label*="Send invitation"]',
-            'button[aria-label*="send invitation"]',
-            'button[aria-label*="Send invite"]',
-            'button[aria-label*="send invite"]'
-        ];
-
-        let connectButton = null;
-
-        // First try CSS selectors
-        for (const selector of connectSelectors) {
-            try {
-                connectButton = document.querySelector(selector);
-                if (connectButton) break;
-            } catch (e) {
-                console.log('Invalid selector:', selector, e);
-            }
-        }
-
-        // If no button found, try finding by text content
-        if (!connectButton) {
-            const allButtons = document.querySelectorAll('button');
-            for (const button of allButtons) {
-                const text = button.textContent?.toLowerCase() || '';
-                if (text.includes('connect') || text.includes('invite')) {
-                    connectButton = button;
-                    break;
+            // Method 1: Look for any LinkedIn profile links in the page
+            const linkedinLinks = document.querySelectorAll('a[href*="linkedin.com/in/"]');
+            for (const link of linkedinLinks) {
+                if (link.href && link.href.includes('linkedin.com/in/')) {
+                    console.log('Found LinkedIn URL in page:', link.href);
+                    return link.href;
                 }
             }
-        }
 
-        if (connectButton) {
-            connectButton.click();
-            if (statusElement) {
-                statusElement.textContent = 'Connect button clicked';
+            // Method 2: Look for data attributes that might contain LinkedIn URLs
+            const elementsWithData = document.querySelectorAll('[data-linkedin-url], [data-profile-url], [data-url]');
+            for (const element of elementsWithData) {
+                const url = element.getAttribute('data-linkedin-url') ||
+                           element.getAttribute('data-profile-url') ||
+                           element.getAttribute('data-url');
+                if (url && url.includes('linkedin.com/in/')) {
+                    console.log('Found LinkedIn URL in data attribute:', url);
+                    return url;
+                }
             }
-            await this.wait(1000);
-        } else {
-            if (statusElement) {
-                statusElement.textContent = 'Connect button not found';
-            }
-            await this.wait(1000);
+
+            console.log('No LinkedIn URL found in page');
+            return null;
+        } catch (e) {
+            console.log('Error extracting LinkedIn URL from page:', e.message);
+            return null;
         }
     }
 
@@ -1455,14 +1464,16 @@ class SalesNavigatorFloatingUI {
             // Show the collection UI again
             this.showUI();
 
-            // Update main UI
-            const workflowStatus = this.ui.querySelector('#workflow-status');
-            const nextBtn = this.ui.querySelector('#next-button');
+            // Update main UI (only if the floating UI exists on this page)
+            if (this.ui) {
+                const workflowStatus = this.ui.querySelector('#workflow-status');
+                const nextBtn = this.ui.querySelector('#next-button');
 
-            if (workflowStatus) workflowStatus.style.display = 'none';
-            if (nextBtn) {
-                nextBtn.style.display = 'block';
-                nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+                if (workflowStatus) workflowStatus.style.display = 'none';
+                if (nextBtn) {
+                    nextBtn.style.display = 'block';
+                    nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+                }
             }
         }, 5000);
     }
