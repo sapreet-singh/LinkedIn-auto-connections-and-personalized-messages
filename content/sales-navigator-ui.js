@@ -53,6 +53,9 @@ class SalesNavigatorFloatingUI {
         this.isProcessingThreeDotMenu = false;
         this.profileStatuses = {};
         this.profileDelay = 5000;
+        this.sendConnectCount = 0;
+        this.fieldConnectCount = 0;
+        this.loadSavedCounters();
 
         this.loadBatchSettings();
         this.autoProcessingTimeout = null;
@@ -98,6 +101,8 @@ class SalesNavigatorFloatingUI {
                 this.automationRunning = state.automationRunning || false;
                 this.workflowPaused = state.workflowPaused || false;
                 this.profileStatuses = state.profileStatuses || {};
+                this.sendConnectCount = state.sendConnectCount || 0;
+                this.fieldConnectCount = state.fieldConnectCount || 0;
                 if (this.currentWorkflowStep === 'processing') {
                     this.hideCollectionUI();
                     this.showWorkflowPopup();
@@ -106,6 +111,7 @@ class SalesNavigatorFloatingUI {
                     this.showUI();
                     this.updateProfilesList();
                     this.updateProfilesCount();
+                    this.updateConnectCounts();
                     this.updateUI();
                 }
             } catch (e) {
@@ -288,6 +294,10 @@ class SalesNavigatorFloatingUI {
                         <span id="status-text">Ready to collect profiles</span>
                     </div>
                 </div>
+                <div class="send-connect-section">
+                    <div class="connect-count">Send Connect: <span id="send-connect-count">0</span></div>
+                    <div class="connect-count">Field Connect: <span id="field-connect-count">0</span></div>
+                </div>
                 <div class="profiles-section">
                     <div class="profiles-header">
                         <span class="profiles-count">Profiles: <span id="profiles-count">0</span></span>
@@ -418,6 +428,8 @@ class SalesNavigatorFloatingUI {
                 this.profileStatuses = state.profileStatuses || {};
                 this.automationRunning = state.automationRunning || false;
                 this.workflowPaused = state.workflowPaused || false;
+                this.sendConnectCount = state.sendConnectCount || 0;
+                this.fieldConnectCount = state.fieldConnectCount || 0;
                 this.currentLinkedInProfileUrl = null;
                 this.showWorkflowPopup();
 
@@ -439,6 +451,7 @@ class SalesNavigatorFloatingUI {
             this.ui.style.display = 'flex';
             this.ui.style.visibility = 'visible';
             this.ui.style.opacity = '1';
+            this.updateConnectCounts();
         }
     }
 
@@ -641,6 +654,24 @@ class SalesNavigatorFloatingUI {
         }
     }
 
+    updateConnectCounts() {
+        const sendConnectElement = this.ui?.querySelector('#send-connect-count');
+        const fieldConnectElement = this.ui?.querySelector('#field-connect-count');
+
+        if (sendConnectElement) {
+            sendConnectElement.textContent = this.sendConnectCount;
+        }
+        if (fieldConnectElement) {
+            fieldConnectElement.textContent = this.fieldConnectCount;
+        }
+
+        // Also update in workflow popup if it exists
+        const workflowSendConnect = document.getElementById('send-connect-count');
+        const workflowFieldConnect = document.getElementById('field-connect-count');
+        if (workflowSendConnect) workflowSendConnect.textContent = this.sendConnectCount;
+        if (workflowFieldConnect) workflowFieldConnect.textContent = this.fieldConnectCount;
+    }
+
     updateProfilesList() {
         const listElement = this.ui.querySelector('#profiles-list');
         if (this.profiles.length === 0) {
@@ -738,7 +769,9 @@ class SalesNavigatorFloatingUI {
             processedProfiles: this.processedProfiles || [],
             automationRunning: this.automationRunning,
             workflowPaused: this.workflowPaused,
-            profileStatuses: this.profileStatuses || {}
+            profileStatuses: this.profileStatuses || {},
+            sendConnectCount: this.sendConnectCount || 0,
+            fieldConnectCount: this.fieldConnectCount || 0
         };
         localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
     }
@@ -1425,13 +1458,21 @@ class SalesNavigatorFloatingUI {
 
             if (successMessage) {
                 if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
             } else {
-                if (statusElement) statusElement.textContent = 'Invitation sent (no confirmation message found)';
+                if (statusElement) statusElement.textContent = 'Invitation sent';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
             }
         } else if (sendButton && sendButton.disabled) {
             if (statusElement) statusElement.textContent = 'Send button found but disabled';
+            this.fieldConnectCount++;
+            this.updateConnectCounts();
         } else {
             if (statusElement) statusElement.textContent = 'Send Invitation button not found';
+            this.fieldConnectCount++;
+            this.updateConnectCounts();
         }
 
         this.isProcessingThreeDotMenu = false;
@@ -1500,6 +1541,10 @@ class SalesNavigatorFloatingUI {
             popup.appendChild(summaryDiv);
         }
 
+        // Save counters before clearing state
+        const savedSendConnectCount = this.sendConnectCount;
+        const savedFieldConnectCount = this.fieldConnectCount;
+
         localStorage.removeItem('salesNavWorkflow');
         this.currentWorkflowStep = 'collecting';
         this.currentProfileIndex = 0;
@@ -1510,14 +1555,38 @@ class SalesNavigatorFloatingUI {
         this.currentLinkedInProfileUrl = null;
         this.profileStatuses = {};
 
+        // Restore counters after clearing state
+        this.sendConnectCount = savedSendConnectCount;
+        this.fieldConnectCount = savedFieldConnectCount;
+
         setTimeout(() => {
             if (statusElement) {
                 statusElement.textContent = 'Returning to Sales Navigator search page...';
             }
+            // Save counters to localStorage for persistence across page navigation
+            localStorage.setItem('salesNavCounters', JSON.stringify({
+                sendConnectCount: this.sendConnectCount,
+                fieldConnectCount: this.fieldConnectCount
+            }));
             const salesNavUrl = 'https://www.linkedin.com/sales/search/people?viewAllFilters=true';
             window.location.href = salesNavUrl;
         }, 5000);
     }
+    loadSavedCounters() {
+        try {
+            const savedCounters = localStorage.getItem('salesNavCounters');
+            if (savedCounters) {
+                const counters = JSON.parse(savedCounters);
+                this.sendConnectCount = counters.sendConnectCount || 0;
+                this.fieldConnectCount = counters.fieldConnectCount || 0;
+            }
+        } catch (error) {
+            console.error('Error loading saved counters:', error);
+            this.sendConnectCount = 0;
+            this.fieldConnectCount = 0;
+        }
+    }
+
     loadBatchSettings() {
         this.profileDelay = 8000;
     }
