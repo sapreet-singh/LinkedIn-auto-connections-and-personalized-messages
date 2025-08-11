@@ -1,16 +1,72 @@
+// Prevent multiple script executions
+if (window.salesNavigatorUILoaded) {
+    console.log('Sales Navigator UI script already loaded, skipping');
+} else {
+    window.salesNavigatorUILoaded = true;
+
+const CONSTANTS = {
+    API: {
+        BASE_URL: 'https://localhost:7007',
+        ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
+    }
+};
+
+const APIService = {
+    async generateMessage(customPrompt, profileUrl) {
+        try {
+            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: profileUrl,
+                    prompt: customPrompt
+                })
+            });
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+            const apiData = await response.json();
+            const messageTest = apiData?.messages?.message1;
+            return { message: messageTest };
+        } catch (error) {
+            console.error('API Service Error:', error);
+            throw error;
+        }
+    }
+};
+
 class SalesNavigatorFloatingUI {
     constructor() {
         this.isCollecting = false;
         this.profiles = [];
-        this.observer = null;
-        this.collectingInterval = null;
         this.ui = null;
         this.currentWorkflowStep = 'collecting';
         this.currentProfileIndex = 0;
         this.generatedMessage = null;
+        this.processedProfiles = [];
+        this.workflowPaused = false;
+        this.automationRunning = false;
+        this.workflowPopup = null;
+        this.currentLinkedInProfileUrl = null;
+        this.isProcessingThreeDotMenu = false;
+        this.profileStatuses = {};
+        this.profileDelay = 5000;
+        this.sendConnectCount = 0;
+        this.fieldConnectCount = 0;
+        this.customPrompt = '';
+        this.promptSet = false;
+        this.loadSavedCounters();
+
+        this.loadBatchSettings();
+        this.autoProcessingTimeout = null;
 
         if (this.isSalesNavigatorSearchPage()) {
             this.init();
+        } else if (this.isLinkedInProfilePage() || this.isSalesNavigatorProfilePage()) {
+            this.checkAndRestoreWorkflow();
         }
     }
 
@@ -19,17 +75,23 @@ class SalesNavigatorFloatingUI {
         return url.includes('/sales/search/people') && url.includes('linkedin.com');
     }
 
-    init() {
-        if (!this.isSalesNavigatorSearchPage()) {
-            return;
-        }
+    isLinkedInProfilePage() {
+        const url = window.location.href;
+        return url.includes('/in/') && url.includes('linkedin.com');
+    }
 
+    isSalesNavigatorProfilePage() {
+        const url = window.location.href;
+        return url.includes('/sales/lead/') && url.includes('linkedin.com');
+    }
+
+    init() {
+        if (!this.isSalesNavigatorSearchPage()) return;
         this.injectCSS();
         this.createUI();
         this.setupEventListeners();
         this.startAutoDetection();
 
-        // Restore workflow state if present
         const saved = localStorage.getItem('salesNavWorkflow');
         if (saved) {
             try {
@@ -37,35 +99,42 @@ class SalesNavigatorFloatingUI {
                 this.currentWorkflowStep = state.currentWorkflowStep || 'collecting';
                 this.currentProfileIndex = state.currentProfileIndex || 0;
                 this.profiles = state.profiles || [];
-                this.generatedMessage = state.generatedMessage || null;
-                this.showUI();
-                this.updateProfilesList();
-                this.updateProfilesCount();
-                this.updateUI();
+                this.generatedMessage = state.generatedMessage;
+                this.processedProfiles = state.processedProfiles || [];
+                this.automationRunning = state.automationRunning || false;
+                this.workflowPaused = state.workflowPaused || false;
+                this.profileStatuses = state.profileStatuses || {};
+                this.sendConnectCount = state.sendConnectCount || 0;
+                this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.customPrompt = state.customPrompt || '';
+                this.promptSet = state.promptSet || false;
                 if (this.currentWorkflowStep === 'processing') {
-                    setTimeout(() => this.processNextProfile(), 1000);
+                    this.hideCollectionUI();
+                    this.showWorkflowPopup();
+                    this.updateButtonStates();
+                } else {
+                    this.showUI();
+                    this.updateProfilesList();
+                    this.updateProfilesCount();
+                    this.updateConnectCounts();
+                    this.updateUI();
                 }
             } catch (e) {
-                console.error('Error restoring workflow state:', e);
                 localStorage.removeItem('salesNavWorkflow');
             }
         } else {
-            setTimeout(() => {
-                this.showUI();
-            }, 1000);
+            setTimeout(() => this.showUI(), 1000);
         }
     }
 
     injectCSS() {
         if (document.getElementById('sales-navigator-ui-styles')) return;
-
         const link = document.createElement('link');
         link.id = 'sales-navigator-ui-styles';
         link.rel = 'stylesheet';
         link.href = chrome.runtime.getURL('content/sales-navigator-ui.css');
         link.onerror = () => this.injectInlineCSS();
         document.head.appendChild(link);
-
         setTimeout(() => {
             if (!document.querySelector('.sales-navigator-floating-ui')) {
                 this.injectInlineCSS();
@@ -202,6 +271,13 @@ class SalesNavigatorFloatingUI {
     createUI() {
         if (this.ui) return;
 
+        const existingUI = document.querySelector('.sales-navigator-floating-ui');
+        if (existingUI) {
+            console.log('Sales Navigator UI already exists in DOM, skipping creation');
+            this.ui = existingUI;
+            return;
+        }
+
         this.ui = document.createElement('div');
         this.ui.className = 'sales-navigator-floating-ui';
         this.ui.innerHTML = `
@@ -214,43 +290,34 @@ class SalesNavigatorFloatingUI {
             </div>
             <div class="sales-nav-content">
                 <div class="sales-nav-controls">
-                    <button class="sales-nav-btn start" id="start-collecting">
-                        Start Collecting
-                    </button>
-                    <button class="sales-nav-btn pause" id="pause-collecting" disabled>
-                        Pause Collecting
-                    </button>
+                    <button class="sales-nav-btn start" id="start-collecting">Start Collecting</button>
+                    <button class="sales-nav-btn pause" id="pause-collecting" disabled>Pause Collecting</button>
                 </div>
-                
                 <div class="sales-nav-status">
                     <div class="status-indicator">
                         <span class="status-dot" id="status-dot"></span>
                         <span id="status-text">Ready to collect profiles</span>
                     </div>
                 </div>
-
+                <div class="send-connect-section">
+                    <div class="connect-count">Send Connect: <span id="send-connect-count">0</span></div>
+                    <div class="connect-count">Field Connect: <span id="field-connect-count">0</span></div>
+                </div>
                 <div class="profiles-section">
                     <div class="profiles-header">
                         <span class="profiles-count">Profiles: <span id="profiles-count">0</span></span>
                         <button class="clear-profiles" id="clear-profiles">Clear All</button>
                     </div>
                     <div class="profiles-list" id="profiles-list">
-                        <div class="empty-profiles">
-                            No profiles collected yet. Click "Start Collecting" to begin.
-                        </div>
+                        <div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>
                     </div>
                 </div>
-
-                <button class="sales-nav-btn next" id="next-button" style="display: none;">
-                    Next: Process Profiles (0)
-                </button>
-
+                <button class="sales-nav-btn next" id="next-button" style="display: none;">Next: Process Profiles (0)</button>
                 <div class="workflow-status" id="workflow-status" style="display: none;">
                     <div id="workflow-text">Ready to process profiles</div>
                 </div>
             </div>
         `;
-
         document.body.appendChild(this.ui);
     }
 
@@ -269,24 +336,17 @@ class SalesNavigatorFloatingUI {
         closeBtn.addEventListener('click', () => this.closeUI());
         minimizeBtn.addEventListener('click', () => this.toggleMinimize());
         clearBtn.addEventListener('click', () => this.clearProfiles());
-
-        // Make the UI draggable
         this.makeDraggable(header);
     }
 
     makeDraggable(handle) {
         let isDragging = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-        let xOffset = 0;
-        let yOffset = 0;
+        let currentX, currentY, initialX, initialY;
+        let xOffset = 0, yOffset = 0;
 
         handle.addEventListener('mousedown', (e) => {
             initialX = e.clientX - xOffset;
             initialY = e.clientY - yOffset;
-
             if (e.target === handle || handle.contains(e.target)) {
                 isDragging = true;
                 this.ui.style.cursor = 'grabbing';
@@ -298,18 +358,13 @@ class SalesNavigatorFloatingUI {
                 e.preventDefault();
                 currentX = e.clientX - initialX;
                 currentY = e.clientY - initialY;
-
                 xOffset = currentX;
                 yOffset = currentY;
-
-                // Keep within viewport bounds
                 const rect = this.ui.getBoundingClientRect();
                 const maxX = window.innerWidth - rect.width;
                 const maxY = window.innerHeight - rect.height;
-
                 currentX = Math.max(0, Math.min(currentX, maxX));
                 currentY = Math.max(0, Math.min(currentY, maxY));
-
                 this.ui.style.transform = `translate(${currentX}px, ${currentY}px)`;
             }
         });
@@ -323,9 +378,9 @@ class SalesNavigatorFloatingUI {
     }
 
     startAutoDetection() {
-        // Show UI on any LinkedIn Sales Navigator page (search or profile)
         if (window.location.href.includes('/sales/') || window.location.href.includes('/in/')) {
             setTimeout(() => this.showUI(), 2000);
+            this.checkAndRestoreWorkflow();
         }
 
         let lastUrl = location.href;
@@ -334,53 +389,108 @@ class SalesNavigatorFloatingUI {
             if (url !== lastUrl) {
                 lastUrl = url;
                 if (url.includes('/sales/') || url.includes('/sales/search/people')) {
-                    setTimeout(() => this.showUI(), 2000);
+                    setTimeout(() => {
+                        this.showUI();
+                        const savedState = localStorage.getItem('salesNavWorkflow');
+                        if (savedState) {
+                            try {
+                                const state = JSON.parse(savedState);
+                                if (state.currentWorkflowStep === 'processing') {
+                                    this.showWorkflowPopup();
+                                }
+                            } catch (e) {
+                                console.error('Error checking workflow state:', e);
+                            }
+                        }
+                    }, 2000);
+                } else if (url.includes('/in/') && url.includes('linkedin.com')) {
+                    setTimeout(() => this.checkAndRestoreWorkflow(), 2000);
                 }
             }
         });
 
         urlObserver.observe(document, { subtree: true, childList: true });
-
-        window.addEventListener('popstate', () => {
-            if (window.location.href.includes('/sales/') || window.location.href.includes('/sales/search/people')) {
-                setTimeout(() => this.showUI(), 2000);
-            }
-        });
-
         setTimeout(() => {
             if (window.location.href.includes('/sales/') || window.location.href.includes('/sales/search/people')) {
                 this.showUI();
+            } else if (window.location.href.includes('/in/') && window.location.href.includes('linkedin.com')) {
+                this.checkAndRestoreWorkflow();
             }
         }, 5000);
     }
 
+    checkAndRestoreWorkflow() {
+        const savedState = localStorage.getItem('salesNavWorkflow');
+        if (!savedState) return;
+        try {
+            const state = JSON.parse(savedState);
+            if (state.currentWorkflowStep === 'processing') {
+                this.currentWorkflowStep = state.currentWorkflowStep;
+                this.currentProfileIndex = state.currentProfileIndex;
+                this.profiles = state.profiles || [];
+                this.generatedMessage = state.generatedMessage;
+                this.processedProfiles = state.processedProfiles || [];
+                this.profileStatuses = state.profileStatuses || {};
+                this.automationRunning = state.automationRunning || false;
+                this.workflowPaused = state.workflowPaused || false;
+                this.sendConnectCount = state.sendConnectCount || 0;
+                this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.customPrompt = state.customPrompt || '';
+                this.promptSet = state.promptSet || false;
+                this.currentLinkedInProfileUrl = null;
+                this.showWorkflowPopup();
+
+                setTimeout(() => {
+                    this.updateButtonStates();
+                    this.restoreProfileStatuses();
+                }, 500);
+
+                setTimeout(() => this.processNextProfile(), 3000);
+            }
+        } catch (error) {
+            localStorage.removeItem('salesNavWorkflow');
+        }
+    }
+
     showUI() {
+        if (this.currentWorkflowStep === 'processing') return;
         if (this.ui) {
             this.ui.style.display = 'flex';
             this.ui.style.visibility = 'visible';
             this.ui.style.opacity = '1';
+            this.updateConnectCounts();
         }
     }
 
-    closeUI() {
+    hideCollectionUI() {
         if (this.ui) {
             this.ui.style.display = 'none';
+            this.ui.style.visibility = 'hidden';
+            this.ui.style.opacity = '0';
         }
+    }
+
+    getCurrentProfileUrl() {
+        if (this.currentProfileIndex < this.profiles.length) {
+            return this.profiles[this.currentProfileIndex].url || 'No URL available';
+        }
+        return 'No profile selected';
+    }
+
+    closeUI() {
+        if (this.ui) this.ui.style.display = 'none';
         this.pauseCollecting();
     }
 
     toggleMinimize() {
         const content = this.ui.querySelector('.sales-nav-content');
         const minimizeBtn = this.ui.querySelector('.sales-nav-minimize');
-
         if (content.style.display === 'none') {
-            // Expand
             content.style.display = 'block';
             minimizeBtn.textContent = '−';
             minimizeBtn.title = 'Minimize';
             this.ui.style.height = 'auto';
         } else {
-            // Minimize
             content.style.display = 'none';
             minimizeBtn.textContent = '+';
             minimizeBtn.title = 'Expand';
@@ -393,8 +503,6 @@ class SalesNavigatorFloatingUI {
         this.updateUI();
         this.setupProfileObserver();
         this.collectCurrentPageProfiles();
-        
-        // Start periodic collection
         this.collectingInterval = setInterval(() => {
             this.collectCurrentPageProfiles();
         }, 3000);
@@ -403,12 +511,10 @@ class SalesNavigatorFloatingUI {
     pauseCollecting() {
         this.isCollecting = false;
         this.updateUI();
-        
         if (this.observer) {
             this.observer.disconnect();
             this.observer = null;
         }
-        
         if (this.collectingInterval) {
             clearInterval(this.collectingInterval);
             this.collectingInterval = null;
@@ -417,10 +523,8 @@ class SalesNavigatorFloatingUI {
 
     setupProfileObserver() {
         if (this.observer) return;
-
         this.observer = new MutationObserver((mutations) => {
             if (!this.isCollecting) return;
-            
             let hasNewProfiles = false;
             mutations.forEach((mutation) => {
                 mutation.addedNodes.forEach((node) => {
@@ -429,27 +533,16 @@ class SalesNavigatorFloatingUI {
                     }
                 });
             });
-            
             if (hasNewProfiles) {
                 setTimeout(() => this.collectCurrentPageProfiles(), 500);
             }
         });
-
-        this.observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        this.observer.observe(document.body, { childList: true, subtree: true });
     }
 
     isProfileElement(element) {
-        const selectors = [
-            '.artdeco-entity-lockup',
-            '[data-chameleon-result-urn]',
-            '.search-results__result-item',
-            '.result-lockup'
-        ];
-        
-        return selectors.some(selector => 
+        const selectors = ['.artdeco-entity-lockup', '[data-chameleon-result-urn]', '.search-results__result-item', '.result-lockup'];
+        return selectors.some(selector =>
             element.matches && element.matches(selector) ||
             element.querySelector && element.querySelector(selector)
         );
@@ -457,20 +550,12 @@ class SalesNavigatorFloatingUI {
 
     collectCurrentPageProfiles() {
         if (!this.isCollecting) return;
-
-        const selectors = [
-            '.artdeco-entity-lockup',
-            '[data-chameleon-result-urn]',
-            '.search-results__result-item',
-            '.result-lockup'
-        ];
-
+        const selectors = ['.artdeco-entity-lockup', '[data-chameleon-result-urn]', '.search-results__result-item', '.result-lockup'];
         let profileElements = [];
         for (const selector of selectors) {
             profileElements = document.querySelectorAll(selector);
             if (profileElements.length > 0) break;
         }
-
         profileElements.forEach(element => {
             const profile = this.extractProfileData(element);
             if (profile && !this.isDuplicateProfile(profile)) {
@@ -485,26 +570,17 @@ class SalesNavigatorFloatingUI {
             const titleBlock = element.querySelector('.artdeco-entity-lockup__subtitle');
             const locationElement = element.querySelector('.artdeco-entity-lockup__caption');
             const imageElement = element.querySelector('img[src*="profile"]');
-    
             if (!nameElement) return null;
-    
             let name = nameElement.textContent?.trim();
-            // Remove "is reachable" text from names
             if (name && name.includes(' is reachable')) {
                 name = name.replace(' is reachable', '').trim();
             }
-            
             const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
             const location = locationElement?.textContent?.trim() || '';
             const profilePic = imageElement?.src || '';
-            
-            let title = '';
-            let company = '';
-    
+            let title = '', company = '';
             if (titleBlock) {
                 const raw = titleBlock.innerText.trim();
-    
-                // Try to split title from company using " at " separator if present
                 if (raw.includes(' at ')) {
                     const parts = raw.split(' at ');
                     title = parts[0]?.trim() || '';
@@ -513,16 +589,9 @@ class SalesNavigatorFloatingUI {
                     title = raw;
                 }
             }
-    
             return {
-                name,
-                url,
-                title,
-                company,
-                location,
-                profilePic,
-                timestamp: Date.now(),
-                source: 'sales-navigator'
+                name, url, title, company, location, profilePic,
+                timestamp: Date.now(), source: 'sales-navigator'
             };
         } catch (error) {
             console.error('Error extracting profile data:', error);
@@ -531,15 +600,14 @@ class SalesNavigatorFloatingUI {
     }
 
     isDuplicateProfile(newProfile) {
-        return this.profiles.some(profile => 
-            profile.url === newProfile.url || 
+        return this.profiles.some(profile =>
+            profile.url === newProfile.url ||
             (profile.name === newProfile.name && profile.title === newProfile.title)
         );
     }
 
     addProfile(profile) {
         this.profiles.push(profile);
-
         this.updateProfilesList();
         this.updateProfilesCount();
         this.sendProfileToExtension(profile);
@@ -552,9 +620,7 @@ class SalesNavigatorFloatingUI {
                 profiles: [profile],
                 source: 'sales-navigator-ui'
             });
-        } catch (error) {
-
-        }
+        } catch (error) {}
     }
 
     updateUI() {
@@ -574,8 +640,6 @@ class SalesNavigatorFloatingUI {
             pauseBtn.disabled = true;
             statusDot.className = 'status-dot paused';
             statusText.textContent = 'Collection paused';
-            
-            // Show Next button if profiles are collected
             if (this.profiles.length > 0) {
                 nextBtn.style.display = 'block';
                 nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
@@ -588,10 +652,7 @@ class SalesNavigatorFloatingUI {
     updateProfilesCount() {
         const countElement = this.ui.querySelector('#profiles-count');
         const nextBtn = this.ui.querySelector('#next-button');
-        
         countElement.textContent = this.profiles.length;
-        
-        // Show Next button if profiles are collected and not currently collecting
         if (this.profiles.length > 0 && !this.isCollecting) {
             nextBtn.style.display = 'block';
             nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
@@ -600,19 +661,35 @@ class SalesNavigatorFloatingUI {
         }
     }
 
+    updateConnectCounts() {
+        const sendConnectElement = this.ui?.querySelector('#send-connect-count');
+        const fieldConnectElement = this.ui?.querySelector('#field-connect-count');
+
+        if (sendConnectElement) {
+            sendConnectElement.textContent = this.sendConnectCount;
+        }
+        if (fieldConnectElement) {
+            fieldConnectElement.textContent = this.fieldConnectCount;
+        }
+
+        // Also update in workflow popup if it exists
+        const workflowSendConnect = document.getElementById('send-connect-count');
+        const workflowFieldConnect = document.getElementById('field-connect-count');
+        if (workflowSendConnect) workflowSendConnect.textContent = this.sendConnectCount;
+        if (workflowFieldConnect) workflowFieldConnect.textContent = this.fieldConnectCount;
+    }
+
     updateProfilesList() {
         const listElement = this.ui.querySelector('#profiles-list');
-        
         if (this.profiles.length === 0) {
             listElement.innerHTML = '<div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>';
             return;
         }
-
-        listElement.innerHTML = this.profiles.map(profile => `
-            <div class="profile-item">
+        listElement.innerHTML = this.profiles.map((profile, index) => `
+            <div class="profile-item" data-profile-index="${index}">
                 <div class="profile-image">
-                    ${profile.profilePic ? 
-                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` : 
+                    ${profile.profilePic ?
+                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
                         `<div class="profile-initial">${profile.name ? profile.name.charAt(0).toUpperCase() : '?'}</div>`
                     }
                 </div>
@@ -620,39 +697,45 @@ class SalesNavigatorFloatingUI {
                     <div class="profile-name" title="${profile.name}">${profile.name}</div>
                     <div class="profile-title" title="${profile.title}">${profile.title}</div>
                     ${profile.company ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>` : ''}
-                    <div class="profile-url" title="${profile.url}" onclick="salesNavUI.copyProfileUrl('${profile.url}')" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
+                    <div class="profile-url" title="${profile.url}" data-url="${profile.url}" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
                 </div>
                 <div class="profile-actions">
-                    <button class="profile-action-btn remove-profile-btn" onclick="salesNavUI.removeProfile('${profile.url}')" title="Remove">✕</button>
+                    <button class="profile-action-btn remove-profile-btn" data-url="${profile.url}" title="Remove">✕</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners for profile actions
+        listElement.querySelectorAll('.profile-url').forEach(urlElement => {
+            urlElement.addEventListener('click', (e) => {
+                const url = e.target.getAttribute('data-url');
+                this.copyProfileUrl(url);
+            });
+        });
+
+        listElement.querySelectorAll('.remove-profile-btn').forEach(removeBtn => {
+            removeBtn.addEventListener('click', (e) => {
+                const url = e.target.getAttribute('data-url');
+                this.removeProfile(url);
+            });
+        });
     }
 
     shortenUrl(url) {
         if (!url) return '';
-
         const match = url.match(/\/in\/([^\/\?]+)/);
-        if (match) {
-            return `linkedin.com/in/${match[1]}`;
-        }
+        if (match) return `linkedin.com/in/${match[1]}`;
         return url.length > 30 ? url.substring(0, 30) + '...' : url;
     }
 
     copyProfileUrl(url) {
         navigator.clipboard.writeText(url).then(() => {
-
             const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed; top: 20px; right: 20px; background: #28a745; color: white; 
-                padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;
-            `;
+            notification.style.cssText = `position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;`;
             notification.textContent = 'Profile URL copied!';
             document.body.appendChild(notification);
             setTimeout(() => notification.remove(), 2000);
-        }).catch(err => {
-            console.error('Failed to copy URL:', err);
-        });
+        }).catch(err => console.error('Failed to copy URL:', err));
     }
 
     removeProfile(url) {
@@ -670,255 +753,844 @@ class SalesNavigatorFloatingUI {
         }
     }
 
-    // New workflow methods
     startWorkflow() {
         if (this.profiles.length === 0) {
             alert('No profiles to process');
             return;
         }
-
-
         this.currentWorkflowStep = 'processing';
         this.currentProfileIndex = 0;
         this.generatedMessage = null;
-        
+        this.processedProfiles = [];
+        this.hideCollectionUI();
+        this.saveState();
+        this.showWorkflowPopup();
+    }
+
+    saveState() {
+        const state = {
+            currentWorkflowStep: this.currentWorkflowStep,
+            currentProfileIndex: this.currentProfileIndex,
+            profiles: this.profiles,
+            generatedMessage: this.generatedMessage,
+            processedProfiles: this.processedProfiles || [],
+            automationRunning: this.automationRunning,
+            workflowPaused: this.workflowPaused,
+            profileStatuses: this.profileStatuses || {},
+            sendConnectCount: this.sendConnectCount || 0,
+            fieldConnectCount: this.fieldConnectCount || 0,
+            customPrompt: this.customPrompt || '',
+            promptSet: this.promptSet || false
+        };
+        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+    }
+
+
+
+    updateButtonStates() {
+        const startBtn = document.getElementById('start-automation');
+        const pauseBtn = document.getElementById('pause-automation');
+        const resumeBtn = document.getElementById('resume-automation');
+
+        if (this.automationRunning && !this.workflowPaused) {
+            if (startBtn) startBtn.style.display = 'none';
+            if (pauseBtn) pauseBtn.style.display = 'inline-block';
+            if (resumeBtn) resumeBtn.style.display = 'none';
+        } else if (this.automationRunning && this.workflowPaused) {
+            if (startBtn) startBtn.style.display = 'none';
+            if (pauseBtn) pauseBtn.style.display = 'none';
+            if (resumeBtn) resumeBtn.style.display = 'inline-block';
+        } else {
+            if (startBtn) startBtn.style.display = 'inline-block';
+            if (pauseBtn) pauseBtn.style.display = 'none';
+            if (resumeBtn) resumeBtn.style.display = 'none';
+        }
+    }
+
+    showWorkflowPopup() {
+        const overlay = document.createElement('div');
+        overlay.id = 'workflow-popup-overlay';
+        overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.3) !important; z-index: 999999 !important; display: flex !important; justify-content: flex-end !important; align-items: flex-start !important; pointer-events: none !important; padding: 20px !important;`;
+
+        const popup = document.createElement('div');
+        popup.id = 'workflow-popup';
+        popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 450px !important; max-height: 90vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important; margin-top: 20px !important;`;
+
+        popup.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0073b1;">Processing Profiles</h2>
+                <button id="close-workflow-popup" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <div style="background: #f3f6f8; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <strong>Progress: </strong><span id="workflow-progress">0 / ${this.profiles.length}</span>
+                </div>
+                <div style="background: #e7f3ff; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <strong>Current Status: </strong><span id="workflow-current-status">Starting workflow...</span>
+                </div>
+                <div style="background: #fff3cd; padding: 12px; border-radius: 8px;">
+                    <strong>Message: </strong><span id="workflow-message">${this.generatedMessage || 'Will be generated from custom prompt'}</span>
+                </div>
+                <div id="prompt-section" style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-top: 8px; ${this.promptSet ? 'display: none;' : ''}">
+                    <strong>Custom Prompt: </strong>
+                    <textarea id="custom-prompt-input" placeholder="Enter your custom prompt for message generation..."
+                        style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 14px;">${this.customPrompt}</textarea>
+                    <button id="set-prompt-btn" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">Set Prompt</button>
+                </div>
+                <div id="prompt-display" style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 8px; ${!this.promptSet ? 'display: none;' : ''}">
+                    <strong>Using Custom Prompt: </strong><span id="current-prompt-text" style="font-style: italic;">${this.customPrompt}</span>
+                    <button id="change-prompt-btn" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px;">Change</button>
+                </div>
+                <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-top: 8px;">
+                    <strong>Current Profile URL: </strong><span id="workflow-profile-url" style="font-size: 12px; word-break: break-all;">${this.getCurrentProfileUrl()}</span>
+                </div>
+                <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; margin-top: 8px;">
+                    <strong>LinkedIn URL: </strong><span id="workflow-linkedin-url" style="font-size: 12px; word-break: break-all;">${this.currentLinkedInProfileUrl || 'Will be captured from profile'}</span>
+                </div>
+            </div>
+
+            <div id="workflow-profiles-list" style="max-height: 300px; overflow-y: auto;">
+                ${this.profiles.map((profile, index) => `
+                    <div id="profile-${index}" style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee;">
+                        <div id="status-icon-${index}" style="width: 20px; height: 20px; border-radius: 50%; background: #ddd; margin-right: 12px; display: flex; align-items: center; justify-content: center; font-size: 12px;">⏳</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">${profile.name}</div>
+                            <div style="font-size: 12px; color: #666;">${profile.title || ''}</div>
+                        </div>
+                        <div id="profile-status-${index}" style="font-size: 12px; color: #666;">Waiting</div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+                <button id="start-automation" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500; font-size: 16px;">🚀 Start Automation</button>
+                <button id="pause-automation" style="background: #f44336; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500; font-size: 16px; display: none;">⏸️ Pause Automation</button>
+                <button id="resume-automation" style="background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 16px; display: none;">▶️ Resume Automation</button>
+            </div>
+        `;
+
+        popup.addEventListener('click', (e) => e.stopPropagation());
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+
+        document.getElementById('close-workflow-popup').addEventListener('click', () => this.closeWorkflowPopup());
+        document.getElementById('start-automation').addEventListener('click', () => this.startFullAutomation());
+        document.getElementById('pause-automation').addEventListener('click', () => this.pauseAutomation());
+        document.getElementById('resume-automation').addEventListener('click', () => this.resumeAutomation());
+        document.getElementById('set-prompt-btn').addEventListener('click', () => this.setCustomPrompt());
+        document.getElementById('change-prompt-btn').addEventListener('click', () => this.changePrompt());
+
+        this.workflowPopup = overlay;
+        if (this.ui) this.ui.style.display = 'none';
         this.updateWorkflowUI();
-        this.processNextProfile();
     }
 
     updateWorkflowUI() {
-        const workflowStatus = this.ui.querySelector('#workflow-status');
-        const workflowText = this.ui.querySelector('#workflow-text');
-        const nextBtn = this.ui.querySelector('#next-button');
+        if (!this.workflowPopup) return;
+        const progressElement = document.getElementById('workflow-progress');
+        const statusElement = document.getElementById('workflow-current-status');
+        const messageElement = document.getElementById('workflow-message');
+        const profileUrlElement = document.getElementById('workflow-profile-url');
+        const linkedinUrlElement = document.getElementById('workflow-linkedin-url');
 
-        workflowStatus.style.display = 'block';
-        nextBtn.style.display = 'none';
-
-        if (this.currentWorkflowStep === 'processing') {
+        if (progressElement) progressElement.textContent = `${this.currentProfileIndex} / ${this.profiles.length}`;
+        if (this.currentWorkflowStep === 'processing' && this.currentProfileIndex < this.profiles.length) {
             const currentProfile = this.profiles[this.currentProfileIndex];
-            workflowText.textContent = `Processing: ${currentProfile.name} (${this.currentProfileIndex + 1}/${this.profiles.length})`;
+            if (statusElement) statusElement.textContent = `Processing: ${currentProfile.name}`;
+        }
+
+        if (this.currentProfileIndex < this.profiles.length && this.automationRunning) {
+            this.setCurrentProfileProcessing();
+        }
+        if (messageElement) {
+            messageElement.textContent = this.generatedMessage || 'Will be generated from custom prompt';
+        }
+
+        const promptSection = document.getElementById('prompt-section');
+        const promptDisplay = document.getElementById('prompt-display');
+        const currentPromptText = document.getElementById('current-prompt-text');
+        const customPromptInput = document.getElementById('custom-prompt-input');
+
+        if (promptSection && promptDisplay) {
+            if (this.promptSet) {
+                promptSection.style.display = 'none';
+                promptDisplay.style.display = 'block';
+                if (currentPromptText) currentPromptText.textContent = this.customPrompt;
+            } else {
+                promptSection.style.display = 'block';
+                promptDisplay.style.display = 'none';
+                if (customPromptInput) customPromptInput.value = this.customPrompt;
+            }
+        }
+        if (profileUrlElement) profileUrlElement.textContent = this.getCurrentProfileUrl();
+        if (linkedinUrlElement) linkedinUrlElement.textContent = this.currentLinkedInProfileUrl || 'Will be captured from profile';
+        this.restoreProfileStatuses();
+        this.updateButtonStates();
+    }
+
+    restoreProfileStatuses() {
+
+        Object.keys(this.profileStatuses).forEach(index => {
+            const savedStatus = this.profileStatuses[index];
+            if (savedStatus) {
+                const statusIcon = document.getElementById(`status-icon-${index}`);
+                const profileStatus = document.getElementById(`profile-status-${index}`);
+                if (statusIcon) {
+                    statusIcon.textContent = savedStatus.icon;
+                    statusIcon.style.background = savedStatus.color;
+                    statusIcon.style.color = 'white';
+                }
+                if (profileStatus) {
+                    profileStatus.textContent = savedStatus.text || savedStatus.status;
+                }
+            }
+        });
+
+        if (this.currentProfileIndex < this.profiles.length && this.automationRunning && !this.workflowPaused) {
+            this.setCurrentProfileProcessing();
+        }
+    }
+
+    closeWorkflowPopup() {
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+            this.autoProcessingTimeout = null;
+        }
+
+        if (this.workflowPopup) {
+            document.body.removeChild(this.workflowPopup);
+            this.workflowPopup = null;
+        }
+        this.currentWorkflowStep = null;
+        this.currentProfileIndex = 0;
+        this.showUI();
+    }
+
+    pauseAutomation() {
+        this.workflowPaused = true;
+        this.automationRunning = false;
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+            this.autoProcessingTimeout = null;
+        }
+
+        document.getElementById('pause-automation').style.display = 'none';
+        document.getElementById('resume-automation').style.display = 'inline-block';
+        this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
+        this.updateCurrentStatus('⏸️ Automation paused. Click "Resume Automation" to continue.');
+        this.saveState();
+    }
+
+    resumeAutomation() {
+        this.workflowPaused = false;
+        this.automationRunning = true;
+        document.getElementById('pause-automation').style.display = 'inline-block';
+        document.getElementById('resume-automation').style.display = 'none';
+        this.updateCurrentStatus(`▶️ Automation resumed... Next profile in ${this.profileDelay / 1000} seconds.`);
+
+        // Update current profile status to show it's being processed
+        this.setCurrentProfileProcessing();
+
+        this.saveState();
+        this.scheduleNextProfile();
+    }
+
+    startFullAutomation() {
+        if (!this.promptSet || !this.customPrompt.trim()) {
+            alert('Please set a custom prompt before starting automation');
+            return;
+        }
+        const startBtn = document.getElementById('start-automation');
+        const pauseBtn = document.getElementById('pause-automation');
+
+        if (startBtn) startBtn.style.display = 'none';
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+
+        this.workflowPaused = false;
+        this.automationRunning = true;
+        this.saveState();
+
+        this.updateCurrentStatus('🚀 Starting full automation process...');
+        this.updateWorkflowUI();
+        this.setCurrentProfileProcessing();
+        setTimeout(() => {
+            this.goToNextProfile();
+        }, 2000);
+    }
+
+    updateCurrentStatus(message) {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = message;
+    }
+
+    setCustomPrompt() {
+        const promptInput = document.getElementById('custom-prompt-input');
+        const promptValue = promptInput.value.trim();
+
+        if (!promptValue) {
+            alert('Please enter a custom prompt');
+            return;
+        }
+
+        this.customPrompt = promptValue;
+        this.promptSet = true;
+        this.saveState();
+
+        // Hide prompt input section and show display section
+        document.getElementById('prompt-section').style.display = 'none';
+        document.getElementById('prompt-display').style.display = 'block';
+        document.getElementById('current-prompt-text').textContent = this.customPrompt;
+
+        // Update message display
+        const messageElement = document.getElementById('workflow-message');
+        if (messageElement) {
+            messageElement.textContent = 'Will be generated from custom prompt';
+        }
+    }
+
+    changePrompt() {
+        this.promptSet = false;
+        this.customPrompt = '';
+        this.saveState();
+
+        // Show prompt input section and hide display section
+        document.getElementById('prompt-section').style.display = 'block';
+        document.getElementById('prompt-display').style.display = 'none';
+        document.getElementById('custom-prompt-input').value = '';
+
+        // Update message display
+        const messageElement = document.getElementById('workflow-message');
+        if (messageElement) {
+            messageElement.textContent = 'Will be generated from custom prompt';
+        }
+    }
+
+    scheduleNextProfile() {
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+        }
+        this.startCountdownTimer();
+        this.autoProcessingTimeout = setTimeout(() => {
+            if (!this.workflowPaused) {
+                this.goToNextProfile();
+            }
+        }, this.profileDelay);
+    }
+
+    startCountdownTimer() {
+        let remainingTime = this.profileDelay / 1000;
+        const countdownInterval = setInterval(() => {
+            if (this.workflowPaused) {
+                clearInterval(countdownInterval);
+                return;
+            }
+
+            remainingTime--;
+            if (remainingTime > 0) {
+                const statusElement = document.getElementById('workflow-current-status');
+                if (statusElement) {
+                    const baseMessage = statusElement.textContent.split(' in ')[0];
+                    statusElement.textContent = `${baseMessage} in ${remainingTime} seconds...`;
+                }
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    }
+
+    async goToNextProfile() {
+        console.log(`goToNextProfile called. Current index: ${this.currentProfileIndex}, Total profiles: ${this.profiles.length}`);
+        const pauseBtn = document.getElementById('pause-workflow');
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+
+        if (this.currentProfileIndex < this.profiles.length) {
+            const profile = this.profiles[this.currentProfileIndex];
+            console.log(`Next profile to process: ${profile.name} - ${profile.url}`);
+            await this.navigateToProfile(profile.url);
+        } else {
+            console.log('All profiles completed, finishing workflow');
+            this.completeWorkflow();
+        }
+    }
+
+    async navigateToProfile(profileUrl) {
+        console.log(`Navigating to profile ${this.currentProfileIndex + 1}/${this.profiles.length}: ${profileUrl}`);
+        this.updateCurrentStatus(`Opening profile ${this.currentProfileIndex + 1}/${this.profiles.length}...`);
+
+        this.saveState();
+        window.location.href = profileUrl;
+    }
+
+    processCurrentProfile() {
+        const pauseBtn = document.getElementById('pause-workflow');
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+        this.processNextProfile();
+    }
+
+    forceContinueWorkflow() {
+        this.workflowPaused = false;
+        this.updateProfileStatus(this.currentProfileIndex, 'Force continuing...', '⚡', '#ff9800');
+        setTimeout(() => this.showThreeDotMenu(), 1000);
+    }
+
+    updateProfileStatus(index, status, icon, color) {
+        const statusIcon = document.getElementById(`status-icon-${index}`);
+        const profileStatus = document.getElementById(`profile-status-${index}`);
+        if (statusIcon) {
+            statusIcon.textContent = icon;
+            statusIcon.style.background = color;
+            statusIcon.style.color = 'white';
+        }
+        if (profileStatus) profileStatus.textContent = status;
+
+        this.profileStatuses[index] = {
+            status: status,
+            icon: icon,
+            color: color,
+            timestamp: Date.now()
+        };
+        this.saveState();
+    }
+
+    setCurrentProfileProcessing() {
+        if (this.currentProfileIndex < this.profiles.length) {
+            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
         }
     }
 
     async processNextProfile() {
+        if (this.workflowPaused) return;
         if (this.currentProfileIndex >= this.profiles.length) {
             this.completeWorkflow();
             return;
         }
 
         const profile = this.profiles[this.currentProfileIndex];
-        this.updateWorkflowUI();
+        this.currentLinkedInProfileUrl = null;
 
         try {
-            // Check if we're already on the profile page
             const currentUrl = window.location.href;
-            const isOnProfilePage = currentUrl.includes(profile.url) || 
-                                  (currentUrl.includes('/in/') && currentUrl.includes(profile.name?.toLowerCase().replace(/\s+/g, '')));
+            const isOnSalesNavPage = currentUrl.includes('/sales/search/people');
+            const isOnLinkedInProfilePage = currentUrl.includes('/in/') && currentUrl.includes('linkedin.com');
+            const isOnSalesNavProfilePage = currentUrl.includes('/sales/lead/') && currentUrl.includes('linkedin.com');
 
-            if (!isOnProfilePage) {
+            if (isOnSalesNavPage) {
+                if (this.workflowPopup) this.closeWorkflowPopup();
                 await this.openProfileUrl(profile.url);
                 return;
-            } else {
-                
-                // Step 2: Wait for page to load
+            } else if (isOnLinkedInProfilePage || isOnSalesNavProfilePage) {
+                if (!this.workflowPopup) this.showWorkflowPopup();
+                this.updateWorkflowUI();
+                this.updateProfileStatus(this.currentProfileIndex, 'Page loading...', '🔄', '#2196f3');
+
+                if (this.workflowPaused) {
+                    this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
+                    return;
+                }
+
                 await this.waitForPageLoad();
-                
-                // Step 3: Show three-dot menu and copy URL
+                this.updateProfileStatus(this.currentProfileIndex, 'Finding menu...', '🔍', '#2196f3');
                 await this.showThreeDotMenu();
-                
-                // Step 4: Call API to generate message
-                await this.generateMessageFromAPI(profile.url);
-                
-                // Step 5: Show three-dot menu again
-                await this.showThreeDotMenu();
-                
-                // Step 6: Click connect button
-                await this.clickConnectButton();
-                
-                // Step 7: Wait and move to next profile
+                this.updateProfileStatus(this.currentProfileIndex, 'Completed', '✅', '#4caf50');
+                this.processedProfiles.push({...profile, status: 'completed', message: this.generatedMessage});
+
                 await this.wait(2000);
                 this.currentProfileIndex++;
-                this.processNextProfile();
-            }
+                console.log(`Profile completed. Moving to index ${this.currentProfileIndex}/${this.profiles.length}`);
 
+                // Update UI to reflect completion
+                this.updateWorkflowUI();
+
+                if (this.currentProfileIndex < this.profiles.length) {
+                    this.updateCurrentStatus(`✅ Profile completed! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
+                    this.scheduleNextProfile();
+                } else {
+                    this.completeWorkflow();
+                }
+                return;
+            } else {
+                await this.navigateBackToSalesNav();
+                return;
+            }
         } catch (error) {
             console.error('Error processing profile:', error);
+            if (!this.workflowPopup) this.showWorkflowPopup();
+            this.updateProfileStatus(this.currentProfileIndex, 'Error', '❌', '#f44336');
+            this.processedProfiles.push({...profile, status: 'error', error: error.message});
+            await this.wait(1000);
             this.currentProfileIndex++;
-            this.processNextProfile();
+            if (this.currentProfileIndex < this.profiles.length) {
+                this.updateCurrentStatus(`❌ Error occurred! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
+                this.scheduleNextProfile();
+            } else {
+                this.completeWorkflow();
+            }
+        }
+    }
+
+    async navigateBackToSalesNav() {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Returning to search page...';
+        this.saveState();
+        if (document.referrer && document.referrer.includes('/sales/search/people')) {
+            window.history.back();
+        } else {
+            const salesNavUrl = 'https://www.linkedin.com/sales/search/people';
+            window.location.href = salesNavUrl;
         }
     }
 
     async openProfileUrl(url) {
-        const workflowText = this.ui.querySelector('#workflow-text');
-        workflowText.textContent = 'Opening profile URL...';
-        
-        const state = {
-            currentWorkflowStep: this.currentWorkflowStep,
-            currentProfileIndex: this.currentProfileIndex,
-            profiles: this.profiles,
-            generatedMessage: this.generatedMessage
-        };
-        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
-        
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Opening profile URL...';
+        this.saveState();
         window.location.href = url;
     }
 
     async waitForPageLoad() {
-        const workflowText = this.ui.querySelector('#workflow-text');
-        workflowText.textContent = 'Waiting for page to load...';
-        
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Waiting for page to load...';
         return new Promise(resolve => {
-            setTimeout(resolve, 3000);
+            const maxTimeout = setTimeout(() => resolve(), 10000);
+            if (document.readyState === 'complete') {
+                clearTimeout(maxTimeout);
+                setTimeout(resolve, 1000);
+                return;
+            }
+            const checkLoaded = () => {
+                if (document.readyState === 'complete') {
+                    clearTimeout(maxTimeout);
+                    setTimeout(resolve, 1000);
+                } else {
+                    setTimeout(checkLoaded, 500);
+                }
+            };
+            checkLoaded();
         });
     }
 
     async showThreeDotMenu() {
-        const workflowText = this.ui.querySelector('#workflow-text');
-        workflowText.textContent = 'Looking for three-dot menu...';
-        
-        // Look for three-dot menu button with more comprehensive selectors
-        const threeDotSelectors = [
-            'button[aria-label*="More"]',
-            'button[aria-label*="more"]',
-            'button[aria-label*="More actions"]',
-            'button[aria-label*="more actions"]',
-            '.artdeco-dropdown__trigger',
-            '[data-control-name="profile_more_actions"]',
-            'button[data-control-name="profile_more_actions"]',
-            'button[data-control-name="more_actions"]',
-            'button[aria-label*="More actions for"]',
-            'button[aria-label*="more actions for"]',
-            'button[data-control-name="profile_actions"]',
-            'button[aria-label*="More options"]',
-            'button[aria-label*="more options"]',
-            '.artdeco-button[aria-label*="More"]',
-            '.artdeco-button[aria-label*="more"]'
-        ];
+        if (this.isProcessingThreeDotMenu) return;
+        this.isProcessingThreeDotMenu = true;
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Looking for three-dot menu...';
 
-        let threeDotButton = null;
-        for (const selector of threeDotSelectors) {
-            threeDotButton = document.querySelector(selector);
-            if (threeDotButton) break;
-        }
+        const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
+                      document.querySelector('button[id^="hue-menu-trigger-"]') ||
+                      document.querySelector('button._overflow-menu--trigger_1xow7n');
 
-                    if (threeDotButton) {
-                threeDotButton.click();
-                await this.wait(1000);
-                
-                const copyUrlSelectors = [
-                    'a[href*="copy-profile-url"]',
-                    'a[aria-label*="Copy profile URL"]',
-                    'a[aria-label*="copy profile url"]',
-                    'a[data-control-name="copy_profile_url"]',
-                    'a[data-control-name="copy_profile_link"]',
-                    'a[aria-label*="Copy link"]',
-                    'a[aria-label*="copy link"]',
-                    'a[aria-label*="Copy profile link"]',
-                    'a[aria-label*="copy profile link"]',
-                    'a:contains("Copy profile URL")',
-                    'a:contains("copy profile url")',
-                    'a:contains("Copy link")',
-                    'a:contains("copy link")',
-                    'a:contains("Copy profile link")',
-                    'a:contains("copy profile link")'
-                ];
+        if (button) {
+            if (statusElement) statusElement.textContent = 'Clicking three-dot menu...';
+            button.click();
+            if (statusElement) statusElement.textContent = 'Three-dot menu clicked!';
+            await this.wait(1000);
+            const menu = document.querySelector('#hue-menu-ember48') ||
+                        document.querySelector('[id^="hue-menu-"]') ||
+                        document.querySelector('div[role="menu"]');
 
-                let copyUrlLink = null;
-                for (const selector of copyUrlSelectors) {
-                    copyUrlLink = document.querySelector(selector);
-                    if (copyUrlLink) break;
-                }
+            if (menu) {
+                if (statusElement) statusElement.textContent = 'Menu opened! Looking for LinkedIn profile option...';
+                await this.wait(500);
+                const copyUrlOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
+                    const text = (el.textContent || '').toLowerCase().trim();
+                    return text.includes('copy linkedin.com url') || text.includes('copy linkedin url') || text.includes('copy url') || text === 'copy linkedin.com url';
+                });
 
-                if (copyUrlLink) {
-                    copyUrlLink.click();
-                    workflowText.textContent = 'Profile URL copied';
-                    await this.wait(500);
+                if (copyUrlOption) {
+                    if (statusElement) statusElement.textContent = 'Extracting LinkedIn URL...';
+                    let linkedinUrl = this.extractLinkedInUrlFromPage();
+                    if (!linkedinUrl) {
+                        if (statusElement) statusElement.textContent = 'Clicking "Copy LinkedIn.com URL"...';
+                        copyUrlOption.click();
+                        if (statusElement) statusElement.textContent = 'Waiting for URL to be copied...';
+                        await this.wait(2000);
+                        try {
+                            const clipboardText = await navigator.clipboard.readText();
+                            if (clipboardText && clipboardText.includes('linkedin.com')) {
+                                const urlMatch = clipboardText.match(/https:\/\/[^\s]*linkedin\.com\/in\/[^\s\n\r]*/);
+                                if (urlMatch) {
+                                    linkedinUrl = urlMatch[0].trim();
+                                }
+                            }
+                        } catch (e) {
+                            console.log('Clipboard read failed:', e.message);
+                        }
+                    }
+                    const copiedUrl = linkedinUrl;
+
+
+
+                    if (copiedUrl) {
+                        this.currentLinkedInProfileUrl = copiedUrl;
+                        this.updateWorkflowUI();
+                        if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
+
+                        const staticMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                        try {
+                             const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
+                             console.log('Message Data:', messageData);
+                           // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
+
+                            if (messageData && messageData.message) {
+                                this.generatedMessage = messageData.message;
+                                this.updateWorkflowUI();
+                                if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
+
+                            } else {
+                                this.generatedMessage = staticMessage;
+                                if (statusElement) statusElement.textContent = 'API response invalid - using static message';
+                            }
+                        } catch (error) {
+                            console.error('API call failed:', error);
+                            this.generatedMessage = staticMessage;
+                            if (statusElement) statusElement.textContent = 'API error - using static message';
+                        }
+
+                        this.saveState();
+                        await this.wait(1000);
+                        await this.clickConnectButton(true);
+                    } else {
+                        if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
+                    }
                 } else {
-                    workflowText.textContent = 'Copy URL link not found';
-                    await this.wait(500);
+                    if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
                 }
             } else {
-                workflowText.textContent = 'Three-dot menu not found';
-                await this.wait(500);
+                if (statusElement) statusElement.textContent = 'Menu not visible after click';
             }
+            return;
+        } else {
+            if (statusElement) statusElement.textContent = 'Three-dot button not found';
+        }
+        this.isProcessingThreeDotMenu = false;
     }
 
-    async generateMessageFromAPI(profileUrl) {
-        const workflowText = this.ui.querySelector('#workflow-text');
-        workflowText.textContent = 'Generating message from API...';
+    async clickConnectButton(menuAlreadyOpen = false) {
+        const statusElement = document.getElementById('workflow-current-status');
+        if (statusElement) statusElement.textContent = 'Looking for Connect button...';
 
-        try {
-            const response = await fetch('http://localhost:7008/api/linkedin/messages', {
-                method: 'POST',
-                headers: {
-                    'accept': '*/*',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    url: profileUrl
-                })
+        const alreadyConnected = document.querySelector('[aria-label*="Connected"]') ||
+                                document.querySelector('[data-control-name*="connected"]') ||
+                                Array.from(document.querySelectorAll('span, div')).find(el =>
+                                    el.textContent && el.textContent.toLowerCase().includes('connected')
+                                );
+
+        if (alreadyConnected) {
+            if (statusElement) statusElement.textContent = 'Already connected to this profile';
+            return;
+        }
+
+        let menu = null;
+
+        if (menuAlreadyOpen) {
+            menu = document.querySelector('#hue-menu-ember48') ||
+                   document.querySelector('[id^="hue-menu-"]') ||
+                   document.querySelector('div[role="menu"]');
+        } else {
+            document.body.click();
+            await this.wait(500);
+
+            const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
+                          document.querySelector('button[id^="hue-menu-trigger-"]') ||
+                          document.querySelector('button._overflow-menu--trigger_1xow7n');
+
+            if (button) {
+                if (statusElement) statusElement.textContent = 'Opening three-dot menu for Connect...';
+                button.click();
+                await this.wait(1000);
+
+                menu = document.querySelector('#hue-menu-ember48') ||
+                       document.querySelector('[id^="hue-menu-"]') ||
+                       document.querySelector('div[role="menu"]');
+            } else {
+                if (statusElement) statusElement.textContent = 'Three-dot button not found for Connect';
+                this.isProcessingThreeDotMenu = false;
+                return;
+            }
+        }
+
+        if (menu) {
+            if (statusElement) statusElement.textContent = 'Looking for Connect option...';
+            await this.wait(500);
+
+            const connectOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
+                const text = (el.textContent || '').toLowerCase().trim();
+                return text.includes('connect') && !text.includes('copy') && !text.includes('disconnect');
             });
 
-            if (!response.ok) {
-                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            if (connectOption) {
+                if (statusElement) statusElement.textContent = 'Clicking Connect...';
+                connectOption.click();
+                await this.wait(2000);
+
+                const result = await this.fillInvitationMessage();
+                if (result && result.skipped) {
+                    if (statusElement) statusElement.textContent = `Skipped - ${result.reason}`;
+                }
+            } else {
+                if (statusElement) statusElement.textContent = 'Connect option not found in menu (may already be connected)';
+            }
+        } else {
+            if (statusElement) statusElement.textContent = 'Menu not visible after click';
+        }
+
+        this.isProcessingThreeDotMenu = false;
+    }
+
+    async fillInvitationMessage() {
+        try {
+            const statusElement = document.getElementById('workflow-current-status');
+            if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
+
+            await this.wait(1500);
+
+            // Check if email is required first
+            const emailInput = document.querySelector('input[type="email"]') ||
+                             document.querySelector('input[name="email"]') ||
+                             document.querySelector('#connect-cta-form__email');
+
+            if (emailInput) {
+                if (statusElement) statusElement.textContent = 'Email required - skipping this profile';
+                this.closeConnectionModal();
+                return { skipped: true, reason: 'email_required' };
             }
 
-            const data = await response.json();
-            
-            // Store the message in message1 variable
-            this.generatedMessage = data;
-            
-            workflowText.textContent = 'Message generated successfully';
+        let textarea = document.querySelector('textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx') ||
+                      document.querySelector('textarea[id="connect-cta-form__invitation"]') ||
+                      document.querySelector('textarea[maxlength="300"]') ||
+                      document.querySelector('textarea[placeholder*="accepts your invitation"]') ||
+                      document.querySelector('textarea[placeholder*="Bruno accepts"]') ||
+                      document.querySelector('div[data-test-modal] textarea') ||
+                      document.querySelector('.send-invite textarea');
+
+        if (!textarea) {
+            await this.wait(1000);
+            textarea = document.querySelector('textarea') ||
+                      document.querySelector('input[type="text"][maxlength="300"]');
+        }
+
+        if (textarea) {
+            if (statusElement) statusElement.textContent = 'Found textarea, filling message...';
+
+            textarea.value = '';
+            textarea.focus();
+
+            const message = this.generatedMessage || 'Hello dear';
+            for (let i = 0; i < message.length; i++) {
+                textarea.value += message[i];
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+                await this.wait(30);
+            }
+
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            textarea.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            if (statusElement) statusElement.textContent = 'Message filled! Looking for Send button...';
             await this.wait(1000);
 
+            return await this.clickSendInvitationButton();
+        } else {
+            if (statusElement) statusElement.textContent = 'Invitation textarea not found - checking for popup...';
+
+            const popup = document.querySelector('[data-test-modal]') ||
+                         document.querySelector('.send-invite') ||
+                         document.querySelector('[aria-labelledby*="send-invite"]');
+
+            if (popup) {
+                if (statusElement) statusElement.textContent = 'Popup found but textarea missing - trying alternative approach...';
+                await this.wait(1000);
+                return await this.clickSendInvitationButton();
+            } else {
+                if (statusElement) statusElement.textContent = 'Send invitation popup not found - skipping';
+                this.closeConnectionModal();
+                return { skipped: true, reason: 'popup_not_found' };
+            }
+        }
         } catch (error) {
-            console.error('Error generating message:', error);
-            workflowText.textContent = 'Failed to generate message';
-            await this.wait(1000);
+            console.error('Error in fillInvitationMessage:', error);
+            const statusElement = document.getElementById('workflow-current-status');
+            if (statusElement) statusElement.textContent = 'Error filling invitation message';
         }
     }
 
-    async clickConnectButton() {
-        const workflowText = this.ui.querySelector('#workflow-text');
-        workflowText.textContent = 'Looking for connect button...';
-        
-        // Look for connect button with more comprehensive selectors
-        const connectSelectors = [
-            'button[aria-label*="Connect"]',
-            'button[aria-label*="connect"]',
-            'button[data-control-name="connect"]',
-            'button[data-control-name="invite"]',
-            '.artdeco-button[data-control-name="connect"]',
-            '.artdeco-button[data-control-name="invite"]',
-            'button[data-control-name="connect_with_message"]',
-            'button[data-control-name="invite_with_message"]',
-            '.artdeco-button[data-control-name="connect_with_message"]',
-            '.artdeco-button[data-control-name="invite_with_message"]',
-            'button:contains("Connect")',
-            'button:contains("connect")',
-            'button:contains("Invite")',
-            'button:contains("invite")',
-            'button[aria-label*="Invite"]',
-            'button[aria-label*="invite"]',
-            'button[aria-label*="Send invitation"]',
-            'button[aria-label*="send invitation"]',
-            'button[aria-label*="Send invite"]',
-            'button[aria-label*="send invite"]'
-        ];
+    async clickSendInvitationButton() {
+        const statusElement = document.getElementById('workflow-current-status');
+        let sendButton = document.querySelector('button[aria-label="Send invitation"]') ||
+                        document.querySelector('button[data-control-name="send_invitation"]') ||
+                        Array.from(document.querySelectorAll('button')).find(btn => {
+                            const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                            return text === 'send invitation' || text === 'send' || text.includes('send invitation');
+                        });
 
-        let connectButton = null;
-        for (const selector of connectSelectors) {
-            connectButton = document.querySelector(selector);
-            if (connectButton) break;
+        if (!sendButton) {
+            const modal = document.querySelector('[data-test-modal]') ||
+                         document.querySelector('.send-invite') ||
+                         document.querySelector('[aria-labelledby*="send-invite"]');
+
+            if (modal) {
+                sendButton = modal.querySelector('button[type="submit"]') ||
+                           Array.from(modal.querySelectorAll('button')).find(btn => {
+                               const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                               return text.includes('send') || text.includes('invitation');
+                           });
+            }
         }
 
-        if (connectButton) {
-            connectButton.click();
-            workflowText.textContent = 'Connect button clicked';
-            await this.wait(1000);
+        if (sendButton && !sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Clicking Send Invitation...';
+            sendButton.click();
+            await this.wait(3000);
+
+            const successMessage = document.querySelector('[data-test-toast-message]') ||
+                                  Array.from(document.querySelectorAll('div, span')).find(el => {
+                                      const text = el.textContent && el.textContent.toLowerCase();
+                                      return text && (text.includes('invitation sent') || text.includes('request sent'));
+                                  });
+
+            if (successMessage) {
+                if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
+                return { sent: true };
+            } else {
+                if (statusElement) statusElement.textContent = 'Invitation sent';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
+                return { sent: true };
+            }
+        } else if (sendButton && sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
+            this.fieldConnectCount++;
+            this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_disabled' };
         } else {
-            workflowText.textContent = 'Connect button not found';
-            await this.wait(1000);
+            if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
+            this.fieldConnectCount++;
+            this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_not_found' };
+        }
+    }
+
+    extractLinkedInUrlFromPage() {
+        try {
+            const linkedinLinks = document.querySelectorAll('a[href*="linkedin.com/in/"]');
+            for (const link of linkedinLinks) {
+                if (link.href && link.href.includes('linkedin.com/in/')) {
+                    return link.href;
+                }
+            }
+            const elementsWithData = document.querySelectorAll('[data-linkedin-url], [data-profile-url], [data-url]');
+            for (const element of elementsWithData) {
+                const url = element.getAttribute('data-linkedin-url') || element.getAttribute('data-profile-url') || element.getAttribute('data-url');
+                if (url && url.includes('linkedin.com/in/')) {
+                    return url;
+                }
+            }
+            return null;
+        } catch (e) {
+            return null;
         }
     }
 
@@ -927,24 +1599,128 @@ class SalesNavigatorFloatingUI {
     }
 
     completeWorkflow() {
-        const workflowStatus = this.ui.querySelector('#workflow-status');
-        const workflowText = this.ui.querySelector('#workflow-text');
-        const nextBtn = this.ui.querySelector('#next-button');
+        const statusElement = document.getElementById('workflow-current-status');
+        const progressElement = document.getElementById('workflow-progress');
 
-        workflowText.textContent = `Workflow completed! Processed ${this.profiles.length} profiles`;
-        workflowStatus.style.background = '#d4edda';
-        workflowStatus.style.borderColor = '#c3e6cb';
-        workflowStatus.style.color = '#155724';
+        if (statusElement) {
+            statusElement.textContent = `Workflow completed! Processed ${this.profiles.length} profiles`;
+            statusElement.parentElement.style.background = '#d4edda';
+            statusElement.parentElement.style.color = '#155724';
+        }
+        if (progressElement) progressElement.textContent = `${this.profiles.length} / ${this.profiles.length} (Complete)`;
+        this.automationRunning = false;
+        this.updateButtonStates();
 
-        // Clear workflow state
+        const pauseBtn = document.getElementById('pause-workflow');
+        const resumeBtn = document.getElementById('resume-workflow');
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        if (resumeBtn) resumeBtn.style.display = 'none';
+
+        const popup = document.getElementById('workflow-popup');
+        if (popup) {
+            const summaryDiv = document.createElement('div');
+            summaryDiv.style.cssText = `margin-top: 20px; padding: 16px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;`;
+            const completedCount = this.processedProfiles.filter(p => p.status === 'completed').length;
+            const errorCount = this.processedProfiles.filter(p => p.status === 'error').length;
+            summaryDiv.innerHTML = `
+                <h3 style="margin: 0 0 12px 0; color: #155724;">Workflow Summary</h3>
+                <div style="color: #155724;">
+                    <div>✅ Successfully processed: ${completedCount} profiles</div>
+                    ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
+                    <div>💬 Message used: "${this.generatedMessage || 'No message generated'}"</div>
+                    <div style="margin-top: 12px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404;">
+                        🔄 Returning to Sales Navigator search in 5 seconds to start new collection...
+                    </div>
+                </div>
+            `;
+            popup.appendChild(summaryDiv);
+        }
+
+        // Save counters before clearing state
+        const savedSendConnectCount = this.sendConnectCount;
+        const savedFieldConnectCount = this.fieldConnectCount;
+
         localStorage.removeItem('salesNavWorkflow');
+        this.currentWorkflowStep = 'collecting';
+        this.currentProfileIndex = 0;
+        this.generatedMessage = null;
+        this.processedProfiles = [];
+        this.workflowPaused = false;
+        this.automationRunning = false;
+        this.currentLinkedInProfileUrl = null;
+        this.profileStatuses = {};
+        this.customPrompt = '';
+        this.promptSet = false;
+
+        // Restore counters after clearing state
+        this.sendConnectCount = savedSendConnectCount;
+        this.fieldConnectCount = savedFieldConnectCount;
 
         setTimeout(() => {
-            workflowStatus.style.display = 'none';
-            nextBtn.style.display = 'block';
-            nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
-        }, 3000);
+            if (statusElement) {
+                statusElement.textContent = 'Returning to Sales Navigator search page...';
+            }
+            // Save counters to localStorage for persistence across page navigation
+            localStorage.setItem('salesNavCounters', JSON.stringify({
+                sendConnectCount: this.sendConnectCount,
+                fieldConnectCount: this.fieldConnectCount
+            }));
+            const salesNavUrl = 'https://www.linkedin.com/sales/search/people?viewAllFilters=true';
+            window.location.href = salesNavUrl;
+        }, 5000);
+    }
+    loadSavedCounters() {
+        try {
+            const savedCounters = localStorage.getItem('salesNavCounters');
+            if (savedCounters) {
+                const counters = JSON.parse(savedCounters);
+                this.sendConnectCount = counters.sendConnectCount || 0;
+                this.fieldConnectCount = counters.fieldConnectCount || 0;
+            }
+        } catch (error) {
+            console.error('Error loading saved counters:', error);
+            this.sendConnectCount = 0;
+            this.fieldConnectCount = 0;
+        }
+    }
+
+    loadBatchSettings() {
+        this.profileDelay = 8000;
+    }
+
+    closeConnectionModal() {
+        // Try to close any open connection modal/dialog
+        const closeButtons = [
+            document.querySelector('button[aria-label*="Dismiss"]'),
+            document.querySelector('button[aria-label*="Cancel"]'),
+            document.querySelector('button[data-control-name="cancel"]'),
+            document.querySelector('.artdeco-modal__dismiss'),
+            document.querySelector('[data-test-modal-close-btn]')
+        ];
+
+        for (const closeBtn of closeButtons) {
+            if (closeBtn && closeBtn.offsetParent !== null) {
+                closeBtn.click();
+                break;
+            }
+        }
+
+        // Also try pressing Escape key
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }));
     }
 }
 
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
+
+if (typeof window.salesNavUI === 'undefined' &&
+    typeof window.salesNavigatorFloatingUI === 'undefined' &&
+    window.location.href.includes('linkedin.com') &&
+    !document.querySelector('.sales-navigator-floating-ui')) {
+    try {
+        window.salesNavUI = new SalesNavigatorFloatingUI();
+    } catch (error) {
+        console.error('Error creating SalesNavigatorFloatingUI instance:', error);
+    }
+}
+
+}

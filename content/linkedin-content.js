@@ -84,14 +84,23 @@ class LinkedInAutomation {
                 lastUrl = url;
 
                 // Only create UI on Sales Navigator search pages
-                if (this.isSalesNavigatorSearchPage() && !window.salesNavigatorFloatingUI) {
+                if (this.isSalesNavigatorSearchPage() &&
+                    !window.salesNavigatorFloatingUI &&
+                    !window.salesNavUI &&
+                    !document.querySelector('.sales-navigator-floating-ui')) {
                     await this.loadSalesNavigatorUI();
-                } else if (!this.isSalesNavigatorSearchPage() && window.salesNavigatorFloatingUI) {
+                } else if (!this.isSalesNavigatorSearchPage()) {
                     // Remove UI when leaving Sales Navigator search pages
-                    if (window.salesNavigatorFloatingUI.ui) {
-                        window.salesNavigatorFloatingUI.ui.remove();
+                    const existingUI = document.querySelector('.sales-navigator-floating-ui');
+                    if (existingUI) {
+                        existingUI.remove();
                     }
-                    window.salesNavigatorFloatingUI = null;
+                    if (window.salesNavigatorFloatingUI) {
+                        window.salesNavigatorFloatingUI = null;
+                    }
+                    if (window.salesNavUI) {
+                        window.salesNavUI = null;
+                    }
                 }
             }
         });
@@ -105,15 +114,31 @@ class LinkedInAutomation {
             console.log('LinkedIn Automation: SalesNavigatorFloatingUI exists?', !!window.SalesNavigatorFloatingUI);
             console.log('LinkedIn Automation: Is Sales Nav page?', this.isSalesNavigatorSearchPage());
 
-            // Only load if not already loaded and we're on the right page
-            if (window.SalesNavigatorFloatingUI) {
-                if (!window.salesNavigatorFloatingUI) {
-                    window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
-                }
+            // Prevent duplicate UI creation - check for existing UI elements
+            if (document.querySelector('.sales-navigator-floating-ui')) {
+                console.log('LinkedIn Automation: Sales Navigator UI already exists, skipping creation');
                 return;
             }
 
+            // Check if instances already exist
+            if (window.salesNavigatorFloatingUI || window.salesNavUI) {
+                console.log('LinkedIn Automation: Sales Navigator instance already exists, skipping creation');
+                return;
+            }
+
+            // Only load if not already loaded and we're on the right page
+            if (window.SalesNavigatorFloatingUI) {
+                console.log('LinkedIn Automation: SalesNavigatorFloatingUI class exists, but no instance found');
+                return; // Let the script's own initialization handle it
+            }
+
             if (!this.isSalesNavigatorSearchPage()) {
+                return;
+            }
+
+            // Check if script is already loaded
+            if (document.querySelector('script[src*="sales-navigator-ui.js"]')) {
+                console.log('LinkedIn Automation: Sales Navigator script already loaded');
                 return;
             }
 
@@ -122,20 +147,8 @@ class LinkedInAutomation {
             script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
 
             script.onload = () => {
-                const checkAndCreate = (attempt = 1) => {
-                    if (window.SalesNavigatorFloatingUI && !window.salesNavigatorFloatingUI) {
-                        try {
-                            window.salesNavigatorFloatingUI = new window.SalesNavigatorFloatingUI();
-                        } catch (error) {
-                            console.error('LinkedIn Automation: Error creating SalesNavigatorFloatingUI instance:', error);
-                        }
-                    } else if (!window.SalesNavigatorFloatingUI && attempt < 5) {
-                        setTimeout(() => checkAndCreate(attempt + 1), attempt * 100);
-                    }
-                };
-
-                // Start checking immediately, then with delays
-                checkAndCreate();
+                console.log('LinkedIn Automation: Sales Navigator script loaded successfully');
+                // The script will handle its own initialization
             };
 
             script.onerror = (error) => {
