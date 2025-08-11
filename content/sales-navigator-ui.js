@@ -760,8 +760,7 @@ class SalesNavigatorFloatingUI {
                 `).join('')}
             </div>
             <div style="margin-top: 20px; text-align: center;">
-                <button id="start-processing" style="background: #0073b1; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500;">Start Processing</button>
-                <button id="next-profile" style="background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; display: none;">Next Profile</button>
+                <button id="start-automation" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500; font-size: 16px;">🚀 Start Automation</button>
                 <button id="pause-workflow" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-right: 10px; display: none;">Pause</button>
                 <button id="resume-workflow" style="background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; display: none;">Resume</button>
             </div>
@@ -772,8 +771,7 @@ class SalesNavigatorFloatingUI {
         document.body.appendChild(overlay);
 
         document.getElementById('close-workflow-popup').addEventListener('click', () => this.closeWorkflowPopup());
-        document.getElementById('start-processing').addEventListener('click', () => this.startProcessing());
-        document.getElementById('next-profile').addEventListener('click', () => this.goToNextProfile());
+        document.getElementById('start-automation').addEventListener('click', () => this.startFullAutomation());
         document.getElementById('pause-workflow').addEventListener('click', () => this.pauseWorkflow());
         document.getElementById('resume-workflow').addEventListener('click', () => this.resumeWorkflow());
 
@@ -840,15 +838,19 @@ class SalesNavigatorFloatingUI {
         this.scheduleNextProfile();
     }
 
-    startProcessing() {
-        document.getElementById('start-processing').style.display = 'none';
-        document.getElementById('next-profile').style.display = 'inline-block';
-        const currentUrl = window.location.href;
-        if (currentUrl.includes('/in/') || currentUrl.includes('/sales/lead/')) {
-            this.updateCurrentStatus('On profile page. Click "Next Profile" to continue to next profile.');
-        } else {
-            this.updateCurrentStatus('Ready to start. Click "Next Profile" to open first profile.');
-        }
+    startFullAutomation() {
+        const startBtn = document.getElementById('start-automation');
+        const pauseBtn = document.getElementById('pause-workflow');
+
+        if (startBtn) startBtn.style.display = 'none';
+        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+
+        this.updateCurrentStatus('🚀 Starting full automation process...');
+
+        // Start the automated workflow immediately
+        setTimeout(() => {
+            this.goToNextProfile();
+        }, 2000);
     }
 
     updateCurrentStatus(message) {
@@ -857,9 +859,9 @@ class SalesNavigatorFloatingUI {
     }
 
     showNextProfileButton() {
-        const nextBtn = document.getElementById('next-profile');
+        // This method is no longer needed since we use full automation
+        // Keep for compatibility but don't show manual buttons
         const pauseBtn = document.getElementById('pause-workflow');
-        if (nextBtn) nextBtn.style.display = 'inline-block';
         if (pauseBtn) pauseBtn.style.display = 'none';
     }
 
@@ -868,10 +870,6 @@ class SalesNavigatorFloatingUI {
         if (this.autoProcessingTimeout) {
             clearTimeout(this.autoProcessingTimeout);
         }
-
-        // Hide manual next button since we're in auto mode
-        const nextBtn = document.getElementById('next-profile');
-        if (nextBtn) nextBtn.style.display = 'none';
 
         // Start countdown timer
         this.startCountdownTimer();
@@ -907,9 +905,7 @@ class SalesNavigatorFloatingUI {
 
     async goToNextProfile() {
         console.log(`goToNextProfile called. Current index: ${this.currentProfileIndex}, Total profiles: ${this.profiles.length}`);
-        const nextBtn = document.getElementById('next-profile');
         const pauseBtn = document.getElementById('pause-workflow');
-        if (nextBtn) nextBtn.style.display = 'none';
         if (pauseBtn) pauseBtn.style.display = 'inline-block';
 
         if (this.currentProfileIndex < this.profiles.length) {
@@ -1416,24 +1412,34 @@ class SalesNavigatorFloatingUI {
                     <div>✅ Successfully processed: ${completedCount} profiles</div>
                     ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
                     <div>💬 Message used: "${this.generatedMessage || 'No message generated'}"</div>
+                    <div style="margin-top: 12px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404;">
+                        🔄 Returning to Sales Navigator search in 5 seconds to start new collection...
+                    </div>
                 </div>
             `;
             popup.appendChild(summaryDiv);
         }
 
+        // Clear workflow state
         localStorage.removeItem('salesNavWorkflow');
+
+        // Reset workflow variables for new cycle
+        this.currentWorkflowStep = 'collecting';
+        this.currentProfileIndex = 0;
+        this.generatedMessage = null;
+        this.processedProfiles = [];
+        this.workflowPaused = false;
+        this.currentLinkedInProfileUrl = null;
+
+        // Show countdown and navigate back to Sales Navigator search
         setTimeout(() => {
-            this.closeWorkflowPopup();
-            this.showUI();
-            if (this.ui) {
-                const workflowStatus = this.ui.querySelector('#workflow-status');
-                const nextBtn = this.ui.querySelector('#next-button');
-                if (workflowStatus) workflowStatus.style.display = 'none';
-                if (nextBtn) {
-                    nextBtn.style.display = 'block';
-                    nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
-                }
+            if (statusElement) {
+                statusElement.textContent = 'Returning to Sales Navigator search page...';
             }
+
+            // Navigate back to Sales Navigator search page to start new collection
+            const salesNavUrl = 'https://www.linkedin.com/sales/search/people?viewAllFilters=true';
+            window.location.href = salesNavUrl;
         }, 5000);
     }
     loadBatchSettings() {
