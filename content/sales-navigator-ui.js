@@ -1,3 +1,9 @@
+// Prevent multiple script executions
+if (window.salesNavigatorUILoaded) {
+    console.log('Sales Navigator UI script already loaded, skipping');
+} else {
+    window.salesNavigatorUILoaded = true;
+
 const CONSTANTS = {
     API: {
         BASE_URL: 'http://localhost:7008/api/linkedin',
@@ -26,7 +32,9 @@ const APIService = {
             console.log("Api message", messageTest);
             const message = "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team.";
 
-            return { message: message };
+
+
+            return { message: messageTest };
         } catch (error) {
             console.error('API Service Error:', error);
             throw error;
@@ -246,6 +254,15 @@ class SalesNavigatorFloatingUI {
 
     createUI() {
         if (this.ui) return;
+
+        // Check if UI already exists in DOM
+        const existingUI = document.querySelector('.sales-navigator-floating-ui');
+        if (existingUI) {
+            console.log('Sales Navigator UI already exists in DOM, skipping creation');
+            this.ui = existingUI;
+            return;
+        }
+
         this.ui = document.createElement('div');
         this.ui.className = 'sales-navigator-floating-ui';
         this.ui.innerHTML = `
@@ -1072,18 +1089,20 @@ class SalesNavigatorFloatingUI {
                                 apiCallSuccessful = true;
                             } else {
                                 this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
-                                if (statusElement) statusElement.textContent = 'Using static message (API response invalid)';
+                                if (statusElement) statusElement.textContent = 'API response invalid - using static message';
+                                apiCallSuccessful = false;
                             }
                         } catch (error) {
                             console.error('API call failed:', error);
                             this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
                             if (statusElement) statusElement.textContent = 'API error - using static message';
+                            apiCallSuccessful = false;
                         }
 
                         this.saveState();
                         await this.wait(1000);
 
-                        // Always proceed with connection, using either dynamic or static message
+                        // Always proceed with connection, using either API or static message
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
@@ -1359,11 +1378,16 @@ class SalesNavigatorFloatingUI {
 
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
 
-// Only create instance if we're on a LinkedIn page and not already created
-if (typeof window.salesNavUI === 'undefined' && window.location.href.includes('linkedin.com')) {
+// Prevent multiple instances - only create if none exist
+if (typeof window.salesNavUI === 'undefined' &&
+    typeof window.salesNavigatorFloatingUI === 'undefined' &&
+    window.location.href.includes('linkedin.com') &&
+    !document.querySelector('.sales-navigator-floating-ui')) {
     try {
         window.salesNavUI = new SalesNavigatorFloatingUI();
     } catch (error) {
         console.error('Error creating SalesNavigatorFloatingUI instance:', error);
     }
 }
+
+} // Close the else block
