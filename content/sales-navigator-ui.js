@@ -1347,7 +1347,10 @@ class SalesNavigatorFloatingUI {
                 connectOption.click();
                 await this.wait(2000);
 
-                await this.fillInvitationMessage();
+                const result = await this.fillInvitationMessage();
+                if (result && result.skipped) {
+                    if (statusElement) statusElement.textContent = `Skipped - ${result.reason}`;
+                }
             } else {
                 if (statusElement) statusElement.textContent = 'Connect option not found in menu (may already be connected)';
             }
@@ -1364,6 +1367,17 @@ class SalesNavigatorFloatingUI {
             if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
 
             await this.wait(1500);
+
+            // Check if email is required first
+            const emailInput = document.querySelector('input[type="email"]') ||
+                             document.querySelector('input[name="email"]') ||
+                             document.querySelector('#connect-cta-form__email');
+
+            if (emailInput) {
+                if (statusElement) statusElement.textContent = 'Email required - skipping this profile';
+                this.closeConnectionModal();
+                return { skipped: true, reason: 'email_required' };
+            }
 
         let textarea = document.querySelector('textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx') ||
                       document.querySelector('textarea[id="connect-cta-form__invitation"]') ||
@@ -1399,7 +1413,7 @@ class SalesNavigatorFloatingUI {
             if (statusElement) statusElement.textContent = 'Message filled! Looking for Send button...';
             await this.wait(1000);
 
-            await this.clickSendInvitationButton();
+            return await this.clickSendInvitationButton();
         } else {
             if (statusElement) statusElement.textContent = 'Invitation textarea not found - checking for popup...';
 
@@ -1410,9 +1424,11 @@ class SalesNavigatorFloatingUI {
             if (popup) {
                 if (statusElement) statusElement.textContent = 'Popup found but textarea missing - trying alternative approach...';
                 await this.wait(1000);
-                await this.clickSendInvitationButton();
+                return await this.clickSendInvitationButton();
             } else {
-                if (statusElement) statusElement.textContent = 'Send invitation popup not found';
+                if (statusElement) statusElement.textContent = 'Send invitation popup not found - skipping';
+                this.closeConnectionModal();
+                return { skipped: true, reason: 'popup_not_found' };
             }
         }
         } catch (error) {
@@ -1460,22 +1476,26 @@ class SalesNavigatorFloatingUI {
                 if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
                 this.sendConnectCount++;
                 this.updateConnectCounts();
+                return { sent: true };
             } else {
                 if (statusElement) statusElement.textContent = 'Invitation sent';
                 this.sendConnectCount++;
                 this.updateConnectCounts();
+                return { sent: true };
             }
         } else if (sendButton && sendButton.disabled) {
-            if (statusElement) statusElement.textContent = 'Send button found but disabled';
+            if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
             this.fieldConnectCount++;
             this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_disabled' };
         } else {
-            if (statusElement) statusElement.textContent = 'Send Invitation button not found';
+            if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
             this.fieldConnectCount++;
             this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_not_found' };
         }
-
-        this.isProcessingThreeDotMenu = false;
     }
 
     extractLinkedInUrlFromPage() {
@@ -1589,6 +1609,27 @@ class SalesNavigatorFloatingUI {
 
     loadBatchSettings() {
         this.profileDelay = 8000;
+    }
+
+    closeConnectionModal() {
+        // Try to close any open connection modal/dialog
+        const closeButtons = [
+            document.querySelector('button[aria-label*="Dismiss"]'),
+            document.querySelector('button[aria-label*="Cancel"]'),
+            document.querySelector('button[data-control-name="cancel"]'),
+            document.querySelector('.artdeco-modal__dismiss'),
+            document.querySelector('[data-test-modal-close-btn]')
+        ];
+
+        for (const closeBtn of closeButtons) {
+            if (closeBtn && closeBtn.offsetParent !== null) {
+                closeBtn.click();
+                break;
+            }
+        }
+
+        // Also try pressing Escape key
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }));
     }
 }
 
