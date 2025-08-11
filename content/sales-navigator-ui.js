@@ -29,7 +29,7 @@ const APIService = {
             }
             const apiData = await response.json();
             const messageTest = apiData?.messages?.message1;
-            console.log("Api message", messageTest);
+
             const message = "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team.";
 
 
@@ -56,8 +56,8 @@ class SalesNavigatorFloatingUI {
         this.workflowPopup = null;
         this.currentLinkedInProfileUrl = null;
         this.isProcessingThreeDotMenu = false;
-        this.profileStatuses = {}; // Track status of each profile
-        this.profileDelay = 5000; // 5 seconds between profiles
+        this.profileStatuses = {};
+        this.profileDelay = 5000;
 
         this.loadBatchSettings();
         this.autoProcessingTimeout = null;
@@ -106,7 +106,7 @@ class SalesNavigatorFloatingUI {
                 if (this.currentWorkflowStep === 'processing') {
                     this.hideCollectionUI();
                     this.showWorkflowPopup();
-                    this.updateButtonStates(); // Update button states based on saved state
+                    this.updateButtonStates();
                 } else {
                     this.showUI();
                     this.updateProfilesList();
@@ -265,7 +265,6 @@ class SalesNavigatorFloatingUI {
     createUI() {
         if (this.ui) return;
 
-        // Check if UI already exists in DOM
         const existingUI = document.querySelector('.sales-navigator-floating-ui');
         if (existingUI) {
             console.log('Sales Navigator UI already exists in DOM, skipping creation');
@@ -734,9 +733,7 @@ class SalesNavigatorFloatingUI {
         localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
     }
 
-    saveWorkflowState() {
-        this.saveState();
-    }
+
 
     updateButtonStates() {
         const startBtn = document.getElementById('start-automation');
@@ -744,17 +741,14 @@ class SalesNavigatorFloatingUI {
         const resumeBtn = document.getElementById('resume-automation');
 
         if (this.automationRunning && !this.workflowPaused) {
-            // Automation is running - show pause button
             if (startBtn) startBtn.style.display = 'none';
             if (pauseBtn) pauseBtn.style.display = 'inline-block';
             if (resumeBtn) resumeBtn.style.display = 'none';
         } else if (this.automationRunning && this.workflowPaused) {
-            // Automation is paused - show resume button
             if (startBtn) startBtn.style.display = 'none';
             if (pauseBtn) pauseBtn.style.display = 'none';
             if (resumeBtn) resumeBtn.style.display = 'inline-block';
         } else {
-            // Automation not started - show start button
             if (startBtn) startBtn.style.display = 'inline-block';
             if (pauseBtn) pauseBtn.style.display = 'none';
             if (resumeBtn) resumeBtn.style.display = 'none';
@@ -842,25 +836,20 @@ class SalesNavigatorFloatingUI {
             if (statusElement) statusElement.textContent = `Processing: ${currentProfile.name}`;
         }
 
-        // Update current profile status to show it's being processed
         if (this.currentProfileIndex < this.profiles.length && this.automationRunning) {
-            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
+            this.setCurrentProfileProcessing();
         }
         if (messageElement) {
             messageElement.textContent = this.generatedMessage || 'Will be generated from LinkedIn profile URL';
         }
         if (profileUrlElement) profileUrlElement.textContent = this.getCurrentProfileUrl();
         if (linkedinUrlElement) linkedinUrlElement.textContent = this.currentLinkedInProfileUrl || 'Will be captured from profile';
-
-        // Restore saved profile statuses
         this.restoreProfileStatuses();
-
-        // Update button states
         this.updateButtonStates();
     }
 
     restoreProfileStatuses() {
-        // Restore saved profile statuses from previous sessions
+
         Object.keys(this.profileStatuses).forEach(index => {
             const savedStatus = this.profileStatuses[index];
             if (savedStatus) {
@@ -877,9 +866,8 @@ class SalesNavigatorFloatingUI {
             }
         });
 
-        // Ensure current profile shows correct status if automation is running
         if (this.currentProfileIndex < this.profiles.length && this.automationRunning && !this.workflowPaused) {
-            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
+            this.setCurrentProfileProcessing();
         }
     }
 
@@ -910,7 +898,7 @@ class SalesNavigatorFloatingUI {
         document.getElementById('resume-automation').style.display = 'inline-block';
         this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
         this.updateCurrentStatus('⏸️ Automation paused. Click "Resume Automation" to continue.');
-        this.saveWorkflowState();
+        this.saveState();
     }
 
     resumeAutomation() {
@@ -921,11 +909,9 @@ class SalesNavigatorFloatingUI {
         this.updateCurrentStatus(`▶️ Automation resumed... Next profile in ${this.profileDelay / 1000} seconds.`);
 
         // Update current profile status to show it's being processed
-        if (this.currentProfileIndex < this.profiles.length) {
-            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
-        }
+        this.setCurrentProfileProcessing();
 
-        this.saveWorkflowState();
+        this.saveState();
         this.scheduleNextProfile();
     }
 
@@ -938,7 +924,7 @@ class SalesNavigatorFloatingUI {
 
         this.workflowPaused = false;
         this.automationRunning = true;
-        this.saveWorkflowState();
+        this.saveState();
 
         this.updateCurrentStatus('🚀 Starting full automation process...');
 
@@ -946,9 +932,7 @@ class SalesNavigatorFloatingUI {
         this.updateWorkflowUI();
 
         // Update current profile status to show it's being processed
-        if (this.currentProfileIndex < this.profiles.length) {
-            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
-        }
+        this.setCurrentProfileProcessing();
 
         // Start the automated workflow immediately
         setTimeout(() => {
@@ -961,23 +945,13 @@ class SalesNavigatorFloatingUI {
         if (statusElement) statusElement.textContent = message;
     }
 
-    showNextProfileButton() {
-        // This method is no longer needed since we use full automation
-        // Keep for compatibility but don't show manual buttons
-        const pauseBtn = document.getElementById('pause-workflow');
-        if (pauseBtn) pauseBtn.style.display = 'none';
-    }
+
 
     scheduleNextProfile() {
-        // Clear any existing timeout
         if (this.autoProcessingTimeout) {
             clearTimeout(this.autoProcessingTimeout);
         }
-
-        // Start countdown timer
         this.startCountdownTimer();
-
-        // Schedule automatic processing of next profile
         this.autoProcessingTimeout = setTimeout(() => {
             if (!this.workflowPaused) {
                 this.goToNextProfile();
@@ -1014,7 +988,6 @@ class SalesNavigatorFloatingUI {
         if (this.currentProfileIndex < this.profiles.length) {
             const profile = this.profiles[this.currentProfileIndex];
             console.log(`Next profile to process: ${profile.name} - ${profile.url}`);
-            // Always navigate to the next profile URL, regardless of current page
             await this.navigateToProfile(profile.url);
         } else {
             console.log('All profiles completed, finishing workflow');
@@ -1026,7 +999,6 @@ class SalesNavigatorFloatingUI {
         console.log(`Navigating to profile ${this.currentProfileIndex + 1}/${this.profiles.length}: ${profileUrl}`);
         this.updateCurrentStatus(`Opening profile ${this.currentProfileIndex + 1}/${this.profiles.length}...`);
 
-        // Save complete state before navigation
         this.saveState();
         window.location.href = profileUrl;
     }
@@ -1053,14 +1025,19 @@ class SalesNavigatorFloatingUI {
         }
         if (profileStatus) profileStatus.textContent = status;
 
-        // Save profile status persistently
         this.profileStatuses[index] = {
             status: status,
             icon: icon,
             color: color,
             timestamp: Date.now()
         };
-        this.saveWorkflowState();
+        this.saveState();
+    }
+
+    setCurrentProfileProcessing() {
+        if (this.currentProfileIndex < this.profiles.length) {
+            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
+        }
     }
 
     async processNextProfile() {
@@ -1086,7 +1063,6 @@ class SalesNavigatorFloatingUI {
             } else if (isOnLinkedInProfilePage || isOnSalesNavProfilePage) {
                 if (!this.workflowPopup) this.showWorkflowPopup();
                 this.updateWorkflowUI();
-                this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
                 this.updateProfileStatus(this.currentProfileIndex, 'Page loading...', '🔄', '#2196f3');
 
                 if (this.workflowPaused) {
@@ -1137,14 +1113,7 @@ class SalesNavigatorFloatingUI {
     async navigateBackToSalesNav() {
         const statusElement = document.getElementById('workflow-current-status');
         if (statusElement) statusElement.textContent = 'Returning to search page...';
-        const state = {
-            currentWorkflowStep: this.currentWorkflowStep,
-            currentProfileIndex: this.currentProfileIndex,
-            profiles: this.profiles,
-            generatedMessage: this.generatedMessage,
-            processedProfiles: this.processedProfiles || []
-        };
-        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+        this.saveState();
         if (document.referrer && document.referrer.includes('/sales/search/people')) {
             window.history.back();
         } else {
@@ -1156,14 +1125,7 @@ class SalesNavigatorFloatingUI {
     async openProfileUrl(url) {
         const statusElement = document.getElementById('workflow-current-status');
         if (statusElement) statusElement.textContent = 'Opening profile URL...';
-        const state = {
-            currentWorkflowStep: this.currentWorkflowStep,
-            currentProfileIndex: this.currentProfileIndex,
-            profiles: this.profiles,
-            generatedMessage: this.generatedMessage,
-            processedProfiles: this.processedProfiles || []
-        };
-        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+        this.saveState();
         window.location.href = url;
     }
 
@@ -1245,32 +1207,28 @@ class SalesNavigatorFloatingUI {
                         this.updateWorkflowUI();
                         if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
 
-                        let apiCallSuccessful = false;
+                        const staticMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
                         try {
                              const messageData = await APIService.generateMessage(copiedUrl);
                            // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
-                            console.log('API Response:', messageData);
+
                             if (messageData && messageData.message) {
                                 this.generatedMessage = messageData.message;
                                 this.updateWorkflowUI();
                                 if (statusElement) statusElement.textContent = 'Dynamic message generated successfully!';
-                                apiCallSuccessful = true;
+
                             } else {
-                                this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                                this.generatedMessage = staticMessage;
                                 if (statusElement) statusElement.textContent = 'API response invalid - using static message';
-                                apiCallSuccessful = false;
                             }
                         } catch (error) {
                             console.error('API call failed:', error);
-                            this.generatedMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                            this.generatedMessage = staticMessage;
                             if (statusElement) statusElement.textContent = 'API error - using static message';
-                            apiCallSuccessful = false;
                         }
 
                         this.saveState();
                         await this.wait(1000);
-
-                        // Always proceed with connection, using either API or static message
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
@@ -1504,8 +1462,6 @@ class SalesNavigatorFloatingUI {
             statusElement.parentElement.style.color = '#155724';
         }
         if (progressElement) progressElement.textContent = `${this.profiles.length} / ${this.profiles.length} (Complete)`;
-
-        // Update button states to show workflow is complete
         this.automationRunning = false;
         this.updateButtonStates();
 
@@ -1534,10 +1490,7 @@ class SalesNavigatorFloatingUI {
             popup.appendChild(summaryDiv);
         }
 
-        // Clear workflow state
         localStorage.removeItem('salesNavWorkflow');
-
-        // Reset workflow variables for new cycle
         this.currentWorkflowStep = 'collecting';
         this.currentProfileIndex = 0;
         this.generatedMessage = null;
