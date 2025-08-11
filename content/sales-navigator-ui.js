@@ -56,6 +56,9 @@ class SalesNavigatorFloatingUI {
         this.currentLinkedInProfileUrl = null;
         this.isProcessingThreeDotMenu = false;
 
+        this.loadBatchSettings();
+        this.autoProcessingTimeout = null;
+
         if (this.isSalesNavigatorSearchPage()) {
             this.init();
         } else if (this.isLinkedInProfilePage() || this.isSalesNavigatorProfilePage()) {
@@ -743,6 +746,7 @@ class SalesNavigatorFloatingUI {
                     <strong>LinkedIn URL: </strong><span id="workflow-linkedin-url" style="font-size: 12px; word-break: break-all;">${this.currentLinkedInProfileUrl || 'Will be captured from profile'}</span>
                 </div>
             </div>
+
             <div id="workflow-profiles-list" style="max-height: 300px; overflow-y: auto;">
                 ${this.profiles.map((profile, index) => `
                     <div id="profile-${index}" style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee;">
@@ -773,6 +777,8 @@ class SalesNavigatorFloatingUI {
         document.getElementById('pause-workflow').addEventListener('click', () => this.pauseWorkflow());
         document.getElementById('resume-workflow').addEventListener('click', () => this.resumeWorkflow());
 
+
+
         this.workflowPopup = overlay;
         if (this.ui) this.ui.style.display = 'none';
         this.updateWorkflowUI();
@@ -799,6 +805,11 @@ class SalesNavigatorFloatingUI {
     }
 
     closeWorkflowPopup() {
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+            this.autoProcessingTimeout = null;
+        }
+
         if (this.workflowPopup) {
             document.body.removeChild(this.workflowPopup);
             this.workflowPopup = null;
@@ -810,16 +821,23 @@ class SalesNavigatorFloatingUI {
 
     pauseWorkflow() {
         this.workflowPaused = true;
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+            this.autoProcessingTimeout = null;
+        }
+
         document.getElementById('pause-workflow').style.display = 'none';
         document.getElementById('resume-workflow').style.display = 'inline-block';
         this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
+        this.updateCurrentStatus('Workflow paused. Click "Resume" to continue.');
     }
 
     resumeWorkflow() {
         this.workflowPaused = false;
         document.getElementById('pause-workflow').style.display = 'inline-block';
         document.getElementById('resume-workflow').style.display = 'none';
-        this.processNextProfile();
+        this.updateCurrentStatus(`Resuming workflow... Next profile in ${this.profileDelay / 1000} seconds.`);
+        this.scheduleNextProfile();
     }
 
     startProcessing() {
@@ -845,7 +863,50 @@ class SalesNavigatorFloatingUI {
         if (pauseBtn) pauseBtn.style.display = 'none';
     }
 
+    scheduleNextProfile() {
+        // Clear any existing timeout
+        if (this.autoProcessingTimeout) {
+            clearTimeout(this.autoProcessingTimeout);
+        }
+
+        // Hide manual next button since we're in auto mode
+        const nextBtn = document.getElementById('next-profile');
+        if (nextBtn) nextBtn.style.display = 'none';
+
+        // Start countdown timer
+        this.startCountdownTimer();
+
+        // Schedule automatic processing of next profile
+        this.autoProcessingTimeout = setTimeout(() => {
+            if (!this.workflowPaused) {
+                this.goToNextProfile();
+            }
+        }, this.profileDelay);
+    }
+
+    startCountdownTimer() {
+        let remainingTime = this.profileDelay / 1000;
+        const countdownInterval = setInterval(() => {
+            if (this.workflowPaused) {
+                clearInterval(countdownInterval);
+                return;
+            }
+
+            remainingTime--;
+            if (remainingTime > 0) {
+                const statusElement = document.getElementById('workflow-current-status');
+                if (statusElement) {
+                    const baseMessage = statusElement.textContent.split(' in ')[0];
+                    statusElement.textContent = `${baseMessage} in ${remainingTime} seconds...`;
+                }
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    }
+
     async goToNextProfile() {
+        console.log(`goToNextProfile called. Current index: ${this.currentProfileIndex}, Total profiles: ${this.profiles.length}`);
         const nextBtn = document.getElementById('next-profile');
         const pauseBtn = document.getElementById('pause-workflow');
         if (nextBtn) nextBtn.style.display = 'none';
@@ -853,18 +914,18 @@ class SalesNavigatorFloatingUI {
 
         if (this.currentProfileIndex < this.profiles.length) {
             const profile = this.profiles[this.currentProfileIndex];
-            if (window.location.href.includes('/sales/search/people')) {
-                await this.navigateToProfile(profile.url);
-            } else {
-                this.processNextProfile();
-            }
+            console.log(`Next profile to process: ${profile.name} - ${profile.url}`);
+            // Always navigate to the next profile URL, regardless of current page
+            await this.navigateToProfile(profile.url);
         } else {
+            console.log('All profiles completed, finishing workflow');
             this.completeWorkflow();
         }
     }
 
     async navigateToProfile(profileUrl) {
-        this.updateCurrentStatus('Opening profile...');
+        console.log(`Navigating to profile ${this.currentProfileIndex + 1}/${this.profiles.length}: ${profileUrl}`);
+        this.updateCurrentStatus(`Opening profile ${this.currentProfileIndex + 1}/${this.profiles.length}...`);
         const state = {
             currentWorkflowStep: this.currentWorkflowStep,
             currentProfileIndex: this.currentProfileIndex,
@@ -938,10 +999,11 @@ class SalesNavigatorFloatingUI {
 
                 await this.wait(2000);
                 this.currentProfileIndex++;
+                console.log(`Profile completed. Moving to index ${this.currentProfileIndex}/${this.profiles.length}`);
 
                 if (this.currentProfileIndex < this.profiles.length) {
-                    this.updateCurrentStatus('Profile completed! Click "Next Profile" to continue.');
-                    this.showNextProfileButton();
+                    this.updateCurrentStatus(`✅ Profile completed! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
+                    this.scheduleNextProfile();
                 } else {
                     this.completeWorkflow();
                 }
@@ -958,8 +1020,8 @@ class SalesNavigatorFloatingUI {
             await this.wait(1000);
             this.currentProfileIndex++;
             if (this.currentProfileIndex < this.profiles.length) {
-                this.updateCurrentStatus('Error occurred! Click "Next Profile" to continue with next profile.');
-                this.showNextProfileButton();
+                this.updateCurrentStatus(`❌ Error occurred! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
+                this.scheduleNextProfile();
             } else {
                 this.completeWorkflow();
             }
@@ -1374,11 +1436,13 @@ class SalesNavigatorFloatingUI {
             }
         }, 5000);
     }
+    loadBatchSettings() {
+        this.profileDelay = 5000; // Default 5 second delay between profiles
+    }
 }
 
 window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
 
-// Prevent multiple instances - only create if none exist
 if (typeof window.salesNavUI === 'undefined' &&
     typeof window.salesNavigatorFloatingUI === 'undefined' &&
     window.location.href.includes('linkedin.com') &&
@@ -1390,4 +1454,4 @@ if (typeof window.salesNavUI === 'undefined' &&
     }
 }
 
-} // Close the else block
+}
