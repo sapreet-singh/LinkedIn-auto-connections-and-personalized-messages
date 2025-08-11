@@ -29,11 +29,6 @@ const APIService = {
             }
             const apiData = await response.json();
             const messageTest = apiData?.messages?.message1;
-
-            const message = "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team.";
-
-
-
             return { message: messageTest };
         } catch (error) {
             console.error('API Service Error:', error);
@@ -652,8 +647,8 @@ class SalesNavigatorFloatingUI {
             listElement.innerHTML = '<div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>';
             return;
         }
-        listElement.innerHTML = this.profiles.map(profile => `
-            <div class="profile-item">
+        listElement.innerHTML = this.profiles.map((profile, index) => `
+            <div class="profile-item" data-profile-index="${index}">
                 <div class="profile-image">
                     ${profile.profilePic ?
                         `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
@@ -664,13 +659,28 @@ class SalesNavigatorFloatingUI {
                     <div class="profile-name" title="${profile.name}">${profile.name}</div>
                     <div class="profile-title" title="${profile.title}">${profile.title}</div>
                     ${profile.company ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>` : ''}
-                    <div class="profile-url" title="${profile.url}" onclick="salesNavUI.copyProfileUrl('${profile.url}')" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
+                    <div class="profile-url" title="${profile.url}" data-url="${profile.url}" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
                 </div>
                 <div class="profile-actions">
-                    <button class="profile-action-btn remove-profile-btn" onclick="salesNavUI.removeProfile('${profile.url}')" title="Remove">✕</button>
+                    <button class="profile-action-btn remove-profile-btn" data-url="${profile.url}" title="Remove">✕</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners for profile actions
+        listElement.querySelectorAll('.profile-url').forEach(urlElement => {
+            urlElement.addEventListener('click', (e) => {
+                const url = e.target.getAttribute('data-url');
+                this.copyProfileUrl(url);
+            });
+        });
+
+        listElement.querySelectorAll('.remove-profile-btn').forEach(removeBtn => {
+            removeBtn.addEventListener('click', (e) => {
+                const url = e.target.getAttribute('data-url');
+                this.removeProfile(url);
+            });
+        });
     }
 
     shortenUrl(url) {
