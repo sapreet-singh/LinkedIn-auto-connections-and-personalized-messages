@@ -6,13 +6,13 @@ if (window.salesNavigatorUILoaded) {
 
 const CONSTANTS = {
     API: {
-        BASE_URL: 'http://localhost:7008/api/linkedin',
-        ENDPOINTS: { MESSAGES: '/messages' }
+        BASE_URL: 'https://localhost:7007',
+        ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
     }
 };
 
 const APIService = {
-    async generateMessage(profileUrl) {
+    async generateMessage(customPrompt, profileUrl) {
         try {
             const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`, {
                 method: 'POST',
@@ -21,7 +21,8 @@ const APIService = {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    url: profileUrl
+                    url: profileUrl,
+                    prompt: customPrompt
                 })
             });
             if (!response.ok) {
@@ -55,6 +56,8 @@ class SalesNavigatorFloatingUI {
         this.profileDelay = 5000;
         this.sendConnectCount = 0;
         this.fieldConnectCount = 0;
+        this.customPrompt = '';
+        this.promptSet = false;
         this.loadSavedCounters();
 
         this.loadBatchSettings();
@@ -103,6 +106,8 @@ class SalesNavigatorFloatingUI {
                 this.profileStatuses = state.profileStatuses || {};
                 this.sendConnectCount = state.sendConnectCount || 0;
                 this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.customPrompt = state.customPrompt || '';
+                this.promptSet = state.promptSet || false;
                 if (this.currentWorkflowStep === 'processing') {
                     this.hideCollectionUI();
                     this.showWorkflowPopup();
@@ -430,6 +435,8 @@ class SalesNavigatorFloatingUI {
                 this.workflowPaused = state.workflowPaused || false;
                 this.sendConnectCount = state.sendConnectCount || 0;
                 this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.customPrompt = state.customPrompt || '';
+                this.promptSet = state.promptSet || false;
                 this.currentLinkedInProfileUrl = null;
                 this.showWorkflowPopup();
 
@@ -771,7 +778,9 @@ class SalesNavigatorFloatingUI {
             workflowPaused: this.workflowPaused,
             profileStatuses: this.profileStatuses || {},
             sendConnectCount: this.sendConnectCount || 0,
-            fieldConnectCount: this.fieldConnectCount || 0
+            fieldConnectCount: this.fieldConnectCount || 0,
+            customPrompt: this.customPrompt || '',
+            promptSet: this.promptSet || false
         };
         localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
     }
@@ -820,7 +829,17 @@ class SalesNavigatorFloatingUI {
                     <strong>Current Status: </strong><span id="workflow-current-status">Starting workflow...</span>
                 </div>
                 <div style="background: #fff3cd; padding: 12px; border-radius: 8px;">
-                    <strong>Message: </strong><span id="workflow-message">${this.generatedMessage || 'Will be generated from LinkedIn profile URL'}</span>
+                    <strong>Message: </strong><span id="workflow-message">${this.generatedMessage || 'Will be generated from custom prompt'}</span>
+                </div>
+                <div id="prompt-section" style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-top: 8px; ${this.promptSet ? 'display: none;' : ''}">
+                    <strong>Custom Prompt: </strong>
+                    <textarea id="custom-prompt-input" placeholder="Enter your custom prompt for message generation..."
+                        style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 14px;">${this.customPrompt}</textarea>
+                    <button id="set-prompt-btn" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">Set Prompt</button>
+                </div>
+                <div id="prompt-display" style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 8px; ${!this.promptSet ? 'display: none;' : ''}">
+                    <strong>Using Custom Prompt: </strong><span id="current-prompt-text" style="font-style: italic;">${this.customPrompt}</span>
+                    <button id="change-prompt-btn" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px;">Change</button>
                 </div>
                 <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-top: 8px;">
                     <strong>Current Profile URL: </strong><span id="workflow-profile-url" style="font-size: 12px; word-break: break-all;">${this.getCurrentProfileUrl()}</span>
@@ -857,8 +876,8 @@ class SalesNavigatorFloatingUI {
         document.getElementById('start-automation').addEventListener('click', () => this.startFullAutomation());
         document.getElementById('pause-automation').addEventListener('click', () => this.pauseAutomation());
         document.getElementById('resume-automation').addEventListener('click', () => this.resumeAutomation());
-
-
+        document.getElementById('set-prompt-btn').addEventListener('click', () => this.setCustomPrompt());
+        document.getElementById('change-prompt-btn').addEventListener('click', () => this.changePrompt());
 
         this.workflowPopup = overlay;
         if (this.ui) this.ui.style.display = 'none';
@@ -883,7 +902,24 @@ class SalesNavigatorFloatingUI {
             this.setCurrentProfileProcessing();
         }
         if (messageElement) {
-            messageElement.textContent = this.generatedMessage || 'Will be generated from LinkedIn profile URL';
+            messageElement.textContent = this.generatedMessage || 'Will be generated from custom prompt';
+        }
+
+        const promptSection = document.getElementById('prompt-section');
+        const promptDisplay = document.getElementById('prompt-display');
+        const currentPromptText = document.getElementById('current-prompt-text');
+        const customPromptInput = document.getElementById('custom-prompt-input');
+
+        if (promptSection && promptDisplay) {
+            if (this.promptSet) {
+                promptSection.style.display = 'none';
+                promptDisplay.style.display = 'block';
+                if (currentPromptText) currentPromptText.textContent = this.customPrompt;
+            } else {
+                promptSection.style.display = 'block';
+                promptDisplay.style.display = 'none';
+                if (customPromptInput) customPromptInput.value = this.customPrompt;
+            }
         }
         if (profileUrlElement) profileUrlElement.textContent = this.getCurrentProfileUrl();
         if (linkedinUrlElement) linkedinUrlElement.textContent = this.currentLinkedInProfileUrl || 'Will be captured from profile';
@@ -959,6 +995,10 @@ class SalesNavigatorFloatingUI {
     }
 
     startFullAutomation() {
+        if (!this.promptSet || !this.customPrompt.trim()) {
+            alert('Please set a custom prompt before starting automation');
+            return;
+        }
         const startBtn = document.getElementById('start-automation');
         const pauseBtn = document.getElementById('pause-automation');
 
@@ -970,14 +1010,8 @@ class SalesNavigatorFloatingUI {
         this.saveState();
 
         this.updateCurrentStatus('🚀 Starting full automation process...');
-
-        // Update UI to show correct button state
         this.updateWorkflowUI();
-
-        // Update current profile status to show it's being processed
         this.setCurrentProfileProcessing();
-
-        // Start the automated workflow immediately
         setTimeout(() => {
             this.goToNextProfile();
         }, 2000);
@@ -988,7 +1022,47 @@ class SalesNavigatorFloatingUI {
         if (statusElement) statusElement.textContent = message;
     }
 
+    setCustomPrompt() {
+        const promptInput = document.getElementById('custom-prompt-input');
+        const promptValue = promptInput.value.trim();
 
+        if (!promptValue) {
+            alert('Please enter a custom prompt');
+            return;
+        }
+
+        this.customPrompt = promptValue;
+        this.promptSet = true;
+        this.saveState();
+
+        // Hide prompt input section and show display section
+        document.getElementById('prompt-section').style.display = 'none';
+        document.getElementById('prompt-display').style.display = 'block';
+        document.getElementById('current-prompt-text').textContent = this.customPrompt;
+
+        // Update message display
+        const messageElement = document.getElementById('workflow-message');
+        if (messageElement) {
+            messageElement.textContent = 'Will be generated from custom prompt';
+        }
+    }
+
+    changePrompt() {
+        this.promptSet = false;
+        this.customPrompt = '';
+        this.saveState();
+
+        // Show prompt input section and hide display section
+        document.getElementById('prompt-section').style.display = 'block';
+        document.getElementById('prompt-display').style.display = 'none';
+        document.getElementById('custom-prompt-input').value = '';
+
+        // Update message display
+        const messageElement = document.getElementById('workflow-message');
+        if (messageElement) {
+            messageElement.textContent = 'Will be generated from custom prompt';
+        }
+    }
 
     scheduleNextProfile() {
         if (this.autoProcessingTimeout) {
@@ -1252,13 +1326,14 @@ class SalesNavigatorFloatingUI {
 
                         const staticMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
                         try {
-                             const messageData = await APIService.generateMessage(copiedUrl);
+                             const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
+                             console.log('Message Data:', messageData);
                            // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
 
                             if (messageData && messageData.message) {
                                 this.generatedMessage = messageData.message;
                                 this.updateWorkflowUI();
-                                if (statusElement) statusElement.textContent = 'Dynamic message generated successfully!';
+                                if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
 
                             } else {
                                 this.generatedMessage = staticMessage;
@@ -1574,6 +1649,8 @@ class SalesNavigatorFloatingUI {
         this.automationRunning = false;
         this.currentLinkedInProfileUrl = null;
         this.profileStatuses = {};
+        this.customPrompt = '';
+        this.promptSet = false;
 
         // Restore counters after clearing state
         this.sendConnectCount = savedSendConnectCount;
