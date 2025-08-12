@@ -590,76 +590,99 @@ class LinkedInSearchFloatingUI {
         const stopAutomationBtn = automationUI.querySelector('#stop-automation-btn');
         const customPromptTextarea = automationUI.querySelector('#custom-prompt');
 
-        closeBtn.addEventListener('click', () => {
-            if (this.automationState.isRunning) {
-                if (confirm('Automation is running. Are you sure you want to close?')) {
-                    this.stopAutomation();
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                if (this.automationState.isRunning) {
+                    if (confirm('Automation is running. Are you sure you want to close?')) {
+                        this.stopAutomation();
+                        automationUI.remove();
+                        if (this.ui) {
+                            this.ui.style.display = 'flex';
+                            this.ui.style.visibility = 'visible';
+                        }
+                    }
+                } else {
                     automationUI.remove();
                     if (this.ui) {
                         this.ui.style.display = 'flex';
                         this.ui.style.visibility = 'visible';
                     }
                 }
-            } else {
-                automationUI.remove();
-                if (this.ui) {
-                    this.ui.style.display = 'flex';
-                    this.ui.style.visibility = 'visible';
+            });
+        }
+
+        if (setPromptBtn && customPromptTextarea) {
+            setPromptBtn.addEventListener('click', () => {
+                const promptValue = customPromptTextarea.value.trim();
+                if (!promptValue) {
+                    alert('Please enter a custom prompt!');
+                    return;
                 }
-            }
-        });
 
-        setPromptBtn.addEventListener('click', () => {
-            const promptValue = customPromptTextarea.value.trim();
-            if (!promptValue) {
-                alert('Please enter a custom prompt!');
-                return;
-            }
+                this.automationState.customPrompt = promptValue;
+                this.automationState.promptSet = true;
 
-            this.automationState.customPrompt = promptValue;
-            this.automationState.promptSet = true;
+                // Hide prompt input, show prompt display
+                const promptSection = document.getElementById('prompt-section');
+                const promptDisplay = document.getElementById('prompt-display');
+                const currentPromptText = document.getElementById('current-prompt-text');
 
-            // Hide prompt input, show prompt display
-            document.getElementById('prompt-section').style.display = 'none';
-            document.getElementById('prompt-display').style.display = 'block';
-            document.getElementById('current-prompt-text').textContent = promptValue;
+                if (promptSection) promptSection.style.display = 'none';
+                if (promptDisplay) promptDisplay.style.display = 'block';
+                if (currentPromptText) currentPromptText.textContent = promptValue;
 
-            // Enable start button
-            startAutomationBtn.disabled = false;
-            startAutomationBtn.textContent = '🚀 Start Automation';
-        });
+                // Enable start button
+                if (startAutomationBtn) {
+                    startAutomationBtn.disabled = false;
+                    startAutomationBtn.textContent = '🚀 Start Automation';
+                }
+            });
+        }
 
-        changePromptBtn.addEventListener('click', () => {
-            this.automationState.promptSet = false;
-            this.automationState.customPrompt = '';
+        if (changePromptBtn && customPromptTextarea) {
+            changePromptBtn.addEventListener('click', () => {
+                this.automationState.promptSet = false;
+                this.automationState.customPrompt = '';
 
-            // Show prompt input, hide prompt display
-            document.getElementById('prompt-section').style.display = 'block';
-            document.getElementById('prompt-display').style.display = 'none';
-            customPromptTextarea.value = '';
+                // Show prompt input, hide prompt display
+                const promptSection = document.getElementById('prompt-section');
+                const promptDisplay = document.getElementById('prompt-display');
 
-            // Disable start button
-            startAutomationBtn.disabled = true;
-            startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
-        });
+                if (promptSection) promptSection.style.display = 'block';
+                if (promptDisplay) promptDisplay.style.display = 'none';
+                customPromptTextarea.value = '';
 
-        startAutomationBtn.addEventListener('click', () => {
-            if (!this.automationState.promptSet || !this.automationState.customPrompt) {
-                alert('Please set a custom prompt first!');
-                return;
-            }
-            this.startAutomationProcess(automationUI);
-        });
+                // Disable start button
+                if (startAutomationBtn) {
+                    startAutomationBtn.disabled = true;
+                    startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
+                }
+            });
+        }
 
-        pauseAutomationBtn.addEventListener('click', () => {
-            this.pauseAutomation();
-        });
+        if (startAutomationBtn) {
+            startAutomationBtn.addEventListener('click', () => {
+                if (!this.automationState.promptSet || !this.automationState.customPrompt) {
+                    alert('Please set a custom prompt first!');
+                    return;
+                }
+                this.startAutomationProcess(automationUI);
+            });
+        }
 
-        stopAutomationBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to stop the automation?')) {
-                this.stopAutomation();
-            }
-        });
+        if (pauseAutomationBtn) {
+            pauseAutomationBtn.addEventListener('click', () => {
+                this.pauseAutomation();
+            });
+        }
+
+        if (stopAutomationBtn) {
+            stopAutomationBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to stop the automation?')) {
+                    this.stopAutomation();
+                }
+            });
+        }
     }
 
     updateAutomationProgress() {
@@ -1173,10 +1196,8 @@ function initializeLinkedInAutomation() {
     if (window.location.href.includes('linkedin.com/search')) {
         // Initialize search UI
         initLinkedInSearchUI();
-    } else if (window.location.href.includes('linkedin.com/in/')) {
-        // Handle profile automation
-        handleProfileAutomation();
     }
+    // Note: Profile automation is handled by linkedin-profile-automation.js
 }
 
 // Initialize on page load
