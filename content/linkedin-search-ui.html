@@ -1,0 +1,48 @@
+<div class="linkedin-search-floating-ui">
+    <div class="linkedin-search-header">
+        <h3 class="linkedin-search-title" data-text="ui.title">LinkedIn Search</h3>
+        <div class="linkedin-search-controls">
+            <button class="linkedin-search-minimize" title="Minimize">−</button>
+            <button class="linkedin-search-close" title="Close">&times;</button>
+        </div>
+    </div>
+    <div class="linkedin-search-content">
+        <div class="linkedin-search-controls">
+            <button class="linkedin-search-btn start" id="show-filters-btn" data-text="messages.buttons.showFilters">SHOW LINKEDIN FILTERS</button>
+            <button class="linkedin-search-btn pause" id="collect-profiles-btn" disabled data-text="messages.buttons.collectProfiles">COLLECT PROFILES</button>
+        </div>
+        <div class="linkedin-search-status">
+            <div class="status-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text" data-text="messages.status.ready">Ready to show LinkedIn filters</span>
+            </div>
+        </div>
+
+        <div class="connection-stats">
+            <div class="stat-card send-connect">
+                <div class="stat-label" data-text="ui.stats.sendConnect">Send Connect:</div>
+                <div class="stat-number" id="send-connect-count">0</div>
+            </div>
+            <div class="stat-card field-connect">
+                <div class="stat-label" data-text="ui.stats.fieldConnect">Field Connect:</div>
+                <div class="stat-number" id="field-connect-count">0</div>
+            </div>
+        </div>
+
+        <div class="profiles-section">
+            <div class="profiles-header">
+                <span class="profiles-count" data-text="ui.profiles.label">Profiles: <span id="profile-count">0</span></span>
+                <button class="clear-btn" id="clear-profiles" data-text="messages.buttons.clearAll">Clear All</button>
+            </div>
+            <div class="profiles-list" id="profiles-list">
+                <div class="empty-profiles" data-text="messages.empty.profiles">
+                    No profiles collected yet. Click "Show LinkedIn Filters" to begin.
+                </div>
+            </div>
+        </div>
+
+        <button class="linkedin-search-btn next" id="start-connecting-btn" style="display: none;" data-text="messages.buttons.startConnecting">
+            Next: Start Connecting (0)
+        </button>
+    </div>
+</div>
