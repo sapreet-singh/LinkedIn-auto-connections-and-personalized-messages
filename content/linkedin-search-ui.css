@@ -230,22 +230,108 @@
 }
 
 .profile-item {
-    padding: 8px 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 12px 8px !important;
     border-bottom: 1px solid #e9ecef !important;
     font-size: 12px !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.profile-item:hover {
+    background-color: #f8f9fa !important;
 }
 
 .profile-item:last-child {
     border-bottom: none !important;
 }
 
-.profile-item strong {
-    display: block !important;
-    margin-bottom: 2px !important;
+.profile-image {
+    width: 40px !important;
+    height: 40px !important;
+    margin-right: 12px !important;
+    flex-shrink: 0 !important;
 }
 
-.profile-item span {
-    color: #6c757d !important;
+.profile-initial {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    background: #0a66c2 !important;
+    color: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+}
+
+.profile-info {
+    flex: 1 !important;
+    min-width: 0 !important;
+}
+
+.profile-name {
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-title {
+    color: #666 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-company {
+    color: #888 !important;
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-url {
+    color: #0a66c2 !important;
+    font-size: 10px !important;
+    text-decoration: underline !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-url:hover {
+    color: #004182 !important;
+}
+
+.profile-actions {
+    margin-left: 8px !important;
+    flex-shrink: 0 !important;
+}
+
+.profile-action-btn {
+    background: #dc3545 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.profile-action-btn:hover {
+    background: #c82333 !important;
 }
 
 .linkedin-search-btn.next {

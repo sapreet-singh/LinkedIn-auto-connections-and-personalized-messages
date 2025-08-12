@@ -4,6 +4,8 @@ class LinkedInSearchFloatingUI {
         this.isCollecting = false;
         this.collectedProfiles = [];
         this.config = window.LinkedInSearchConfig || {};
+        this.collectionInterval = null;
+        this.observer = null;
         this.init();
     }
 
@@ -164,7 +166,6 @@ class LinkedInSearchFloatingUI {
     }
 
     setupEventListeners() {
-        const showFiltersBtn = this.ui.querySelector('#show-filters-btn');
         const collectBtn = this.ui.querySelector('#collect-profiles-btn');
         const connectBtn = this.ui.querySelector('#start-connecting-btn');
         const clearBtn = this.ui.querySelector('#clear-profiles');
@@ -172,8 +173,7 @@ class LinkedInSearchFloatingUI {
         const minimizeBtn = this.ui.querySelector('.linkedin-search-minimize');
         const header = this.ui.querySelector('.linkedin-search-header');
 
-        showFiltersBtn.addEventListener('click', () => this.showLinkedInFilters());
-        collectBtn.addEventListener('click', () => this.collectProfiles());
+        collectBtn.addEventListener('click', () => this.toggleCollecting());
         connectBtn.addEventListener('click', () => this.startConnecting());
         clearBtn.addEventListener('click', () => this.clearProfiles());
         closeBtn.addEventListener('click', () => this.closeUI());
@@ -215,94 +215,160 @@ class LinkedInSearchFloatingUI {
         });
     }
 
-    showLinkedInFilters() {
-        this.updateStatus('status', this.config.messages?.status?.openingFilters || 'Opening LinkedIn search filters...', true);
 
-        const collectBtn = this.ui.querySelector('#collect-profiles-btn');
-        collectBtn.disabled = false;
-        this.updateButtonText('collect-profiles-btn', 'messages.buttons.collectProfiles', 'COLLECT PROFILES');
 
-        const searchUrl = this.config.urls?.linkedinSearchWithFilters || 'https://www.linkedin.com/search/results/people/?origin=FACETED_SEARCH&viewAllFilters=true';
-        window.location.href = searchUrl;
-
-        setTimeout(() => {
-            this.updateStatus('status', this.config.messages?.status?.filtersOpened || 'LinkedIn filters opened. Now click "COLLECT PROFILES"', false);
-        }, this.config.timing?.pageLoadWait || 2000);
+    toggleCollecting() {
+        if (this.isCollecting) {
+            this.pauseCollecting();
+        } else {
+            this.startCollecting();
+        }
     }
 
-    collectProfiles() {
+    startCollecting() {
         this.updateStatus('status', this.config.messages?.status?.collecting || 'Collecting profiles...', true);
         this.isCollecting = true;
 
-        const showFiltersBtn = this.ui.querySelector('#show-filters-btn');
         const collectBtn = this.ui.querySelector('#collect-profiles-btn');
+        collectBtn.textContent = 'PAUSE COLLECTING';
+        collectBtn.classList.remove('start');
+        collectBtn.classList.add('pause');
 
-        showFiltersBtn.disabled = true;
-        this.updateButtonText('collect-profiles-btn', 'messages.buttons.collecting', 'COLLECTING...');
-        collectBtn.disabled = true;
-
-        this.startProfileCollection();
+        this.setupProfileObserver();
+        this.collectCurrentPageProfiles();
+        this.collectionInterval = setInterval(() => {
+            this.collectCurrentPageProfiles();
+        }, 3000);
     }
 
-    startProfileCollection() {
-        const profileSelectors = this.config.selectors?.profiles || [
-            '[data-chameleon-result-urn]',
-            '.reusable-search__result-container',
-            '.entity-result'
-        ];
+    pauseCollecting() {
+        this.updateStatus('status', 'Collection paused. Click "START COLLECTING" to resume.', false);
+        this.isCollecting = false;
 
-        const profiles = document.querySelectorAll(profileSelectors.join(', '));
-        const delay = this.config.timing?.profileCollectionDelay || 500;
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
 
-        profiles.forEach((profile, index) => {
-            setTimeout(() => {
-                this.processProfile(profile);
-                this.updateProfileCount();
-            }, index * delay);
+        if (this.collectionInterval) {
+            clearInterval(this.collectionInterval);
+            this.collectionInterval = null;
+        }
+
+        const collectBtn = this.ui.querySelector('#collect-profiles-btn');
+        collectBtn.textContent = 'START COLLECTING';
+        collectBtn.classList.remove('pause');
+        collectBtn.classList.add('start');
+    }
+
+    setupProfileObserver() {
+        if (this.observer) return;
+        this.observer = new MutationObserver((mutations) => {
+            if (!this.isCollecting) return;
+            let hasNewProfiles = false;
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1 && this.isProfileElement(node)) {
+                        hasNewProfiles = true;
+                    }
+                });
+            });
+            if (hasNewProfiles) {
+                setTimeout(() => this.collectCurrentPageProfiles(), 500);
+            }
         });
-
-        setTimeout(() => {
-            this.showNextButton();
-        }, profiles.length * delay + (this.config.timing?.statusUpdateDelay || 1000));
+        this.observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    processProfile(profileElement) {
-        const nameSelectors = this.config.selectors?.profileName || ['.entity-result__title-text a', '.actor-name'];
-        const titleSelectors = this.config.selectors?.profileTitle || ['.entity-result__primary-subtitle', '.actor-occupation'];
-        const locationSelectors = this.config.selectors?.profileLocation || ['.entity-result__secondary-subtitle', '.actor-meta'];
-
-        const profileData = {
-            name: this.getTextFromSelectors(profileElement, nameSelectors) || 'Unknown',
-            url: this.getHrefFromSelectors(profileElement, nameSelectors) || '',
-            title: this.getTextFromSelectors(profileElement, titleSelectors) || '',
-            location: this.getTextFromSelectors(profileElement, locationSelectors) || ''
-        };
-
-        if (profileData.url) {
-            this.collectedProfiles.push(profileData);
-            this.updateProfilesList();
-        }
+    isProfileElement(element) {
+        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', '[componentkey]'];
+        return selectors.some(selector =>
+            element.matches && element.matches(selector) ||
+            element.querySelector && element.querySelector(selector)
+        );
     }
 
-    getTextFromSelectors(element, selectors) {
+    collectCurrentPageProfiles() {
+        if (!this.isCollecting) return;
+        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', 'div[componentkey]:has(a[href*="/in/"])', 'div:has(> div > figure img[alt]) div:has(a[href*="/in/"])'];
+        let profileElements = [];
         for (const selector of selectors) {
-            const found = element.querySelector(selector);
-            if (found && found.textContent) {
-                return found.textContent.trim();
+            try {
+                profileElements = document.querySelectorAll(selector);
+                if (profileElements.length > 0) break;
+            } catch (e) {
+                continue;
             }
         }
-        return null;
+        profileElements.forEach(element => {
+            const profile = this.extractProfileData(element);
+            if (profile && !this.isDuplicateProfile(profile)) {
+                this.addProfile(profile);
+            }
+        });
     }
 
-    getHrefFromSelectors(element, selectors) {
-        for (const selector of selectors) {
-            const found = element.querySelector(selector);
-            if (found && found.href) {
-                return found.href;
+    extractProfileData(element) {
+        try {
+            const nameElement = element.querySelector('a[href*="/in/"][data-view-name="search-result-lockup-title"]') ||
+                               element.querySelector('.entity-result__title-text a') ||
+                               element.querySelector('.actor-name a') ||
+                               element.querySelector('a[href*="/in/"]');
+            if (!nameElement) return null;
+
+            let name = nameElement.textContent?.trim();
+            if (name && name.includes(' is reachable')) {
+                name = name.replace(' is reachable', '').trim();
             }
+
+            const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
+            let title = '', company = '', location = '';
+            const parentContainer = nameElement.closest('div[componentkey]') || element;
+            const textElements = parentContainer.querySelectorAll('p');
+
+            textElements.forEach((p) => {
+                const text = p.textContent?.trim();
+                if (!text || text.includes(name)) return;
+                if (!title && text && !text.includes('•') && !text.includes(',')) {
+                    title = text;
+                } else if (!location && text && (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK'))) {
+                    location = text;
+                }
+            });
+
+            if (title && title.includes(' at ')) {
+                const parts = title.split(' at ');
+                title = parts[0]?.trim() || '';
+                company = parts[1]?.trim() || '';
+            }
+
+            const imageElement = parentContainer.querySelector('img[alt="' + name + '"]') ||
+                               parentContainer.querySelector('img[src*="profile"]') ||
+                               parentContainer.querySelector('figure img');
+            const profilePic = imageElement?.src || '';
+
+            return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search' };
+        } catch (error) {
+            console.error('Error extracting profile data:', error);
+            return null;
         }
-        return null;
     }
+
+    isDuplicateProfile(newProfile) {
+        return this.collectedProfiles.some(profile =>
+            profile.url === newProfile.url ||
+            (profile.name === newProfile.name && profile.title === newProfile.title)
+        );
+    }
+
+    addProfile(profile) {
+        this.collectedProfiles.push(profile);
+        this.updateProfilesList();
+        this.updateProfileCount();
+        this.showNextButton();
+    }
+
+
 
     updateProfileCount() {
         const countElement = this.ui.querySelector('#profile-count');
@@ -314,18 +380,69 @@ class LinkedInSearchFloatingUI {
 
     updateProfilesList() {
         const profilesList = this.ui.querySelector('#profiles-list');
-        const emptyMessage = this.config.messages?.empty?.profiles || 'No profiles collected yet. Click "Show LinkedIn Filters" to begin.';
+        const emptyMessage = this.config.messages?.empty?.profiles || 'No profiles collected yet. Click "START COLLECTING" to begin.';
 
         if (this.collectedProfiles.length === 0) {
             profilesList.innerHTML = `<div class="empty-profiles">${emptyMessage}</div>`;
         } else {
-            profilesList.innerHTML = this.collectedProfiles.map((profile) => `
-                <div class="profile-item">
-                    <strong>${profile.name}</strong><br>
-                    <span>${profile.title}</span>
+            profilesList.innerHTML = this.collectedProfiles.map((profile, index) => `
+                <div class="profile-item" data-profile-index="${index}">
+                    <div class="profile-image">
+                        ${profile.profilePic ?
+                            `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
+                            `<div class="profile-initial">${profile.name ? profile.name.charAt(0).toUpperCase() : '?'}</div>`
+                        }
+                    </div>
+                    <div class="profile-info">
+                        <div class="profile-name" title="${profile.name}">${profile.name}</div>
+                        <div class="profile-title" title="${profile.title}">${profile.title}</div>
+                        ${profile.company ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>` : ''}
+                        <div class="profile-url" title="${profile.url}" data-url="${profile.url}" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="profile-action-btn remove-profile-btn" data-url="${profile.url}" title="Remove">✕</button>
+                    </div>
                 </div>
             `).join('');
+
+            // Add event listeners for profile actions
+            profilesList.querySelectorAll('.profile-url').forEach(urlElement => {
+                urlElement.addEventListener('click', (e) => {
+                    const url = e.target.getAttribute('data-url');
+                    this.copyProfileUrl(url);
+                });
+            });
+
+            profilesList.querySelectorAll('.remove-profile-btn').forEach(removeBtn => {
+                removeBtn.addEventListener('click', (e) => {
+                    const url = e.target.getAttribute('data-url');
+                    this.removeProfile(url);
+                });
+            });
         }
+    }
+
+    shortenUrl(url) {
+        // Extract LinkedIn profile ID for cleaner display
+        const match = url.match(/\/in\/([^\/\?]+)/);
+        if (match) return `linkedin.com/in/${match[1]}`;
+        return url.length > 30 ? url.substring(0, 30) + '...' : url;
+    }
+
+    copyProfileUrl(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            const notification = document.createElement('div');
+            notification.style.cssText = `position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;`;
+            notification.textContent = 'Profile URL copied!';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 2000);
+        }).catch(err => console.error('Failed to copy URL:', err));
+    }
+
+    removeProfile(url) {
+        this.collectedProfiles = this.collectedProfiles.filter(profile => profile.url !== url);
+        this.updateProfilesList();
+        this.updateProfileCount();
     }
 
     showNextButton() {
@@ -359,25 +476,22 @@ class LinkedInSearchFloatingUI {
     }
 
     clearProfiles() {
+        if (this.isCollecting) {
+            this.pauseCollecting();
+        }
         this.collectedProfiles = [];
         this.updateProfileCount();
         this.updateProfilesList();
-
-        // Reset UI state
-        const showFiltersBtn = this.ui.querySelector('#show-filters-btn');
         const collectBtn = this.ui.querySelector('#collect-profiles-btn');
         const nextBtn = this.ui.querySelector('#start-connecting-btn');
-
-        showFiltersBtn.disabled = false;
-        collectBtn.disabled = true;
-        collectBtn.textContent = this.config.messages?.buttons?.collectProfiles || 'COLLECT PROFILES';
+        collectBtn.disabled = false;
+        collectBtn.textContent = 'START COLLECTING';
+        collectBtn.classList.remove('pause');
+        collectBtn.classList.add('start');
         nextBtn.style.display = 'none';
-
-        // Reset stats
         this.ui.querySelector('#send-connect-count').textContent = '0';
         this.ui.querySelector('#field-connect-count').textContent = '0';
-
-        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to show LinkedIn filters', false);
+        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting profiles', false);
     }
 
     updateStatus(statusType, message, isActive = false) {
@@ -417,6 +531,13 @@ class LinkedInSearchFloatingUI {
     }
 
     closeUI() {
+        if (this.isCollecting) {
+            this.pauseCollecting();
+        }
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
         if (this.ui) {
             this.ui.remove();
         }
