@@ -18,6 +18,17 @@ class LinkedInAutomation {
         this.autoProfileObserver = null;
         this.autoCollectionTimeout = null;
         this.processedProfiles = new Set();
+
+        // Consolidated selectors to avoid duplication
+        this.PROFILE_SELECTORS = [
+            'div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17', // New LinkedIn layout
+            '.reusable-search__result-container',
+            '[data-chameleon-result-urn]',
+            '.search-result',
+            '.entity-result',
+            'div[componentkey]' // Generic fallback
+        ];
+
         this.init();
     }
 
@@ -32,18 +43,13 @@ class LinkedInAutomation {
     }
 
     setupPageChangeDetection() {
-        // Monitor for page changes during multi-page collection
+        // Unified page change monitoring
         let lastUrl = location.href;
         const pageChangeObserver = new MutationObserver(() => {
             const currentUrl = location.href;
             if (currentUrl !== lastUrl) {
                 lastUrl = currentUrl;
-
-                if (this.isRealTimeMode && currentUrl.includes('linkedin.com')) {
-                    setTimeout(() => {
-                        this.handlePageChangeInCollection();
-                    }, 2000);
-                }
+                this.handlePageChange(currentUrl);
             }
         });
 
@@ -51,21 +57,32 @@ class LinkedInAutomation {
             childList: true,
             subtree: true
         });
+
+        // Also listen for popstate events
+        window.addEventListener('popstate', () => {
+            setTimeout(() => this.handlePageChange(location.href), 100);
+        });
     }
 
-    handlePageChangeInCollection() {
+    handlePageChange(currentUrl) {
         try {
-            // Re-setup auto detection
-            this.setupAutoDetection();
+            // Handle real-time mode page changes
+            if (this.isRealTimeMode && currentUrl.includes('linkedin.com')) {
+                setTimeout(() => this.setupAutoDetection(), 2000);
+            }
 
-            // Ensure message listeners are still active
+            // Handle auto collection
+            if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
+                this.startAutoCollection();
+            }
+
+            // Ensure message listeners are active
             if (!window.linkedInPageChangeHandled) {
                 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                     return this.handleMessage(message, sendResponse);
                 });
                 window.linkedInPageChangeHandled = true;
             }
-
         } catch (error) {
             console.error('Error handling page change:', error);
         }
@@ -170,7 +187,6 @@ class LinkedInAutomation {
         if (this.isProfilePage() && this.isAutoCollectionEnabled) {
             setTimeout(() => this.startAutoCollection(), 2000);
         }
-        this.setupPageChangeMonitoring();
     }
 
     isProfilePage() {
@@ -184,28 +200,7 @@ class LinkedInAutomation {
                (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result, .artdeco-entity-lockup'));
     }
 
-    setupPageChangeMonitoring() {
-        let currentUrl = window.location.href;
-        const urlObserver = new MutationObserver(() => {
-            if (window.location.href !== currentUrl) {
-                currentUrl = window.location.href;
-                setTimeout(() => {
-                    if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
-                        this.startAutoCollection();
-                    }
-                }, 2000);
-            }
-        });
-
-        urlObserver.observe(document.body, { childList: true, subtree: true });
-        window.addEventListener('popstate', () => {
-            setTimeout(() => {
-                if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
-                    this.startAutoCollection();
-                }
-            }, 2000);
-        });
-    }
+    // Removed duplicate - now handled by unified setupPageChangeDetection()
 
     setupAutoPopupDetection() {
         if (document.readyState === 'complete') {
@@ -306,10 +301,14 @@ class LinkedInAutomation {
             mutations.forEach((mutation) => {
                 if (mutation.addedNodes.length > 0) {
                     mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const newProfileCards = node.querySelectorAll ?
-                                node.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result') : [];
-                            if (newProfileCards.length > 0) hasNewProfiles = true;
+                        if (node.nodeType === Node.ELEMENT_NODE && node.querySelectorAll) {
+                            // Check if any new profile cards were added
+                            for (const selector of this.PROFILE_SELECTORS) {
+                                if (node.querySelectorAll(selector).length > 0) {
+                                    hasNewProfiles = true;
+                                    break;
+                                }
+                            }
                         }
                     });
                 }
@@ -328,9 +327,13 @@ class LinkedInAutomation {
     async collectNewProfilesAuto() {
         if (!this.isAutoCollecting) return;
 
-        const profileCards = document.querySelectorAll('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result');
-        const newProfiles = [];
+        let profileCards = [];
+        for (const selector of this.PROFILE_SELECTORS) {
+            profileCards = document.querySelectorAll(selector);
+            if (profileCards.length > 0) break;
+        }
 
+        const newProfiles = [];
         profileCards.forEach((card) => {
             if (card.dataset.autoProcessed) return;
             const profile = this.extractProfileFromCard(card);
@@ -785,18 +788,8 @@ class LinkedInAutomation {
         const profiles = [];
         if (window.location.href.includes('/mynetwork/')) return this.collectNetworkProfiles();
 
-        // Updated selectors for new LinkedIn layout
-        const selectors = [
-            'div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17', // New LinkedIn layout
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            '.search-result',
-            '.entity-result',
-            'div[componentkey]' // Generic fallback for new layout
-        ];
-
         let profileCards = [];
-        for (const selector of selectors) {
+        for (const selector of this.PROFILE_SELECTORS) {
             profileCards = document.querySelectorAll(selector);
             if (profileCards.length > 0) {
                 console.log(`Found ${profileCards.length} profile cards using selector: ${selector}`);
@@ -807,20 +800,17 @@ class LinkedInAutomation {
         profileCards.forEach((card) => {
             const profile = this.extractProfileFromCard(card);
             if (profile?.name && profile?.url) {
-                console.log(`Extracted profile: ${profile.name} - ${profile.url}`);
                 profiles.push(profile);
             }
         });
 
         if (profiles.length === 0) {
-            console.log('No profiles found with main selectors, trying alternative methods...');
             const alternativeProfiles = this.extractProfilesAlternative();
             if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
                 profiles.push(...alternativeProfiles);
             }
         }
 
-        console.log(`Total profiles collected: ${profiles.length}`);
         return profiles;
     }
 
@@ -1022,8 +1012,6 @@ class LinkedInAutomation {
 
     async clickPaginationButton(pageNumber) {
         try {
-            console.log(`Looking for pagination button for page ${pageNumber}`);
-
             // Enhanced selectors for different LinkedIn layouts
             const selectors = [
                 `button[aria-label="Page ${pageNumber}"]`,
@@ -1035,7 +1023,6 @@ class LinkedInAutomation {
                 `button[data-test-pagination-page-btn="${pageNumber}"]`,
                 `.artdeco-pagination__pages button[aria-label="Page ${pageNumber}"]`,
                 `button[data-test-id="pagination-page-${pageNumber}"]`,
-                // New LinkedIn layout selectors
                 `button[aria-label="${pageNumber}"]`,
                 `button:contains("${pageNumber}")`,
                 `.artdeco-pagination button:contains("${pageNumber}")`
@@ -1048,7 +1035,6 @@ class LinkedInAutomation {
                 try {
                     pageButton = document.querySelector(selector);
                     if (pageButton && !pageButton.disabled) {
-                        console.log(`Found pagination button using selector: ${selector}`);
                         break;
                     }
                 } catch (e) {
@@ -1058,9 +1044,7 @@ class LinkedInAutomation {
 
             // Fallback: search through all buttons
             if (!pageButton) {
-                console.log(`Direct selectors failed, searching through all buttons for page ${pageNumber}`);
                 const allButtons = document.querySelectorAll('button');
-                console.log(`Found ${allButtons.length} total buttons on page`);
 
                 for (const button of allButtons) {
                     if (button.disabled) continue;
@@ -1084,24 +1068,10 @@ class LinkedInAutomation {
                             /^\d+$/.test(spanText);
 
                         if (isPaginationButton) {
-                            console.log(`Found pagination button via fallback: text="${buttonText}", span="${spanText}", aria-label="${ariaLabel}"`);
                             pageButton = button;
                             break;
                         }
                     }
-                }
-
-                if (!pageButton) {
-                    console.log(`No pagination button found for page ${pageNumber}`);
-                    // Log all pagination-related buttons for debugging
-                    const paginationButtons = document.querySelectorAll('button[aria-label*="Page"], .artdeco-pagination button, .pagination button');
-                    console.log(`Found ${paginationButtons.length} pagination-related buttons:`,
-                        Array.from(paginationButtons).map(btn => ({
-                            text: btn.textContent.trim(),
-                            ariaLabel: btn.getAttribute('aria-label'),
-                            className: btn.className
-                        }))
-                    );
                 }
             }
 
@@ -1147,27 +1117,18 @@ class LinkedInAutomation {
                 const span = currentPageButton.querySelector('span');
                 if (span) {
                     const pageNum = parseInt(span.textContent.trim());
-                    if (!isNaN(pageNum)) {
-                        console.log(`Current page detected from aria-current button: ${pageNum}`);
-                        return pageNum;
-                    }
+                    if (!isNaN(pageNum)) return pageNum;
                 }
                 // Try button text directly
                 const pageNum = parseInt(currentPageButton.textContent.trim());
-                if (!isNaN(pageNum)) {
-                    console.log(`Current page detected from button text: ${pageNum}`);
-                    return pageNum;
-                }
+                if (!isNaN(pageNum)) return pageNum;
             }
 
             // Look for active/selected pagination button
             const activeButton = document.querySelector('.artdeco-pagination__button--active, .pagination__button--active, button[aria-selected="true"]');
             if (activeButton) {
                 const pageNum = parseInt(activeButton.textContent.trim());
-                if (!isNaN(pageNum)) {
-                    console.log(`Current page detected from active button: ${pageNum}`);
-                    return pageNum;
-                }
+                if (!isNaN(pageNum)) return pageNum;
             }
 
             // Fallback: check URL for page parameter
@@ -1175,15 +1136,10 @@ class LinkedInAutomation {
             const pageParam = urlParams.get('page');
             if (pageParam) {
                 const pageNum = parseInt(pageParam);
-                if (!isNaN(pageNum)) {
-                    console.log(`Current page detected from URL: ${pageNum}`);
-                    return pageNum;
-                }
+                if (!isNaN(pageNum)) return pageNum;
             }
 
-            // Default to page 1 if no page indicator found
-            console.log('No page indicator found, defaulting to page 1');
-            return 1;
+            return 1; // Default to page 1
         } catch (error) {
             console.error('Error getting current page number:', error);
             return 1;
@@ -1238,15 +1194,12 @@ class LinkedInAutomation {
     }
 
     findNextButton() {
-        console.log('Looking for Next button...');
-
         const nextSelectors = [
             'button[aria-label="Next"]',
             'button[aria-label="Next page"]',
             'button:contains("Next")',
             '.artdeco-pagination__button--next',
             'button[data-test-pagination-page-btn="next"]',
-            // New LinkedIn layout selectors
             '.artdeco-pagination button[aria-label*="Next"]',
             '.pagination button[aria-label*="Next"]'
         ];
@@ -1254,10 +1207,7 @@ class LinkedInAutomation {
         for (const selector of nextSelectors) {
             try {
                 const button = document.querySelector(selector);
-                if (button && !button.disabled) {
-                    console.log(`Found Next button using selector: ${selector}`);
-                    return button;
-                }
+                if (button && !button.disabled) return button;
             } catch (e) {
                 continue;
             }
@@ -1265,7 +1215,6 @@ class LinkedInAutomation {
 
         // Fallback: look for buttons with "Next" text or arrow symbols
         const allButtons = document.querySelectorAll('button');
-        console.log(`Searching through ${allButtons.length} buttons for Next button`);
 
         for (const button of allButtons) {
             if (button.disabled) continue;
@@ -1283,12 +1232,10 @@ class LinkedInAutomation {
                 (button.closest('.artdeco-pagination') ||
                  button.closest('.pagination') ||
                  ariaLabel.includes('page'))) {
-                console.log(`Found Next button via fallback: text="${buttonText}", aria-label="${ariaLabel}"`);
                 return button;
             }
         }
 
-        console.log('No Next button found');
         return null;
     }
 
@@ -1463,7 +1410,6 @@ class LinkedInAutomation {
             try {
                 const cards = document.querySelectorAll(selector);
                 if (cards.length > 0) {
-                    console.log(`Alternative method found ${cards.length} cards with selector: ${selector}`);
                     cards.forEach(card => {
                         const profile = this.extractProfileFromCard(card);
                         if (profile?.name && profile?.url) {
@@ -1473,14 +1419,12 @@ class LinkedInAutomation {
                     if (profiles.length > 0) break;
                 }
             } catch (error) {
-                console.log(`Selector ${selector} failed:`, error.message);
                 continue;
             }
         }
 
         // If still no profiles, try a more generic approach
         if (profiles.length === 0) {
-            console.log('Trying generic approach to find profiles...');
             const allLinks = document.querySelectorAll('a[href*="/in/"]');
             const processedUrls = new Set();
 
@@ -1516,7 +1460,6 @@ class LinkedInAutomation {
             });
         }
 
-        console.log(`Alternative extraction found ${profiles.length} profiles`);
         return profiles;
     }
 
@@ -2001,34 +1944,19 @@ class LinkedInAutomation {
     }
 
     getSearchResultElements() {
-        const selectors = [
-            // New LinkedIn layout selectors
-            'div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17',
-            'div[componentkey]',
-            // Original selectors
-            '.search-result',
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            'li[data-reusable-search-result]',
-            '.entity-result'
-        ];
+        // Use consolidated selectors plus additional ones for search results
+        const selectors = [...this.PROFILE_SELECTORS, 'li[data-reusable-search-result]'];
 
         for (const selector of selectors) {
             const elements = document.querySelectorAll(selector);
-            if (elements.length > 0) {
-                console.log(`getSearchResultElements found ${elements.length} elements with selector: ${selector}`);
-                return elements;
-            }
+            if (elements.length > 0) return elements;
         }
 
         // Fallback: find any elements containing LinkedIn profile links
         const elements = document.querySelectorAll('li, div');
-        const filtered = Array.from(elements).filter(el =>
+        return Array.from(elements).filter(el =>
             el.querySelector('a[href*="/in/"]') || el.querySelector('a[href*="linkedin.com/in/"]')
         );
-
-        console.log(`getSearchResultElements fallback found ${filtered.length} elements`);
-        return filtered;
     }
 
     getSalesNavigatorResultElements() {
