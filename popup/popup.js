@@ -482,6 +482,7 @@ const WizardManager = {
                 NetworkManager.openSearch();
                 setTimeout(() => NetworkManager.startMultiPageCollecting(), 1000); // Delay to allow filters to open
             },
+            'pause-collection': () => CollectionManager.togglePause(),
         };
 
         Utils.setupEventListeners(eventMap);
@@ -2221,5 +2222,39 @@ const ProfileURLModal = {
             Utils.show(campaignModal);
             WizardManager.showStep(3, 'collecting');
         }
+    }
+};
+
+// Collection Manager for pause/resume functionality
+const CollectionManager = {
+    isPaused: false,
+
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        this.updatePauseButton();
+        this.sendPauseMessage();
+    },
+
+    updatePauseButton() {
+        const pauseBtn = DOMCache.get('pause-collection');
+        if (pauseBtn) {
+            if (this.isPaused) {
+                pauseBtn.textContent = 'RESUME';
+                pauseBtn.className = 'btn btn-success';
+            } else {
+                pauseBtn.textContent = 'PAUSE';
+                pauseBtn.className = 'btn btn-secondary';
+            }
+        }
+    },
+
+    sendPauseMessage() {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    action: this.isPaused ? 'pauseCollection' : 'resumeCollection'
+                }).catch(() => {});
+            }
+        });
     }
 };

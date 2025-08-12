@@ -283,6 +283,8 @@ class LinkedInAutomation {
     }
 
     async collectAndSendProfiles() {
+        if (!this.isAutoCollectionEnabled || !this.isRealTimeMode) return;
+
         // Only use collectMultiplePages for non-Sales Navigator pages
         let profiles = [];
         if (!window.location.href.includes('sales/search/people')) {
@@ -290,7 +292,7 @@ class LinkedInAutomation {
         } else {
             profiles = await this.collectCurrentPageOnly();
         }
-        if (profiles.length > 0) {
+        if (profiles.length > 0 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
             this.sendProfilesRealTime(profiles);
         }
     }
@@ -314,7 +316,7 @@ class LinkedInAutomation {
                 }
             });
 
-            if (hasNewProfiles) {
+            if (hasNewProfiles && this.isAutoCollectionEnabled && this.isRealTimeMode) {
                 clearTimeout(this.autoCollectionTimeout);
                 this.autoCollectionTimeout = setTimeout(() => this.collectNewProfilesAuto(), 1500);
             }
@@ -325,7 +327,7 @@ class LinkedInAutomation {
     }
 
     async collectNewProfilesAuto() {
-        if (!this.isAutoCollecting) return;
+        if (!this.isAutoCollecting || !this.isAutoCollectionEnabled || !this.isRealTimeMode) return;
 
         let profileCards = [];
         for (const selector of this.PROFILE_SELECTORS) {
@@ -356,6 +358,51 @@ class LinkedInAutomation {
             clearTimeout(this.autoCollectionTimeout);
             this.autoCollectionTimeout = null;
         }
+    }
+
+    pauseCollection() {
+        this.isRealTimeMode = false;
+        this.isAutoCollecting = false;
+        this.isAutoCollectionEnabled = false;
+
+        // Stop all observers and intervals
+        if (this.autoProfileObserver) {
+            this.autoProfileObserver.disconnect();
+            this.autoProfileObserver = null;
+        }
+        if (this.continuousMonitoringInterval) {
+            clearInterval(this.continuousMonitoringInterval);
+            this.continuousMonitoringInterval = null;
+        }
+        if (this.autoCollectionTimeout) {
+            clearTimeout(this.autoCollectionTimeout);
+            this.autoCollectionTimeout = null;
+        }
+
+        // Stop any ongoing scrolling or page navigation
+        this.stopAllScrolling();
+
+        this.sendCollectionStatus('Collection paused');
+    }
+
+    resumeCollection() {
+        this.isRealTimeMode = true;
+        this.isAutoCollecting = true;
+        this.isAutoCollectionEnabled = true;
+        this.setupContinuousMonitoring();
+        this.collectAndSendProfiles();
+        this.sendCollectionStatus('Collection resumed');
+    }
+
+    stopAllScrolling() {
+        // Stop any ongoing scrolling by clearing all timeouts and intervals
+        const highestTimeoutId = setTimeout(() => {}, 0);
+        for (let i = 0; i < highestTimeoutId; i++) {
+            clearTimeout(i);
+        }
+
+        // Stop scrolling by scrolling to current position
+        window.scrollTo(window.scrollX, window.scrollY);
     }
     handleMessage(message, sendResponse) {
         if (!message || !message.action) {
@@ -411,6 +458,16 @@ class LinkedInAutomation {
             enableAutoCollection: () => {
                 this.isAutoCollectionEnabled = true;
                 if (this.isProfilePage() && !this.isAutoCollecting) this.startAutoCollection();
+                sendResponse({ success: true });
+                return true;
+            },
+            pauseCollection: () => {
+                this.pauseCollection();
+                sendResponse({ success: true });
+                return true;
+            },
+            resumeCollection: () => {
+                this.resumeCollection();
                 sendResponse({ success: true });
                 return true;
             },
@@ -839,7 +896,7 @@ class LinkedInAutomation {
         });
 
         // Scroll to load more profiles
-        while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
+        while (scrollAttempts < maxScrollAttempts && profiles.length < 20 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
             scrollAttempts++;
             const initialCount = profiles.length;
 
@@ -891,7 +948,7 @@ class LinkedInAutomation {
         try {
             this.sendCollectionStatus(`🚀 Starting collection from ${maxPages} pages...`);
 
-            while (currentPage <= maxPages) {
+            while (currentPage <= maxPages && this.isAutoCollectionEnabled && this.isRealTimeMode) {
                 this.sendCollectionStatus(`Processing page ${currentPage}`);
 
                 // First scroll and collect profiles from current page
@@ -1860,7 +1917,7 @@ class LinkedInAutomation {
                     }
                 });
 
-                while (scrollAttempts < maxScrollAttempts && profiles.length < 20) {
+                while (scrollAttempts < maxScrollAttempts && profiles.length < 20 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
                     scrollAttempts++;
 
                     const initialCount = profiles.length;
