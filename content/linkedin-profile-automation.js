@@ -24,17 +24,26 @@ class LinkedInProfileAutomation {
     checkForAutomationState() {
         // Check for automation state from same-tab navigation
         const automationState = sessionStorage.getItem('linkedinAutomationState');
+        console.log('Checking for automation state on profile page:', !!automationState);
+
         if (automationState) {
             try {
                 this.automationState = JSON.parse(automationState);
+                console.log('Parsed automation state:', this.automationState);
+
                 if (this.automationState.isAutomation) {
                     console.log('Profile automation detected for:', this.automationState.profileName);
-                    this.showAutomationIndicator('LinkedIn Automation Active - Processing profile...');
+                    console.log('Profile URL:', this.automationState.profileUrl);
+                    console.log('Current profile index:', this.automationState.currentProfileIndex);
+
+                    this.showAutomationIndicator(`LinkedIn Automation Active - Processing ${this.automationState.profileName}...`);
 
                     // Wait for page to fully load
                     setTimeout(() => {
                         this.processConnection();
                     }, 3000);
+                } else {
+                    console.log('Not an automation request, skipping...');
                 }
             } catch (error) {
                 console.error('Error parsing automation state:', error);
@@ -43,6 +52,8 @@ class LinkedInProfileAutomation {
                     error: 'Failed to parse automation state'
                 });
             }
+        } else {
+            console.log('No automation state found on profile page');
         }
     }
 
@@ -50,17 +61,29 @@ class LinkedInProfileAutomation {
         if (this.isProcessing) return;
         this.isProcessing = true;
 
+        // Set a timeout to prevent getting stuck
+        const timeoutId = setTimeout(() => {
+            console.log('Profile automation timeout reached');
+            this.showAutomationIndicator('Automation timeout - returning to search', 'error');
+            this.returnToSearchWithResult({
+                success: false,
+                error: 'Automation timeout - profile took too long to process'
+            });
+        }, 30000); // 30 second timeout
+
         try {
             console.log('Starting profile connection for:', this.automationState.profileName);
-            this.showAutomationIndicator('Looking for Connect button...');
+            this.showAutomationIndicator(`Processing ${this.automationState.profileName}...`);
 
             // Wait a bit more for page to fully load
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Step 1: Find and click Connect button with retries
+            this.showAutomationIndicator('Looking for Connect button...');
             const connectResult = await this.findAndClickConnectButton();
             if (!connectResult.success) {
                 this.showAutomationIndicator('Connect button not found', 'error');
+                clearTimeout(timeoutId);
                 setTimeout(() => {
                     this.returnToSearchWithResult({
                         success: false,
@@ -71,12 +94,13 @@ class LinkedInProfileAutomation {
             }
 
             console.log('Connect button clicked, waiting for popup...');
-            this.showAutomationIndicator('Clicking Connect button...');
+            this.showAutomationIndicator('Connect button clicked, waiting for popup...');
 
             // Step 2: Wait for popup and handle it
             const popupResult = await this.handleConnectionPopup();
             if (!popupResult.success) {
                 this.showAutomationIndicator('Connection failed: ' + popupResult.error, 'error');
+                clearTimeout(timeoutId);
                 setTimeout(() => {
                     this.returnToSearchWithResult({
                         success: false,
@@ -87,6 +111,7 @@ class LinkedInProfileAutomation {
             }
 
             // Step 3: Success
+            clearTimeout(timeoutId);
             this.showAutomationIndicator('Connection sent successfully!', 'success');
             setTimeout(() => {
                 this.returnToSearchWithResult({
@@ -97,6 +122,7 @@ class LinkedInProfileAutomation {
 
         } catch (error) {
             console.error('Error processing connection:', error);
+            clearTimeout(timeoutId);
             this.showAutomationIndicator('Error: ' + error.message, 'error');
             setTimeout(() => {
                 this.returnToSearchWithResult({
@@ -492,14 +518,22 @@ class LinkedInProfileAutomation {
 
     // Helper function to return to search with result
     returnToSearchWithResult(result) {
+        console.log('Returning to search with result:', result);
+        console.log('Current automation state:', this.automationState);
+
         // Remove automation indicator
         const indicator = document.querySelector('.profile-automation-indicator');
         if (indicator) {
             indicator.remove();
         }
 
+        // Store the result for the search page to process
         sessionStorage.removeItem('linkedinAutomationState');
         sessionStorage.setItem('automationResult', JSON.stringify(result));
+
+        console.log('Navigating back to search page:', this.automationState.currentUrl);
+
+        // Navigate back to search page
         window.location.href = this.automationState.currentUrl;
     }
 }

@@ -491,16 +491,60 @@ class LinkedInSearchFloatingUI {
             this.ui.style.visibility = 'hidden';
         }
 
-        // Initialize automation state
-        this.automationState = {
-            currentProfileIndex: 0,
-            totalProfiles: this.collectedProfiles.length,
-            isRunning: false,
-            customPrompt: '',
-            promptSet: false
-        };
+        // Initialize automation state if not already set
+        if (!this.automationState) {
+            this.automationState = {
+                currentProfileIndex: 0,
+                totalProfiles: this.collectedProfiles.length,
+                isRunning: false,
+                customPrompt: '',
+                promptSet: false
+            };
+        }
 
         this.updateAutomationProgress();
+    }
+
+    async restoreAutomationUI() {
+        console.log('Restoring automation UI after profile processing...');
+
+        // Check if automation UI already exists
+        if (document.querySelector('.automation-starter-ui')) {
+            console.log('Automation UI already exists, no need to restore');
+            return;
+        }
+
+        // Try to restore automation state from session storage
+        const uiAutomationState = sessionStorage.getItem('linkedinUIAutomationState');
+        if (uiAutomationState) {
+            try {
+                const savedState = JSON.parse(uiAutomationState);
+                console.log('Restoring automation state:', savedState);
+
+                // Restore the automation state and profiles
+                this.automationState = savedState.automationState;
+                this.collectedProfiles = savedState.collectedProfiles || [];
+
+                console.log('Restored automation state:', this.automationState);
+                console.log('Restored profiles count:', this.collectedProfiles.length);
+                console.log('Prompt set status:', this.automationState.promptSet);
+                console.log('Custom prompt:', this.automationState.customPrompt);
+
+            } catch (error) {
+                console.error('Failed to restore automation state:', error);
+            }
+        }
+
+        // Restore the automation UI
+        await this.showAutomationStarterUI();
+
+        // Make sure the search UI is hidden
+        if (this.ui) {
+            this.ui.style.display = 'none';
+            this.ui.style.visibility = 'hidden';
+        }
+
+        console.log('Automation UI restored successfully');
     }
 
     async createAutomationUI() {
@@ -535,8 +579,14 @@ class LinkedInSearchFloatingUI {
             const profileUrlEl = automationUI.querySelector('#current-profile-url');
 
             if (totalProfilesEl) totalProfilesEl.textContent = this.collectedProfiles.length;
-            if (progressEl) progressEl.textContent = `0 / ${this.collectedProfiles.length}`;
-            if (profileUrlEl) profileUrlEl.textContent = this.collectedProfiles[0]?.url || 'None selected';
+            if (progressEl) progressEl.textContent = `${this.automationState?.currentIndex || 0} / ${this.collectedProfiles.length}`;
+            if (profileUrlEl) profileUrlEl.textContent = this.collectedProfiles[this.automationState?.currentIndex || 0]?.url || 'None selected';
+
+            // Handle prompt state restoration
+            this.setupPromptState(automationUI);
+
+            // Update profile list with status
+            this.updateProfileListInUI(automationUI);
 
             this.setupAutomationEventListeners(automationUI);
 
@@ -545,6 +595,87 @@ class LinkedInSearchFloatingUI {
         } catch (error) {
             console.warn('Failed to load automation UI template, using fallback:', error);
             return this.createFallbackAutomationUI();
+        }
+    }
+
+    setupPromptState(automationUI) {
+        const promptSection = automationUI.querySelector('#prompt-section');
+        const promptDisplay = automationUI.querySelector('#prompt-display');
+        const currentPromptText = automationUI.querySelector('#current-prompt-text');
+        const customPromptTextarea = automationUI.querySelector('#custom-prompt');
+        const startAutomationBtn = automationUI.querySelector('#start-automation-btn');
+
+        console.log('Setting up prompt state. Has saved prompt:', !!this.automationState?.customPrompt);
+        console.log('Prompt set status:', this.automationState?.promptSet);
+        console.log('Saved prompt:', this.automationState?.customPrompt);
+
+        if (this.automationState && this.automationState.promptSet && this.automationState.customPrompt) {
+            // Show prompt display, hide prompt input
+            if (promptSection) promptSection.style.display = 'none';
+            if (promptDisplay) promptDisplay.style.display = 'block';
+            if (currentPromptText) currentPromptText.textContent = this.automationState.customPrompt;
+            if (customPromptTextarea) customPromptTextarea.value = this.automationState.customPrompt;
+
+            // Enable start button if not running
+            if (startAutomationBtn) {
+                if (this.automationState.isRunning) {
+                    startAutomationBtn.textContent = '🔄 Running...';
+                    startAutomationBtn.disabled = true;
+                } else {
+                    startAutomationBtn.disabled = false;
+                    startAutomationBtn.textContent = '🚀 Start Automation';
+                }
+            }
+        } else {
+            // Show prompt input, hide prompt display
+            if (promptSection) promptSection.style.display = 'block';
+            if (promptDisplay) promptDisplay.style.display = 'none';
+            if (startAutomationBtn) {
+                startAutomationBtn.disabled = true;
+                startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
+            }
+        }
+    }
+
+    updateProfileListInUI(automationUI) {
+        const profilesListElement = automationUI.querySelector('#profiles-list-automation');
+        if (!profilesListElement) return;
+
+        const currentIndex = this.automationState?.currentIndex || 0;
+        const isRunning = this.automationState?.isRunning || false;
+
+        const profilesHTML = this.collectedProfiles.map((profile, index) => {
+            let status = '⏳'; // Waiting
+            let statusClass = 'waiting';
+
+            if (index < currentIndex) {
+                status = '✅'; // Completed
+                statusClass = 'completed';
+            } else if (index === currentIndex && isRunning) {
+                status = '🔄'; // Processing
+                statusClass = 'processing';
+            }
+
+            return `
+                <div class="profile-item ${statusClass}">
+                    <span class="profile-status">${status}</span>
+                    <span class="profile-name">${profile.name}</span>
+                    <a href="${profile.url}" target="_blank" class="profile-url">View</a>
+                </div>
+            `;
+        }).join('');
+
+        profilesListElement.innerHTML = profilesHTML;
+    }
+
+    saveAutomationState() {
+        if (this.automationState && this.collectedProfiles) {
+            const stateToSave = {
+                automationState: this.automationState,
+                collectedProfiles: this.collectedProfiles
+            };
+            sessionStorage.setItem('linkedinUIAutomationState', JSON.stringify(stateToSave));
+            console.log('Automation state saved to session storage');
         }
     }
 
@@ -622,10 +753,13 @@ class LinkedInSearchFloatingUI {
                 this.automationState.customPrompt = promptValue;
                 this.automationState.promptSet = true;
 
+                // Save the updated automation state
+                this.saveAutomationState();
+
                 // Hide prompt input, show prompt display
-                const promptSection = document.getElementById('prompt-section');
-                const promptDisplay = document.getElementById('prompt-display');
-                const currentPromptText = document.getElementById('current-prompt-text');
+                const promptSection = automationUI.querySelector('#prompt-section');
+                const promptDisplay = automationUI.querySelector('#prompt-display');
+                const currentPromptText = automationUI.querySelector('#current-prompt-text');
 
                 if (promptSection) promptSection.style.display = 'none';
                 if (promptDisplay) promptDisplay.style.display = 'block';
@@ -636,6 +770,8 @@ class LinkedInSearchFloatingUI {
                     startAutomationBtn.disabled = false;
                     startAutomationBtn.textContent = '🚀 Start Automation';
                 }
+
+                console.log('Prompt set and saved:', promptValue);
             });
         }
 
@@ -644,9 +780,12 @@ class LinkedInSearchFloatingUI {
                 this.automationState.promptSet = false;
                 this.automationState.customPrompt = '';
 
+                // Save the updated automation state
+                this.saveAutomationState();
+
                 // Show prompt input, hide prompt display
-                const promptSection = document.getElementById('prompt-section');
-                const promptDisplay = document.getElementById('prompt-display');
+                const promptSection = automationUI.querySelector('#prompt-section');
+                const promptDisplay = automationUI.querySelector('#prompt-display');
 
                 if (promptSection) promptSection.style.display = 'block';
                 if (promptDisplay) promptDisplay.style.display = 'none';
@@ -657,6 +796,8 @@ class LinkedInSearchFloatingUI {
                     startAutomationBtn.disabled = true;
                     startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
                 }
+
+                console.log('Prompt cleared and state saved');
             });
         }
 
@@ -692,24 +833,28 @@ class LinkedInSearchFloatingUI {
         const currentProfileUrlElement = document.querySelector('#current-profile-url');
         const profilesListElement = document.querySelector('#profiles-list-automation');
 
+        // Use currentIndex or currentProfileIndex, whichever is available
+        const currentIndex = this.automationState?.currentIndex ?? this.automationState?.currentProfileIndex ?? 0;
+        const totalProfiles = this.automationState?.totalProfiles ?? this.collectedProfiles?.length ?? 0;
+
         if (progressElement) {
-            progressElement.textContent = `${this.automationState.currentProfileIndex} / ${this.automationState.totalProfiles}`;
+            progressElement.textContent = `${currentIndex} / ${totalProfiles}`;
         }
 
         if (progressFillElement) {
-            const percentage = (this.automationState.currentProfileIndex / this.automationState.totalProfiles) * 100;
+            const percentage = totalProfiles > 0 ? (currentIndex / totalProfiles) * 100 : 0;
             progressFillElement.style.width = `${percentage}%`;
         }
 
-        if (currentStatusElement) {
-            const currentProfile = this.collectedProfiles[this.automationState.currentProfileIndex];
+        if (currentStatusElement && this.collectedProfiles) {
+            const currentProfile = this.collectedProfiles[currentIndex];
             if (currentProfile) {
                 currentStatusElement.textContent = `Processing: ${currentProfile.name}`;
             }
         }
 
-        if (currentProfileUrlElement) {
-            const currentProfile = this.collectedProfiles[this.automationState.currentProfileIndex];
+        if (currentProfileUrlElement && this.collectedProfiles) {
+            const currentProfile = this.collectedProfiles[currentIndex];
             if (currentProfile) {
                 currentProfileUrlElement.textContent = currentProfile.url;
             }
@@ -731,7 +876,10 @@ class LinkedInSearchFloatingUI {
             let successful = 0;
             let failed = 0;
 
-            for (let i = 0; i < this.automationState.currentProfileIndex; i++) {
+            // Use currentIndex or currentProfileIndex, whichever is available
+            const currentIndex = this.automationState?.currentIndex ?? this.automationState?.currentProfileIndex ?? 0;
+
+            for (let i = 0; i < currentIndex; i++) {
                 const statusElement = document.getElementById(`profile-status-${i}`);
                 if (statusElement) {
                     const status = statusElement.textContent.toLowerCase();
@@ -824,16 +972,19 @@ class LinkedInSearchFloatingUI {
     }
 
     updateAutomationProfilesList(container) {
+        // Use currentIndex or currentProfileIndex, whichever is available
+        const currentIndex = this.automationState?.currentIndex ?? this.automationState?.currentProfileIndex ?? 0;
+
         container.innerHTML = this.collectedProfiles.map((profile, index) => {
             let status = 'Waiting';
             let statusClass = 'waiting';
             let statusIcon = '⏳';
 
-            if (index < this.automationState.currentProfileIndex) {
+            if (index < currentIndex) {
                 status = 'Completed';
                 statusClass = 'completed';
                 statusIcon = '✅';
-            } else if (index === this.automationState.currentProfileIndex && this.automationState.isRunning) {
+            } else if (index === currentIndex && this.automationState.isRunning) {
                 status = 'Processing';
                 statusClass = 'processing';
                 statusIcon = '🔄';
@@ -907,68 +1058,8 @@ class LinkedInSearchFloatingUI {
         pauseBtn.style.display = 'inline-block';
         stopBtn.style.display = 'inline-block';
 
-        for (let i = this.automationState.currentProfileIndex; i < this.collectedProfiles.length; i++) {
-            if (!this.automationState.isRunning) break; // Allow pausing/stopping
-
-            this.automationState.currentProfileIndex = i;
-            const profile = this.collectedProfiles[i];
-
-            this.updateAutomationProgress();
-            this.updateAutomationProfileStatus(i, 'Processing', '🔄', '#ffc107');
-
-            try {
-                // Step 1: Generate message from API
-                const currentStatusElement = document.querySelector('#current-status');
-                if (currentStatusElement) {
-                    currentStatusElement.textContent = `Generating message for ${profile.name}`;
-                }
-
-                const messageData = await this.generateMessageForProfile(profile.url, this.automationState.customPrompt);
-
-                if (!this.automationState.isRunning) break; // Check again after async operation
-
-                // Step 2: Open profile and send connection request
-                if (currentStatusElement) {
-                    currentStatusElement.textContent = `Opening profile for ${profile.name}`;
-                }
-
-                const result = await this.openProfileAndConnect(profile.url, messageData.message, profile.name);
-
-                if (!this.automationState.isRunning) break; // Check again after async operation
-
-                // Step 3: Update status based on result
-                if (result.success) {
-                    this.updateAutomationProfileStatus(i, 'Connected', '✅', '#28a745');
-                    if (currentStatusElement) {
-                        currentStatusElement.textContent = `Successfully connected to ${profile.name}`;
-                    }
-                } else {
-                    this.updateAutomationProfileStatus(i, 'Failed', '❌', '#dc3545');
-                    if (currentStatusElement) {
-                        currentStatusElement.textContent = `Failed to connect to ${profile.name}: ${result.error}`;
-                    }
-
-                    // Show popup blocker notification if needed
-                    if (result.error && result.error.includes('Popup blocked')) {
-                        this.showPopupBlockerNotification();
-                    }
-                }
-
-                // Step 4: Wait before next profile (with interruption check)
-                for (let wait = 0; wait < 3000; wait += 500) {
-                    if (!this.automationState.isRunning) break;
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-
-            } catch (error) {
-                console.log(`Failed to process ${profile.name}`);
-                this.updateAutomationProfileStatus(i, 'Error', '⚠️', '#dc3545');
-                const currentStatusElement = document.querySelector('#current-status');
-                if (currentStatusElement) {
-                    currentStatusElement.textContent = `Error processing ${profile.name}: ${error.message}`;
-                }
-            }
-        }
+        // Process profiles sequentially
+        await this.processProfilesSequentially();
 
         // Automation completed or stopped
         if (this.automationState.isRunning) {
@@ -984,7 +1075,250 @@ class LinkedInSearchFloatingUI {
             if (currentStatusElement) {
                 currentStatusElement.textContent = 'All profiles processed successfully!';
             }
+
+            // Clean up session storage
+            sessionStorage.removeItem('linkedinUIAutomationState');
+            console.log('Automation completed successfully!');
         }
+    }
+
+    async processProfilesSequentially() {
+        for (let i = this.automationState.currentProfileIndex; i < this.collectedProfiles.length; i++) {
+            if (!this.automationState.isRunning) {
+                console.log('Automation stopped by user, breaking loop');
+                break; // Allow pausing/stopping
+            }
+
+            this.automationState.currentProfileIndex = i;
+            const profile = this.collectedProfiles[i];
+
+            console.log(`Processing profile ${i + 1}/${this.collectedProfiles.length}: ${profile.name}`);
+
+            this.updateAutomationProgress();
+            this.updateAutomationProfileStatus(i, 'Processing', '🔄', '#ffc107');
+
+            try {
+                // Step 1: Generate message from API
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Generating message for ${profile.name}`;
+                }
+
+                const messageData = await this.generateMessageForProfile(profile.url, this.automationState.customPrompt);
+
+                if (!this.automationState.isRunning) {
+                    console.log('Automation stopped during message generation');
+                    break; // Check again after async operation
+                }
+
+                // Step 2: Open profile and send connection request
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Opening profile for ${profile.name}`;
+                }
+
+                console.log(`About to open profile and connect for: ${profile.name}`);
+                console.log(`Profile ${i + 1}/${this.collectedProfiles.length} - Opening: ${profile.url}`);
+                const result = await this.openProfileAndConnect(profile.url, messageData.message, profile.name);
+                console.log(`Received result for ${profile.name}:`, result);
+                console.log(`Automation still running: ${this.automationState.isRunning}`);
+
+                if (!this.automationState.isRunning) {
+                    console.log('Automation stopped after profile processing');
+                    break; // Check again after async operation
+                }
+
+                // Step 3: Update status based on result
+                if (result.success) {
+                    this.updateAutomationProfileStatus(i, 'Connected', '✅', '#28a745');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Successfully connected to ${profile.name}`;
+                    }
+                    console.log(`Successfully processed profile ${i + 1}: ${profile.name}`);
+                } else {
+                    this.updateAutomationProfileStatus(i, 'Failed', '❌', '#dc3545');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Failed to connect to ${profile.name}: ${result.error}`;
+                    }
+                    console.log(`Failed to process profile ${i + 1}: ${profile.name} - ${result.error}`);
+
+                    // Show popup blocker notification if needed
+                    if (result.error && result.error.includes('Popup blocked')) {
+                        this.showPopupBlockerNotification();
+                    }
+                }
+
+                // Step 4: Wait before next profile (with interruption check)
+                if (i < this.collectedProfiles.length - 1) { // Don't wait after the last profile
+                    console.log(`Waiting before next profile... (${i + 1}/${this.collectedProfiles.length})`);
+                    console.log(`Next profile will be: ${this.collectedProfiles[i + 1]?.name}`);
+
+                    for (let wait = 0; wait < 3000; wait += 500) {
+                        if (!this.automationState.isRunning) {
+                            console.log('Automation stopped during wait, breaking...');
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+
+                    console.log(`Finished waiting, continuing to next profile...`);
+                } else {
+                    console.log(`This was the last profile (${i + 1}/${this.collectedProfiles.length})`);
+                }
+
+            } catch (error) {
+                console.error(`Failed to process ${profile.name}:`, error);
+                this.updateAutomationProfileStatus(i, 'Error', '⚠️', '#dc3545');
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Error processing ${profile.name}: ${error.message}`;
+                }
+
+                // Continue to next profile even if this one failed
+                console.log('Continuing to next profile after error...');
+            }
+        }
+
+        console.log('Profile processing loop completed');
+    }
+
+    async continueAutomationAfterProfile() {
+        console.log('Continuing automation after profile processing...');
+        console.log('Current automation state:', this.automationState);
+        console.log('Current profile index:', this.automationState?.currentIndex || this.automationState?.currentProfileIndex);
+
+        if (!this.automationState?.isRunning) {
+            console.log('Automation is not running, cannot continue');
+            return;
+        }
+
+        // Update the current index to the next profile
+        const currentIndex = this.automationState.currentIndex || this.automationState.currentProfileIndex || 0;
+        const nextIndex = currentIndex + 1;
+
+        console.log(`Moving from profile ${currentIndex} to profile ${nextIndex}`);
+
+        if (nextIndex >= this.collectedProfiles.length) {
+            console.log('All profiles processed, completing automation');
+            this.automationState.isRunning = false;
+            this.updateAutomationProgress();
+
+            // Show completion message
+            const currentStatusElement = document.querySelector('#current-status');
+            if (currentStatusElement) {
+                currentStatusElement.textContent = 'All profiles processed successfully!';
+            }
+
+            // Clean up
+            sessionStorage.removeItem('linkedinUIAutomationState');
+            return;
+        }
+
+        // Update the automation state
+        this.automationState.currentIndex = nextIndex;
+        this.automationState.currentProfileIndex = nextIndex;
+
+        // Save the updated state
+        this.saveAutomationState();
+
+        // Continue processing from the next profile
+        console.log(`Continuing with profile ${nextIndex + 1}/${this.collectedProfiles.length}`);
+        await this.processNextProfileInSequence(nextIndex);
+    }
+
+    async processNextProfileInSequence(startIndex) {
+        console.log(`Processing profiles starting from index ${startIndex}`);
+
+        for (let i = startIndex; i < this.collectedProfiles.length; i++) {
+            if (!this.automationState.isRunning) {
+                console.log('Automation stopped by user, breaking loop');
+                break;
+            }
+
+            this.automationState.currentIndex = i;
+            this.automationState.currentProfileIndex = i;
+            const profile = this.collectedProfiles[i];
+
+            console.log(`Processing profile ${i + 1}/${this.collectedProfiles.length}: ${profile.name}`);
+
+            this.updateAutomationProgress();
+            this.updateAutomationProfileStatus(i, 'Processing', '🔄', '#ffc107');
+
+            try {
+                // Step 1: Generate message from API
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Generating message for ${profile.name}`;
+                }
+
+                const messageData = await this.generateMessageForProfile(profile.url, this.automationState.customPrompt);
+
+                if (!this.automationState.isRunning) {
+                    console.log('Automation stopped during message generation');
+                    break;
+                }
+
+                // Step 2: Open profile and send connection request
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Opening profile for ${profile.name}`;
+                }
+
+                console.log(`About to open profile and connect for: ${profile.name}`);
+                console.log(`Profile ${i + 1}/${this.collectedProfiles.length} - Opening: ${profile.url}`);
+                const result = await this.openProfileAndConnect(profile.url, messageData.message, profile.name);
+                console.log(`Received result for ${profile.name}:`, result);
+                console.log(`Automation still running: ${this.automationState.isRunning}`);
+
+                if (!this.automationState.isRunning) {
+                    console.log('Automation stopped after profile processing');
+                    break;
+                }
+
+                // Step 3: Update status based on result
+                if (result.success) {
+                    this.updateAutomationProfileStatus(i, 'Connected', '✅', '#28a745');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Successfully connected to ${profile.name}`;
+                    }
+                    console.log(`Successfully processed profile ${i + 1}: ${profile.name}`);
+                } else {
+                    this.updateAutomationProfileStatus(i, 'Failed', '❌', '#dc3545');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Failed to connect to ${profile.name}: ${result.error}`;
+                    }
+                    console.log(`Failed to process profile ${i + 1}: ${profile.name} - ${result.error}`);
+                }
+
+                // Step 4: Wait before next profile (with interruption check)
+                if (i < this.collectedProfiles.length - 1) {
+                    console.log(`Waiting before next profile... (${i + 1}/${this.collectedProfiles.length})`);
+                    console.log(`Next profile will be: ${this.collectedProfiles[i + 1]?.name}`);
+
+                    for (let wait = 0; wait < 3000; wait += 500) {
+                        if (!this.automationState.isRunning) {
+                            console.log('Automation stopped during wait, breaking...');
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+
+                    console.log(`Finished waiting, continuing to next profile...`);
+                } else {
+                    console.log(`This was the last profile (${i + 1}/${this.collectedProfiles.length})`);
+                }
+
+            } catch (error) {
+                console.error(`Failed to process ${profile.name}:`, error);
+                this.updateAutomationProfileStatus(i, 'Error', '⚠️', '#dc3545');
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Error processing ${profile.name}: ${error.message}`;
+                }
+
+                console.log('Continuing to next profile after error...');
+            }
+        }
+
+        console.log('Profile processing sequence completed');
     }
 
     async generateMessageForProfile(profileUrl, customPrompt) {
@@ -1017,10 +1351,13 @@ class LinkedInSearchFloatingUI {
 
     async openProfileAndConnect(profileUrl, message, profileName) {
         return new Promise((resolve) => {
+            console.log(`Opening profile for automation: ${profileName}`);
+            console.log(`Profile URL: ${profileUrl}`);
+
             // Store current page URL and automation context
             const currentUrl = window.location.href;
 
-            // Store automation state for same-tab navigation
+            // Store complete automation state for same-tab navigation
             const automationState = {
                 currentUrl: currentUrl,
                 profileUrl: profileUrl,
@@ -1028,13 +1365,29 @@ class LinkedInSearchFloatingUI {
                 profileName: profileName,
                 timestamp: Date.now(),
                 isAutomation: true,
-                returnCallback: true
+                returnCallback: true,
+                currentProfileIndex: this.automationState.currentProfileIndex,
+                totalProfiles: this.automationState.totalProfiles,
+                isRunning: this.automationState.isRunning,
+                customPrompt: this.automationState.customPrompt,
+                promptSet: this.automationState.promptSet,
+                collectedProfiles: this.collectedProfiles // Store the profiles list
             };
 
             sessionStorage.setItem('linkedinAutomationState', JSON.stringify(automationState));
 
+            // Also store the UI automation state separately for restoration
+            const uiAutomationState = {
+                automationState: this.automationState,
+                collectedProfiles: this.collectedProfiles,
+                timestamp: Date.now()
+            };
+            sessionStorage.setItem('linkedinUIAutomationState', JSON.stringify(uiAutomationState));
+
             // Store the resolve function reference for when we return
             window.automationResolve = resolve;
+
+            console.log('Automation state stored, navigating to profile...');
 
             // Navigate to profile in same tab
             window.location.href = profileUrl;
@@ -1136,21 +1489,94 @@ function initLinkedInSearchUI() {
 
         // Check if we returned from profile automation first
         const automationResult = sessionStorage.getItem('automationResult');
+        console.log('Checking for automation result:', !!automationResult);
+        console.log('Existing UI instance:', !!window['linkedInSearchUI']);
+        console.log('Automation resolve function:', !!window.automationResolve);
 
-        // If we have an existing UI instance and automation result, handle it
-        if (window['linkedInSearchUI'] && automationResult && window.automationResolve) {
+        // Handle automation result first - this is the key fix
+        if (automationResult) {
             try {
                 const result = JSON.parse(automationResult);
                 sessionStorage.removeItem('automationResult');
 
-                // Resolve the promise from openProfileAndConnect
-                window.automationResolve(result);
-                window.automationResolve = null;
+                console.log('Processing automation result:', result);
 
-                console.log('Automation result processed successfully');
-                return; // Don't create new UI instance
+                // If we have an existing UI instance and resolve function, handle it
+                if (window['linkedInSearchUI'] && window.automationResolve) {
+                    console.log('Found existing UI instance and resolve function');
+                    console.log('Current automation state:', window['linkedInSearchUI'].automationState);
+
+                    // Ensure automation UI is visible
+                    const automationUI = document.querySelector('.automation-starter-ui');
+                    if (!automationUI) {
+                        console.log('Automation UI not found, restoring it...');
+                        setTimeout(async () => {
+                            await window['linkedInSearchUI'].restoreAutomationUI();
+                            // Resolve after UI is restored and continue automation
+                            if (window.automationResolve) {
+                                window.automationResolve(result);
+                                window.automationResolve = null;
+                                console.log('Automation result processed after UI restoration');
+
+                                // Continue automation if still running
+                                if (window['linkedInSearchUI'].automationState?.isRunning) {
+                                    console.log('Continuing automation after profile processing...');
+                                    setTimeout(() => {
+                                        window['linkedInSearchUI'].continueAutomationAfterProfile();
+                                    }, 1000);
+                                }
+                            }
+                        }, 500);
+                        return;
+                    }
+
+                    // Resolve the promise from openProfileAndConnect
+                    window.automationResolve(result);
+                    window.automationResolve = null;
+                    console.log('Automation result processed successfully, automation should continue...');
+
+                    // Continue automation if still running
+                    if (window['linkedInSearchUI'].automationState?.isRunning) {
+                        console.log('Continuing automation after profile processing...');
+                        setTimeout(() => {
+                            window['linkedInSearchUI'].continueAutomationAfterProfile();
+                        }, 1000);
+                    }
+                    return; // Don't create new UI instance
+                }
+
+                // If we don't have a UI instance but have automation result,
+                // we need to restore the automation UI
+                if (!window['linkedInSearchUI']) {
+                    console.log('Restoring automation UI after profile processing...');
+                    setTimeout(async () => {
+                        window['linkedInSearchUI'] = new LinkedInSearchFloatingUI();
+
+                        // Wait a bit for the UI to be created, then restore automation UI
+                        setTimeout(async () => {
+                            await window['linkedInSearchUI'].restoreAutomationUI();
+
+                            // After restoring the UI, process the automation result
+                            if (window.automationResolve) {
+                                window.automationResolve(result);
+                                window.automationResolve = null;
+                                console.log('Automation result processed for restored UI');
+                            }
+
+                            // Continue automation if still running
+                            if (window['linkedInSearchUI'].automationState?.isRunning) {
+                                console.log('Continuing automation after UI restoration...');
+                                setTimeout(() => {
+                                    window['linkedInSearchUI'].continueAutomationAfterProfile();
+                                }, 1000);
+                            }
+                        }, 500);
+                    }, 1000);
+                    return;
+                }
+
             } catch (error) {
-                console.log('Failed to process automation result');
+                console.error('Failed to process automation result:', error);
                 if (window.automationResolve) {
                     window.automationResolve({ success: false, error: 'Failed to process result' });
                     window.automationResolve = null;
@@ -1158,44 +1584,34 @@ function initLinkedInSearchUI() {
             }
         }
 
-        // Create new UI instance if one doesn't exist
+        // Create new UI instance if one doesn't exist and no automation result
         if (!document.querySelector('.linkedin-search-floating-ui') &&
             !document.querySelector('.automation-starter-ui') &&
-            !window['linkedInSearchUI']) {
+            !window['linkedInSearchUI'] &&
+            !automationResult) {
+
+            console.log('Creating new LinkedIn Search UI instance...');
 
             // Wait for page to load
             setTimeout(() => {
                 window['linkedInSearchUI'] = new LinkedInSearchFloatingUI();
-
-                // Handle automation result if we returned from profile (for new instances)
-                if (automationResult && window.automationResolve) {
-                    try {
-                        const result = JSON.parse(automationResult);
-                        sessionStorage.removeItem('automationResult');
-
-                        // Resolve the promise from openProfileAndConnect
-                        window.automationResolve(result);
-                        window.automationResolve = null;
-
-                        console.log('Automation result processed successfully');
-                    } catch (error) {
-                        console.log('Failed to process automation result');
-                        if (window.automationResolve) {
-                            window.automationResolve({ success: false, error: 'Failed to process result' });
-                            window.automationResolve = null;
-                        }
-                    }
-                }
             }, 2000);
+        } else {
+            console.log('UI already exists or automation result being processed, skipping creation');
         }
     }
 }
 
 // Main initialization function
 function initializeLinkedInAutomation() {
+    console.log('Initializing LinkedIn automation for URL:', window.location.href);
+
     if (window.location.href.includes('linkedin.com/search')) {
+        console.log('LinkedIn search page detected, initializing search UI...');
         // Initialize search UI
         initLinkedInSearchUI();
+    } else {
+        console.log('Not a LinkedIn search page, skipping search UI initialization');
     }
     // Note: Profile automation is handled by linkedin-profile-automation.js
 }
