@@ -174,7 +174,7 @@ class LinkedInSearchFloatingUI {
         const header = this.ui.querySelector('.linkedin-search-header');
 
         collectBtn.addEventListener('click', () => this.toggleCollecting());
-        connectBtn.addEventListener('click', () => this.startConnecting());
+        connectBtn.addEventListener('click', async () => await this.startConnecting());
         clearBtn.addEventListener('click', () => this.clearProfiles());
         closeBtn.addEventListener('click', () => this.closeUI());
         minimizeBtn.addEventListener('click', () => this.toggleMinimize());
@@ -349,7 +349,7 @@ class LinkedInSearchFloatingUI {
 
             return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search' };
         } catch (error) {
-            console.error('Error extracting profile data:', error);
+            console.log('Failed to extract profile data');
             return null;
         }
     }
@@ -432,7 +432,7 @@ class LinkedInSearchFloatingUI {
     copyProfileUrl(url) {
         navigator.clipboard.writeText(url).then(() => {
             const notification = document.createElement('div');
-            notification.style.cssText = `position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;`;
+            notification.className = 'linkedin-notification linkedin-notification-success';
             notification.textContent = 'Profile URL copied!';
             document.body.appendChild(notification);
             setTimeout(() => notification.remove(), 2000);
@@ -457,14 +457,120 @@ class LinkedInSearchFloatingUI {
         this.updateStatus('status', `Collected ${this.collectedProfiles.length} ${statusMessage}`, false);
     }
 
-    startConnecting() {
-        this.updateStatus('status', this.config.messages?.status?.connecting || 'Starting connection requests...', true);
-        this.processConnectionRequests();
+    async startConnecting() {
+        // Check if automation UI is already open
+        if (document.querySelector('.automation-starter-ui')) {
+            console.log('Automation UI already open');
+            return;
+        }
+
+        await this.showAutomationStarterUI();
+    }
+
+    async showAutomationStarterUI() {
+        // Remove any existing automation UI first
+        const existingAutomationUI = document.querySelector('.automation-starter-ui');
+        if (existingAutomationUI) {
+            existingAutomationUI.remove();
+        }
+
+        // Create automation starter UI
+        const automationUI = await this.createAutomationUI();
+        console.log('Automation UI to append:', automationUI, 'Type:', typeof automationUI, 'Is Node:', automationUI instanceof Node);
+
+        if (automationUI && automationUI instanceof Node) {
+            document.body.appendChild(automationUI);
+        } else {
+            console.error('Invalid automation UI element:', automationUI);
+            throw new Error('Failed to create valid automation UI element');
+        }
+
+        // Hide the main search UI completely
+        if (this.ui) {
+            this.ui.style.display = 'none';
+            this.ui.style.visibility = 'hidden';
+        }
+
+        // Initialize automation state
+        this.automationState = {
+            currentProfileIndex: 0,
+            totalProfiles: this.collectedProfiles.length,
+            isRunning: false,
+            customPrompt: '',
+            promptSet: false
+        };
+
+        this.updateAutomationProgress();
+    }
+
+    async createAutomationUI() {
+        try {
+            console.log('Loading automation UI template...');
+            // Load automation UI template from external HTML file
+            const response = await fetch(chrome.runtime.getURL('content/linkedin-search-ui.html'));
+            const htmlContent = await response.text();
+            console.log('HTML content loaded, length:', htmlContent.length);
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+
+            // Get the automation UI template
+            const automationTemplate = tempDiv.querySelector('#automation-ui-template');
+            console.log('Automation template found:', !!automationTemplate);
+
+            if (!automationTemplate) {
+                console.error('Available elements in template:', tempDiv.querySelectorAll('[id]'));
+                throw new Error('Automation UI template not found');
+            }
+
+            // Clone the template and make it visible
+            const automationUI = automationTemplate.cloneNode(true);
+            automationUI.id = 'active-automation-ui';
+            automationUI.style.display = 'block';
+            console.log('Automation UI created:', automationUI);
+
+            // Update dynamic content
+            const totalProfilesEl = automationUI.querySelector('#total-profiles');
+            const progressEl = automationUI.querySelector('#automation-progress');
+            const profileUrlEl = automationUI.querySelector('#current-profile-url');
+
+            if (totalProfilesEl) totalProfilesEl.textContent = this.collectedProfiles.length;
+            if (progressEl) progressEl.textContent = `0 / ${this.collectedProfiles.length}`;
+            if (profileUrlEl) profileUrlEl.textContent = this.collectedProfiles[0]?.url || 'None selected';
+
+            this.setupAutomationEventListeners(automationUI);
+
+            return automationUI;
+
+        } catch (error) {
+            console.warn('Failed to load automation UI template, using fallback:', error);
+            return this.createFallbackAutomationUI();
+        }
+    }
+
+    createFallbackAutomationUI() {
+        // Create a minimal fallback UI if external template fails to load
+        const automationUI = document.createElement('div');
+        automationUI.className = 'automation-starter-ui';
+        automationUI.innerHTML = `
+            <div class="automation-header">
+                <h3>Processing Profiles</h3>
+                <button class="automation-close" title="Close">&times;</button>
+            </div>
+            <div class="automation-content">
+                <div class="automation-controls">
+                    <button id="start-automation-btn" class="start-automation-btn" disabled>🚀 Start Automation</button>
+                </div>
+            </div>
+        `;
+
+        this.setupAutomationEventListeners(automationUI);
+        return automationUI;
     }
 
     processConnectionRequests() {
         console.log('Processing connection requests for:', this.collectedProfiles);
-        
+
         const sendRatio = this.config.stats?.sendConnectRatio || 0.7;
         const fieldRatio = this.config.stats?.fieldConnectRatio || 0.3;
 
@@ -473,6 +579,275 @@ class LinkedInSearchFloatingUI {
 
         sendConnectCount.textContent = Math.floor(this.collectedProfiles.length * sendRatio);
         fieldConnectCount.textContent = Math.floor(this.collectedProfiles.length * fieldRatio);
+    }
+
+    setupAutomationEventListeners(automationUI) {
+        const closeBtn = automationUI.querySelector('.automation-close');
+        const setPromptBtn = automationUI.querySelector('#set-prompt-btn');
+        const changePromptBtn = automationUI.querySelector('#change-prompt-btn');
+        const startAutomationBtn = automationUI.querySelector('#start-automation-btn');
+        const pauseAutomationBtn = automationUI.querySelector('#pause-automation-btn');
+        const stopAutomationBtn = automationUI.querySelector('#stop-automation-btn');
+        const customPromptTextarea = automationUI.querySelector('#custom-prompt');
+
+        closeBtn.addEventListener('click', () => {
+            if (this.automationState.isRunning) {
+                if (confirm('Automation is running. Are you sure you want to close?')) {
+                    this.stopAutomation();
+                    automationUI.remove();
+                    if (this.ui) {
+                        this.ui.style.display = 'flex';
+                        this.ui.style.visibility = 'visible';
+                    }
+                }
+            } else {
+                automationUI.remove();
+                if (this.ui) {
+                    this.ui.style.display = 'flex';
+                    this.ui.style.visibility = 'visible';
+                }
+            }
+        });
+
+        setPromptBtn.addEventListener('click', () => {
+            const promptValue = customPromptTextarea.value.trim();
+            if (!promptValue) {
+                alert('Please enter a custom prompt!');
+                return;
+            }
+
+            this.automationState.customPrompt = promptValue;
+            this.automationState.promptSet = true;
+
+            // Hide prompt input, show prompt display
+            document.getElementById('prompt-section').style.display = 'none';
+            document.getElementById('prompt-display').style.display = 'block';
+            document.getElementById('current-prompt-text').textContent = promptValue;
+
+            // Enable start button
+            startAutomationBtn.disabled = false;
+            startAutomationBtn.textContent = '🚀 Start Automation';
+        });
+
+        changePromptBtn.addEventListener('click', () => {
+            this.automationState.promptSet = false;
+            this.automationState.customPrompt = '';
+
+            // Show prompt input, hide prompt display
+            document.getElementById('prompt-section').style.display = 'block';
+            document.getElementById('prompt-display').style.display = 'none';
+            customPromptTextarea.value = '';
+
+            // Disable start button
+            startAutomationBtn.disabled = true;
+            startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
+        });
+
+        startAutomationBtn.addEventListener('click', () => {
+            if (!this.automationState.promptSet || !this.automationState.customPrompt) {
+                alert('Please set a custom prompt first!');
+                return;
+            }
+            this.startAutomationProcess(automationUI);
+        });
+
+        pauseAutomationBtn.addEventListener('click', () => {
+            this.pauseAutomation();
+        });
+
+        stopAutomationBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to stop the automation?')) {
+                this.stopAutomation();
+            }
+        });
+    }
+
+    updateAutomationProgress() {
+        const progressElement = document.querySelector('#automation-progress');
+        const progressFillElement = document.querySelector('#progress-fill');
+        const currentStatusElement = document.querySelector('#current-status');
+        const currentProfileUrlElement = document.querySelector('#current-profile-url');
+        const profilesListElement = document.querySelector('#profiles-list-automation');
+
+        if (progressElement) {
+            progressElement.textContent = `${this.automationState.currentProfileIndex} / ${this.automationState.totalProfiles}`;
+        }
+
+        if (progressFillElement) {
+            const percentage = (this.automationState.currentProfileIndex / this.automationState.totalProfiles) * 100;
+            progressFillElement.style.width = `${percentage}%`;
+        }
+
+        if (currentStatusElement) {
+            const currentProfile = this.collectedProfiles[this.automationState.currentProfileIndex];
+            if (currentProfile) {
+                currentStatusElement.textContent = `Processing: ${currentProfile.name}`;
+            }
+        }
+
+        if (currentProfileUrlElement) {
+            const currentProfile = this.collectedProfiles[this.automationState.currentProfileIndex];
+            if (currentProfile) {
+                currentProfileUrlElement.textContent = currentProfile.url;
+            }
+        }
+
+        if (profilesListElement) {
+            this.updateAutomationProfilesList(profilesListElement);
+        }
+
+        // Update stats
+        this.updateAutomationStats();
+    }
+
+    updateAutomationStats() {
+        const successCount = document.querySelector('#success-count');
+        const failedCount = document.querySelector('#failed-count');
+
+        if (successCount && failedCount) {
+            let successful = 0;
+            let failed = 0;
+
+            for (let i = 0; i < this.automationState.currentProfileIndex; i++) {
+                const statusElement = document.getElementById(`profile-status-${i}`);
+                if (statusElement) {
+                    const status = statusElement.textContent.toLowerCase();
+                    if (status.includes('connected') || status.includes('completed')) {
+                        successful++;
+                    } else if (status.includes('failed') || status.includes('error')) {
+                        failed++;
+                    }
+                }
+            }
+
+            successCount.textContent = successful;
+            failedCount.textContent = failed;
+        }
+    }
+
+    pauseAutomation() {
+        this.automationState.isRunning = false;
+
+        const startBtn = document.querySelector('#start-automation-btn');
+        const pauseBtn = document.querySelector('#pause-automation-btn');
+        const stopBtn = document.querySelector('#stop-automation-btn');
+
+        if (startBtn) {
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = '▶️ Resume Automation';
+            startBtn.disabled = false;
+        }
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'inline-block';
+
+        const currentStatusElement = document.querySelector('#current-status');
+        if (currentStatusElement) {
+            currentStatusElement.textContent = 'Automation paused. Click Resume to continue.';
+        }
+    }
+
+    stopAutomation() {
+        this.automationState.isRunning = false;
+        this.automationState.currentProfileIndex = 0;
+
+        const startBtn = document.querySelector('#start-automation-btn');
+        const pauseBtn = document.querySelector('#pause-automation-btn');
+        const stopBtn = document.querySelector('#stop-automation-btn');
+
+        if (startBtn) {
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = '🚀 Start Automation';
+            startBtn.disabled = !this.automationState.promptSet;
+        }
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'none';
+
+        const currentStatusElement = document.querySelector('#current-status');
+        if (currentStatusElement) {
+            currentStatusElement.textContent = 'Automation stopped.';
+        }
+    }
+
+    showPopupBlockerNotification() {
+        // Remove any existing notification
+        const existingNotification = document.querySelector('.popup-blocker-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+
+        const notification = document.createElement('div');
+        notification.className = 'popup-blocker-notification';
+        notification.innerHTML = `
+            <div class="linkedin-notification linkedin-notification-error popup-blocker-content">
+                <div class="notification-title">⚠️ Popup Blocked</div>
+                <div class="notification-message">
+                    Please allow popups for LinkedIn to enable automatic profile opening.
+                </div>
+                <div class="notification-details">
+                    Click the popup blocker icon in your browser's address bar and select "Always allow popups from linkedin.com"
+                </div>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+            </div>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Auto-remove after 10 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 10000);
+    }
+
+    updateAutomationProfilesList(container) {
+        container.innerHTML = this.collectedProfiles.map((profile, index) => {
+            let status = 'Waiting';
+            let statusClass = 'waiting';
+            let statusIcon = '⏳';
+
+            if (index < this.automationState.currentProfileIndex) {
+                status = 'Completed';
+                statusClass = 'completed';
+                statusIcon = '✅';
+            } else if (index === this.automationState.currentProfileIndex && this.automationState.isRunning) {
+                status = 'Processing';
+                statusClass = 'processing';
+                statusIcon = '🔄';
+            }
+
+            return `
+                <div class="automation-profile-item ${statusClass}" id="profile-item-${index}">
+                    <div class="profile-avatar" id="profile-icon-${index}">${statusIcon}</div>
+                    <div class="profile-info">
+                        <div class="profile-name">${profile.name}</div>
+                        <div class="profile-title">${profile.title}</div>
+                        <div class="profile-company">${profile.company}</div>
+                    </div>
+                    <div class="profile-status" id="profile-status-${index}">${status}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    updateAutomationProfileStatus(index, status, icon, color) {
+        const profileItem = document.getElementById(`profile-item-${index}`);
+        const profileIcon = document.getElementById(`profile-icon-${index}`);
+        const profileStatus = document.getElementById(`profile-status-${index}`);
+
+        if (profileItem) {
+            profileItem.className = `automation-profile-item ${status.toLowerCase()}`;
+        }
+
+        if (profileIcon) {
+            profileIcon.textContent = icon;
+            profileIcon.style.backgroundColor = color;
+            profileIcon.style.color = 'white';
+        }
+
+        if (profileStatus) {
+            profileStatus.textContent = status;
+        }
     }
 
     clearProfiles() {
@@ -494,6 +869,155 @@ class LinkedInSearchFloatingUI {
         this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting profiles', false);
     }
 
+    async startAutomationProcess(automationUI) {
+        this.automationState.isRunning = true;
+
+        // Show notification about same-tab automation with popup preservation
+        this.showNotification('Starting same-tab automation. The popup will be preserved during navigation.', 'info');
+
+        // Update button states
+        const startBtn = automationUI.querySelector('#start-automation-btn');
+        const pauseBtn = automationUI.querySelector('#pause-automation-btn');
+        const stopBtn = automationUI.querySelector('#stop-automation-btn');
+
+        startBtn.style.display = 'none';
+        pauseBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'inline-block';
+
+        for (let i = this.automationState.currentProfileIndex; i < this.collectedProfiles.length; i++) {
+            if (!this.automationState.isRunning) break; // Allow pausing/stopping
+
+            this.automationState.currentProfileIndex = i;
+            const profile = this.collectedProfiles[i];
+
+            this.updateAutomationProgress();
+            this.updateAutomationProfileStatus(i, 'Processing', '🔄', '#ffc107');
+
+            try {
+                // Step 1: Generate message from API
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Generating message for ${profile.name}`;
+                }
+
+                const messageData = await this.generateMessageForProfile(profile.url, this.automationState.customPrompt);
+
+                if (!this.automationState.isRunning) break; // Check again after async operation
+
+                // Step 2: Open profile and send connection request
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Opening profile for ${profile.name}`;
+                }
+
+                const result = await this.openProfileAndConnect(profile.url, messageData.message, profile.name);
+
+                if (!this.automationState.isRunning) break; // Check again after async operation
+
+                // Step 3: Update status based on result
+                if (result.success) {
+                    this.updateAutomationProfileStatus(i, 'Connected', '✅', '#28a745');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Successfully connected to ${profile.name}`;
+                    }
+                } else {
+                    this.updateAutomationProfileStatus(i, 'Failed', '❌', '#dc3545');
+                    if (currentStatusElement) {
+                        currentStatusElement.textContent = `Failed to connect to ${profile.name}: ${result.error}`;
+                    }
+
+                    // Show popup blocker notification if needed
+                    if (result.error && result.error.includes('Popup blocked')) {
+                        this.showPopupBlockerNotification();
+                    }
+                }
+
+                // Step 4: Wait before next profile (with interruption check)
+                for (let wait = 0; wait < 3000; wait += 500) {
+                    if (!this.automationState.isRunning) break;
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+            } catch (error) {
+                console.log(`Failed to process ${profile.name}`);
+                this.updateAutomationProfileStatus(i, 'Error', '⚠️', '#dc3545');
+                const currentStatusElement = document.querySelector('#current-status');
+                if (currentStatusElement) {
+                    currentStatusElement.textContent = `Error processing ${profile.name}: ${error.message}`;
+                }
+            }
+        }
+
+        // Automation completed or stopped
+        if (this.automationState.isRunning) {
+            // Completed successfully
+            this.automationState.isRunning = false;
+            startBtn.textContent = 'Automation Completed ✓';
+            startBtn.style.backgroundColor = '#28a745';
+            startBtn.style.display = 'inline-block';
+            pauseBtn.style.display = 'none';
+            stopBtn.style.display = 'none';
+
+            const currentStatusElement = document.querySelector('#current-status');
+            if (currentStatusElement) {
+                currentStatusElement.textContent = 'All profiles processed successfully!';
+            }
+        }
+    }
+
+    async generateMessageForProfile(profileUrl, customPrompt) {
+        try {
+            const response = await fetch('https://localhost:7007/api/linkedin/messages', {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: profileUrl,
+                    prompt: customPrompt
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+
+            const apiData = await response.json();
+            console.log('API Data:', apiData);
+            const message = apiData?.messages?.message1 || 'Hi, I\'m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I\'d love to support your development needs. Let\'s connect and explore how I can add value to your team.';
+            return { message };
+        } catch (error) {
+            console.log('Using default message (API unavailable)');
+            return { message: 'Hi, I\'m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I\'d love to support your development needs. Let\'s connect and explore how I can add value to your team.' };
+        }
+    }
+
+    async openProfileAndConnect(profileUrl, message, profileName) {
+        return new Promise((resolve) => {
+            // Store current page URL and automation context
+            const currentUrl = window.location.href;
+
+            // Store automation state for same-tab navigation
+            const automationState = {
+                currentUrl: currentUrl,
+                profileUrl: profileUrl,
+                message: message,
+                profileName: profileName,
+                timestamp: Date.now(),
+                isAutomation: true,
+                returnCallback: true
+            };
+
+            sessionStorage.setItem('linkedinAutomationState', JSON.stringify(automationState));
+
+            // Store the resolve function reference for when we return
+            window.automationResolve = resolve;
+
+            // Navigate to profile in same tab
+            window.location.href = profileUrl;
+        });
+    }
+
     updateStatus(statusType, message, isActive = false) {
         const statusText = this.ui.querySelector(`#${statusType}-text`);
         const statusDot = this.ui.querySelector(`#${statusType}-dot`);
@@ -503,6 +1027,26 @@ class LinkedInSearchFloatingUI {
             statusDot.classList.toggle('active', isActive);
         }
     }
+
+    showNotification(message, type = 'info') {
+        // Remove existing notifications
+        const existingNotifications = document.querySelectorAll('.linkedin-automation-notification');
+        existingNotifications.forEach(notification => notification.remove());
+
+        const notification = document.createElement('div');
+        notification.className = `linkedin-automation-notification linkedin-notification linkedin-notification-${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Auto-remove after 5 seconds for same-tab workflow
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
+
 
     // Utility method to update any element text using configuration
     updateElementText(elementId, configPath, fallbackText = '') {
@@ -553,34 +1097,112 @@ class LinkedInSearchFloatingUI {
     }
 }
 
+// Profile automation is now handled by linkedin-profile-automation.js
+
+
+
+
+
+
+
+
+
 // Auto-initialize when on LinkedIn search pages
 function initLinkedInSearchUI() {
-    if (window.location.href.includes('linkedin.com/search') &&
-        !document.querySelector('.linkedin-search-floating-ui') &&
-        !window['linkedInSearchUI']) {
+    if (window.location.href.includes('linkedin.com/search')) {
 
-        // Wait for page to load
-        setTimeout(() => {
-            window['linkedInSearchUI'] = new LinkedInSearchFloatingUI();
-        }, 2000);
+        // Check if we returned from profile automation first
+        const automationResult = sessionStorage.getItem('automationResult');
+
+        // If we have an existing UI instance and automation result, handle it
+        if (window['linkedInSearchUI'] && automationResult && window.automationResolve) {
+            try {
+                const result = JSON.parse(automationResult);
+                sessionStorage.removeItem('automationResult');
+
+                // Resolve the promise from openProfileAndConnect
+                window.automationResolve(result);
+                window.automationResolve = null;
+
+                console.log('Automation result processed successfully');
+                return; // Don't create new UI instance
+            } catch (error) {
+                console.log('Failed to process automation result');
+                if (window.automationResolve) {
+                    window.automationResolve({ success: false, error: 'Failed to process result' });
+                    window.automationResolve = null;
+                }
+            }
+        }
+
+        // Create new UI instance if one doesn't exist
+        if (!document.querySelector('.linkedin-search-floating-ui') &&
+            !document.querySelector('.automation-starter-ui') &&
+            !window['linkedInSearchUI']) {
+
+            // Wait for page to load
+            setTimeout(() => {
+                window['linkedInSearchUI'] = new LinkedInSearchFloatingUI();
+
+                // Handle automation result if we returned from profile (for new instances)
+                if (automationResult && window.automationResolve) {
+                    try {
+                        const result = JSON.parse(automationResult);
+                        sessionStorage.removeItem('automationResult');
+
+                        // Resolve the promise from openProfileAndConnect
+                        window.automationResolve(result);
+                        window.automationResolve = null;
+
+                        console.log('Automation result processed successfully');
+                    } catch (error) {
+                        console.log('Failed to process automation result');
+                        if (window.automationResolve) {
+                            window.automationResolve({ success: false, error: 'Failed to process result' });
+                            window.automationResolve = null;
+                        }
+                    }
+                }
+            }, 2000);
+        }
+    }
+}
+
+// Main initialization function
+function initializeLinkedInAutomation() {
+    if (window.location.href.includes('linkedin.com/search')) {
+        // Initialize search UI
+        initLinkedInSearchUI();
+    } else if (window.location.href.includes('linkedin.com/in/')) {
+        // Handle profile automation
+        handleProfileAutomation();
     }
 }
 
 // Initialize on page load
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initLinkedInSearchUI);
+    document.addEventListener('DOMContentLoaded', initializeLinkedInAutomation);
 } else {
-    initLinkedInSearchUI();
+    initializeLinkedInAutomation();
 }
 
 // Re-initialize on navigation changes
-let lastUrl = location.href;
-new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-        lastUrl = url;
-        setTimeout(initLinkedInSearchUI, 1000);
-    }
-}).observe(document, { subtree: true, childList: true });
+if (!window.linkedInLastUrl) {
+    window.linkedInLastUrl = location.href;
+    new MutationObserver(() => {
+        const url = location.href;
+        if (url !== window.linkedInLastUrl) {
+            window.linkedInLastUrl = url;
+            console.log('Navigation detected:', url);
+            setTimeout(initializeLinkedInAutomation, 1000);
+        }
+    }).observe(document, { subtree: true, childList: true });
+}
+
+// Also listen for popstate events (back/forward navigation)
+window.addEventListener('popstate', () => {
+    console.log('Popstate navigation detected');
+    setTimeout(initializeLinkedInAutomation, 1000);
+});
 
 window.LinkedInSearchFloatingUI = LinkedInSearchFloatingUI;

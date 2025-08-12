@@ -378,3 +378,458 @@
 .linkedin-search-floating-ui.minimized .linkedin-search-content {
     display: none !important;
 }
+
+/* Automation UI Styles */
+.automation-starter-ui {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 650px !important;
+    max-height: 85vh !important;
+    background: white !important;
+    border-radius: 12px !important;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
+    z-index: 10000 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    overflow: hidden !important;
+}
+
+.automation-header {
+    background: linear-gradient(135deg, #0077b5, #005885) !important;
+    color: white !important;
+    padding: 16px 20px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+
+.automation-header h3 {
+    margin: 0 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}
+
+.automation-close {
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.automation-close:hover {
+    background: rgba(255,255,255,0.2) !important;
+}
+
+.automation-content {
+    padding: 20px !important;
+    max-height: 65vh !important;
+    overflow-y: auto !important;
+}
+
+.progress-section {
+    margin-bottom: 16px !important;
+    padding: 12px !important;
+    background: #f8f9fa !important;
+    border-radius: 8px !important;
+    border-left: 4px solid #0077b5 !important;
+}
+
+.progress-bar {
+    width: 100% !important;
+    height: 8px !important;
+    background: #e9ecef !important;
+    border-radius: 4px !important;
+    margin-top: 8px !important;
+    overflow: hidden !important;
+}
+
+.progress-fill {
+    height: 100% !important;
+    background: linear-gradient(90deg, #0077b5, #00a0dc) !important;
+    transition: width 0.3s ease !important;
+}
+
+.status-section {
+    margin-bottom: 16px !important;
+    padding: 12px !important;
+    background: #e3f2fd !important;
+    border-radius: 8px !important;
+    border-left: 4px solid #2196f3 !important;
+}
+
+.stats-section {
+    display: flex !important;
+    gap: 16px !important;
+    margin-bottom: 16px !important;
+    padding: 12px !important;
+    background: #f8f9fa !important;
+    border-radius: 8px !important;
+    border-left: 4px solid #28a745 !important;
+}
+
+.stat-item {
+    flex: 1 !important;
+    text-align: center !important;
+}
+
+.stat-label {
+    display: block !important;
+    font-size: 12px !important;
+    color: #666 !important;
+    margin-bottom: 4px !important;
+}
+
+.stat-value {
+    display: block !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    color: #333 !important;
+}
+
+.stat-value.success {
+    color: #28a745 !important;
+}
+
+.stat-value.failed {
+    color: #dc3545 !important;
+}
+
+.current-profile-section {
+    margin-bottom: 16px !important;
+    padding: 12px !important;
+    background: #fff3cd !important;
+    border-radius: 8px !important;
+    border-left: 4px solid #ffc107 !important;
+}
+
+.current-profile-label {
+    font-weight: 600 !important;
+    margin-bottom: 4px !important;
+    color: #333 !important;
+}
+
+.current-profile-url {
+    font-size: 12px !important;
+    color: #666 !important;
+    word-break: break-all !important;
+    background: white !important;
+    padding: 8px !important;
+    border-radius: 4px !important;
+    border: 1px solid #e9ecef !important;
+}
+
+.prompt-section, .prompt-display {
+    margin-bottom: 16px !important;
+    padding: 12px !important;
+    background: #e8f5e8 !important;
+    border-radius: 8px !important;
+    border-left: 4px solid #28a745 !important;
+}
+
+.prompt-section label, .prompt-label {
+    display: block !important;
+    margin-bottom: 8px !important;
+    font-weight: 600 !important;
+    color: #333 !important;
+}
+
+.prompt-section textarea {
+    width: 100% !important;
+    padding: 12px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    resize: vertical !important;
+    margin-bottom: 8px !important;
+}
+
+.set-prompt-btn, .change-prompt-btn {
+    background: #28a745 !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
+
+.set-prompt-btn:hover, .change-prompt-btn:hover {
+    background: #218838 !important;
+}
+
+.prompt-text {
+    background: white !important;
+    padding: 12px !important;
+    border-radius: 6px !important;
+    border: 1px solid #ddd !important;
+    margin-bottom: 8px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+}
+
+.profiles-list-section {
+    margin-bottom: 20px !important;
+}
+
+.profiles-list-header {
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+    color: #333 !important;
+}
+
+.profiles-list-automation {
+    background: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+}
+
+.automation-profile-item {
+    display: flex !important;
+    align-items: center !important;
+    padding: 8px !important;
+    margin-bottom: 8px !important;
+    background: white !important;
+    border-radius: 6px !important;
+    border: 1px solid #e9ecef !important;
+}
+
+.automation-profile-item:last-child {
+    margin-bottom: 0 !important;
+}
+
+.automation-profile-item.waiting {
+    border-left: 4px solid #6c757d !important;
+}
+
+.automation-profile-item.processing {
+    border-left: 4px solid #ffc107 !important;
+    background: #fff3cd !important;
+}
+
+.automation-profile-item.completed {
+    border-left: 4px solid #28a745 !important;
+    background: #d4edda !important;
+}
+
+.automation-profile-item.failed {
+    border-left: 4px solid #dc3545 !important;
+    background: #f8d7da !important;
+}
+
+.profile-avatar {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 50% !important;
+    background: #0077b5 !important;
+    color: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+    margin-right: 12px !important;
+    flex-shrink: 0 !important;
+}
+
+.automation-profile-item .profile-info {
+    flex: 1 !important;
+    min-width: 0 !important;
+}
+
+.automation-profile-item .profile-name {
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    color: #333 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.automation-profile-item .profile-title {
+    font-size: 12px !important;
+    color: #666 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.automation-profile-item .profile-company {
+    font-size: 11px !important;
+    color: #888 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-status {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    color: #666 !important;
+    margin-left: 8px !important;
+    flex-shrink: 0 !important;
+}
+
+.automation-controls {
+    display: flex !important;
+    gap: 12px !important;
+    justify-content: center !important;
+}
+
+.start-automation-btn, .pause-automation-btn, .stop-automation-btn {
+    padding: 12px 20px !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.start-automation-btn {
+    background: #28a745 !important;
+    color: white !important;
+}
+
+.start-automation-btn:hover:not(:disabled) {
+    background: #218838 !important;
+    transform: translateY(-1px) !important;
+}
+
+.start-automation-btn:disabled {
+    background: #6c757d !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.pause-automation-btn {
+    background: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.pause-automation-btn:hover {
+    background: #e0a800 !important;
+    transform: translateY(-1px) !important;
+}
+
+.stop-automation-btn {
+    background: #dc3545 !important;
+    color: white !important;
+}
+
+.stop-automation-btn:hover {
+    background: #c82333 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Profile automation indicator styles */
+.profile-automation-indicator {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    padding: 12px 20px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    z-index: 10001 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    max-width: 300px !important;
+    word-wrap: break-word !important;
+    animation: slideIn 0.3s ease-out !important;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Notification styles */
+.linkedin-notification {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    color: white !important;
+    padding: 15px 20px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    z-index: 10001 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    max-width: 350px !important;
+    word-wrap: break-word !important;
+    animation: slideIn 0.3s ease-out !important;
+}
+
+.linkedin-notification-info {
+    background: #007bff !important;
+}
+
+.linkedin-notification-success {
+    background: #28a745 !important;
+}
+
+.linkedin-notification-error {
+    background: #dc3545 !important;
+}
+
+.linkedin-notification-warning {
+    background: #ffc107 !important;
+    color: #212529 !important;
+}
+
+/* Popup blocker notification specific styles */
+.popup-blocker-content {
+    max-width: 350px !important;
+}
+
+.notification-title {
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+}
+
+.notification-message {
+    font-size: 14px !important;
+    margin-bottom: 12px !important;
+}
+
+.notification-details {
+    font-size: 12px !important;
+    opacity: 0.9 !important;
+}
+
+.notification-close {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    font-size: 18px !important;
+    cursor: pointer !important;
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.notification-close:hover {
+    background: rgba(255,255,255,0.2) !important;
+}

@@ -45,3 +45,66 @@
         </button>
     </div>
 </div>
+
+<!-- Automation UI Template -->
+<div class="automation-starter-ui" id="automation-ui-template" style="display: none;">
+    <div class="automation-header">
+        <h3>Processing Profiles</h3>
+        <button class="automation-close" title="Close">&times;</button>
+    </div>
+    <div class="automation-content">
+        <div class="progress-section">
+            <div class="progress-text">Progress: <span id="automation-progress">0 / 0</span></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <div class="current-status">Current Status: <span id="current-status">Ready to start</span></div>
+        </div>
+
+        <div class="stats-section">
+            <div class="stat-item">
+                <span class="stat-label">Profile Count:</span>
+                <span class="stat-value" id="total-profiles">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Successful:</span>
+                <span class="stat-value success" id="success-count">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Failed:</span>
+                <span class="stat-value failed" id="failed-count">0</span>
+            </div>
+        </div>
+
+        <div class="current-profile-section">
+            <div class="current-profile-label">Current LinkedIn Profile URL:</div>
+            <div class="current-profile-url" id="current-profile-url">None selected</div>
+        </div>
+
+        <div class="prompt-section" id="prompt-section">
+            <label for="custom-prompt">Custom Prompt:</label>
+            <textarea id="custom-prompt" placeholder="Enter your custom prompt for message generation..." rows="4"></textarea>
+            <button id="set-prompt-btn" class="set-prompt-btn">Set Prompt</button>
+        </div>
+
+        <div class="prompt-display" id="prompt-display" style="display: none;">
+            <div class="prompt-label">Using Custom Prompt:</div>
+            <div class="prompt-text" id="current-prompt-text"></div>
+            <button id="change-prompt-btn" class="change-prompt-btn">Change Prompt</button>
+        </div>
+
+        <div class="profiles-list-section">
+            <div class="profiles-list-header">Profile List:</div>
+            <div class="profiles-list-automation" id="profiles-list-automation"></div>
+        </div>
+
+        <div class="automation-controls">
+            <button id="start-automation-btn" class="start-automation-btn" disabled>🚀 Start Automation</button>
+            <button id="pause-automation-btn" class="pause-automation-btn" style="display: none;">⏸️ Pause</button>
+            <button id="stop-automation-btn" class="stop-automation-btn" style="display: none;">⏹️ Stop</button>
+        </div>
+    </div>
+</div>
