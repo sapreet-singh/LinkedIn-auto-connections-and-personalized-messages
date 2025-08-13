@@ -1,0 +1,1025 @@
+.linkedin-search-floating-ui {
+    position: fixed !important;
+    top: 80px !important;
+    right: 20px !important;
+    width: 480px !important;
+    max-height: 85vh !important;
+    background: white !important;
+    border-radius: 16px !important;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18) !important;
+    z-index: 999999 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    border: 1px solid #e1e5e9 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    cursor: move !important;
+}
+
+.linkedin-search-header {
+    background: linear-gradient(135deg, #0a66c2, #004182) !important;
+    color: white !important;
+    padding: 20px 24px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-radius: 16px 16px 0 0 !important;
+    cursor: move !important;
+    user-select: none !important;
+}
+
+.linkedin-search-title {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+}
+
+.linkedin-search-controls {
+    display: flex !important;
+    gap: 12px !important;
+    margin-bottom: 20px !important;
+}
+
+.linkedin-search-minimize,
+.linkedin-search-close {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: none !important;
+    color: white !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.linkedin-search-minimize:hover,
+.linkedin-search-close:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+}
+
+.linkedin-search-content {
+    padding: 24px !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+}
+
+.linkedin-search-btn {
+    flex: 1 !important;
+    padding: 12px 16px !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+.linkedin-search-btn.start {
+    background: #28a745 !important;
+    color: white !important;
+}
+
+.linkedin-search-btn.start:hover {
+    background: #218838 !important;
+    transform: translateY(-1px) !important;
+}
+
+.linkedin-search-btn.pause {
+    background: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.linkedin-search-btn.pause:hover {
+    background: #e0a800 !important;
+    transform: translateY(-1px) !important;
+}
+
+.linkedin-search-btn:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.linkedin-search-btn.next {
+    background: #007bff !important;
+    color: white !important;
+    margin-top: 12px !important;
+    width: 100% !important;
+}
+
+.linkedin-search-btn.next:hover {
+    background: #0056b3 !important;
+}
+
+.linkedin-search-btn.next:disabled {
+    background: #6c757d !important;
+    cursor: not-allowed !important;
+}
+
+.linkedin-search-status {
+    background: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 8px !important;
+    padding: 16px 18px !important;
+    margin-bottom: 15px !important;
+    text-align: center !important;
+}
+
+.status-indicator {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+}
+
+.status-dot {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #6c757d !important;
+}
+
+.status-dot.active {
+    background: #28a745 !important;
+    animation: pulse 2s infinite !important;
+}
+
+/* Status text styling for better readability */
+.status-indicator span:not(.status-dot) {
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    letter-spacing: 0.3px !important;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.connection-stats {
+    display: flex !important;
+    gap: 12px !important;
+    margin-bottom: 20px !important;
+}
+
+.stat-card {
+    flex: 1 !important;
+    padding: 16px !important;
+    border-radius: 8px !important;
+    text-align: center !important;
+}
+
+.stat-card.send-connect {
+    background: #d4edda !important;
+    border: 1px solid #c3e6cb !important;
+}
+
+.stat-card.field-connect {
+    background: #fff3cd !important;
+    border: 1px solid #ffeaa7 !important;
+}
+
+.stat-label {
+    font-size: 12px !important;
+    color: #6c757d !important;
+    margin-bottom: 4px !important;
+}
+
+.stat-number {
+    font-size: 24px !important;
+    font-weight: 700 !important;
+}
+
+.send-connect .stat-number {
+    color: #28a745 !important;
+}
+
+.field-connect .stat-number {
+    color: #ffc107 !important;
+}
+
+.profiles-section {
+    margin-bottom: 20px !important;
+}
+
+.profiles-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 12px !important;
+}
+
+.profiles-count {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #333 !important;
+}
+
+.clear-btn {
+    background: none !important;
+    border: none !important;
+    color: #dc3545 !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    text-decoration: underline !important;
+}
+
+.clear-btn:hover {
+    color: #c82333 !important;
+}
+
+.profiles-list {
+    background: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    min-height: 100px !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+}
+
+.empty-profiles {
+    text-align: center !important;
+    color: #6c757d !important;
+    font-size: 14px !important;
+    font-style: italic !important;
+}
+
+.profile-item {
+    display: flex !important;
+    align-items: center !important;
+    padding: 12px 8px !important;
+    border-bottom: 1px solid #e9ecef !important;
+    font-size: 12px !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.profile-item:hover {
+    background-color: #f8f9fa !important;
+}
+
+.profile-item:last-child {
+    border-bottom: none !important;
+}
+
+.profile-image {
+    width: 40px !important;
+    height: 40px !important;
+    margin-right: 12px !important;
+    flex-shrink: 0 !important;
+}
+
+.profile-initial {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    background: #0a66c2 !important;
+    color: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+}
+
+.profile-info {
+    flex: 1 !important;
+    min-width: 0 !important;
+}
+
+.profile-name {
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-title {
+    color: #666 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-company {
+    color: #888 !important;
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-url {
+    color: #0a66c2 !important;
+    font-size: 10px !important;
+    text-decoration: underline !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.profile-url:hover {
+    color: #004182 !important;
+}
+
+.profile-actions {
+    margin-left: 8px !important;
+    flex-shrink: 0 !important;
+}
+
+.profile-action-btn {
+    background: #dc3545 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.profile-action-btn:hover {
+    background: #c82333 !important;
+}
+
+.progress-section {
+    margin-bottom: 18px !important;
+    padding: 10px !important;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff) !important;
+    border-radius: 16px !important;
+    border: 2px solid #e3f2fd !important;
+    border-left: 8px solid #0077b5 !important;
+    box-shadow: 0 8px 24px rgba(0, 123, 181, 0.15) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.progress-section::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 4px !important;
+    background: linear-gradient(90deg, #0077b5, #00a0dc) !important;
+}
+
+.progress-section .progress-text {
+    font-size: 14px !important; /* Adjusted for standard UI readability */
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 14px !important;
+    letter-spacing: 0.3px !important;
+}
+
+.progress-bar {
+    width: 100% !important;
+    height: 20px !important;
+    background: #e9ecef !important;
+    border-radius: 12px !important;
+    margin-top: 16px !important;
+    overflow: hidden !important;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.15) !important;
+    border: 2px solid #d1d5db !important;
+}
+
+.progress-fill {
+    height: 100% !important;
+    background: linear-gradient(90deg, #0077b5, #00a0dc, #0077b5) !important;
+    background-size: 200% 100% !important;
+    transition: width 0.5s ease, background-position 2s ease !important;
+    box-shadow: 0 2px 6px rgba(0, 123, 181, 0.3) !important;
+    animation: progressShine 3s ease-in-out infinite !important;
+}
+
+.status-section {
+    margin-bottom: 18px !important;
+    padding: 10px !important;
+    background: linear-gradient(135deg, #e3f2fd, #f0f8ff) !important;
+    border-radius: 16px !important;
+    border: 2px solid #e3f2fd !important;
+    border-left: 8px solid #2196f3 !important;
+    box-shadow: 0 8px 24px rgba(33, 150, 243, 0.15) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.status-section::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 4px !important;
+    background: linear-gradient(90deg, #2196f3, #64b5f6) !important;
+}
+
+.status-section .current-status {
+    font-size: 15px !important; /* Adjusted for standard UI readability */
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 10px !important;
+    letter-spacing: 0.3px !important;
+}
+
+.status-section .current-status span {
+    font-size: 13px !important; /* Slightly smaller for the status value */
+    font-weight: 500 !important;
+    color: #1976d2 !important;
+    background: rgba(33, 150, 243, 0.1) !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(33, 150, 243, 0.2) !important;
+    display: inline-block !important;
+}
+
+.prompt-section {
+    margin-bottom: 20px !important;
+    padding: 15px !important;
+    background: #e8f5e8 !important;
+    border-radius: 10px !important;
+    border: 2px solid #28a745 !important;
+    border-left: 6px solid #28a745 !important;
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.15) !important;
+}
+
+.prompt-section label {
+    display: block !important;
+    margin-bottom: 14px !important;
+    font-weight: 700 !important;
+    color: #333 !important;
+    font-size: 16px !important;
+    letter-spacing: 0.5px !important;
+}
+
+.prompt-section textarea {
+    width: 100% !important;
+    padding: 10px !important;
+    border: 2px solid #28a745 !important;
+    border-radius: 8px !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    resize: vertical !important;
+    margin-bottom: 8px !important;
+    min-height: 120px !important;
+    transition: border-color 0.2s ease !important;
+}
+
+.prompt-section textarea:focus {
+    outline: none !important;
+    border-color: #1e4d2b !important;
+    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1) !important;
+}
+
+.set-prompt-btn {
+    background: #28a745 !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: 0 3px 12px rgba(40, 167, 69, 0.2) !important;
+    min-width: 100px !important;
+}
+
+.set-prompt-btn:hover {
+    background: #1e4d2b !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+}
+
+.prompt-text {
+    background: white !important;
+    padding: 12px !important;
+    border-radius: 6px !important;
+    border: 1px solid #ddd !important;
+    margin-bottom: 8px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+}
+
+.profiles-list-section {
+    margin-bottom: 24px !important;
+    background: linear-gradient(135deg, #f8f9fa, #ffffff) !important;
+    border-radius: 16px !important;
+    padding: 20px !important;
+    border: 2px solid #e9ecef !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+}
+
+.profiles-list-header {
+    font-weight: 700 !important;
+    margin-bottom: 16px !important;
+    color: #333 !important;
+    font-size: 18px !important;
+    letter-spacing: 0.5px !important;
+    border-bottom: 2px solid #0077b5 !important;
+    padding-bottom: 8px !important;
+}
+
+.profiles-list-automation {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    max-height: 280px !important;
+    overflow-y: auto !important;
+}
+
+.automation-profile-item {
+    display: flex !important;
+    align-items: center !important;
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    background: white !important;
+    border-radius: 12px !important;
+    border: 2px solid #e9ecef !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.08) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.automation-profile-item::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 4px !important;
+    height: 100% !important;
+    background: linear-gradient(180deg, #0077b5, #00a0dc) !important;
+    transition: width 0.3s ease !important;
+}
+
+.automation-profile-item:hover::before {
+    width: 8px !important;
+}
+
+.automation-profile-item:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+}
+
+.automation-profile-item:last-child {
+    margin-bottom: 0 !important;
+}
+
+.automation-profile-item.waiting {
+    border-left: 5px solid #6c757d !important;
+}
+
+.automation-profile-item.processing {
+    border-left: 5px solid #ffc107 !important;
+    background: #fff3cd !important;
+}
+
+.automation-profile-item.completed {
+    border-left: 5px solid #28a745 !important;
+    background: #d4edda !important;
+}
+
+.automation-profile-item.failed {
+    border-left: 5px solid #dc3545 !important;
+    background: #f8d7da !important;
+}
+
+.profile-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50% !important;
+    background: #0077b5 !important;
+    color: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+    margin-right: 16px !important;
+    flex-shrink: 0 !important;
+    font-weight: 600 !important;
+}
+
+.automation-profile-item .profile-info {
+    flex: 1 !important;
+    min-width: 0 !important;
+}
+
+.automation-profile-item .profile-name {
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    color: #333 !important;
+    margin-bottom: 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.automation-profile-item .profile-title {
+    font-size: 12px !important;
+    color: #555 !important;
+    margin-bottom: 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-weight: 500 !important;
+}
+
+.automation-profile-item .profile-company {
+    font-size: 11px !important;
+    color: #666 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-weight: 500 !important;
+}
+
+.profile-status {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #1a1a1a !important;
+    margin-left: 12px !important;
+    flex-shrink: 0 !important;
+    padding: 6px 12px !important;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    border-radius: 8px !important;
+    border: 1px solid #d1d5db !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.3px !important;
+    min-width: 70px !important;
+    text-align: center !important;
+    transition: all 0.3s ease !important;
+}
+
+.profile-status:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
+.profile-status.waiting {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    border-color: #6c757d !important;
+    color: #495057 !important;
+}
+
+.profile-status.processing {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
+    border-color: #ffc107 !important;
+    color: #856404 !important;
+}
+
+.profile-status.completed {
+    background: linear-gradient(135deg, #d4edda, #c3e6cb) !important;
+    border-color: #28a745 !important;
+    color: #155724 !important;
+}
+
+.profile-status.failed {
+    background: linear-gradient(135deg, #f8d7da, #f5c6cb) !important;
+    border-color: #dc3545 !important;
+    color: #721c24 !important;
+}
+
+.automation-controls {
+    display: flex !important;
+    gap: 16px !important;
+    justify-content: center !important;
+    margin-top: 20px !important;
+}
+
+.start-automation-btn, .pause-automation-btn, .stop-automation-btn {
+    padding: 11px 12px !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+.start-automation-btn {
+    background: #28a745 !important;
+    color: white !important;
+}
+
+.start-automation-btn:hover:not(:disabled) {
+    background: #1e4d2b !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+}
+
+.start-automation-btn:disabled {
+    background: #6c757d !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.pause-automation-btn {
+    background: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.pause-automation-btn:hover {
+    background: #e0a800 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3) !important;
+}
+
+.stop-automation-btn {
+    background: #dc3545 !important;
+    color: white !important;
+}
+
+.stop-automation-btn:hover {
+    background: #c82333 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3) !important;
+}
+
+.stats-section {
+    display: flex !important;
+    gap: 24px !important;
+    margin-bottom: 24px !important;
+    padding: 20px !important;
+    background: #f8f9fa !important;
+    border-radius: 16px !important;
+    border-left: 6px solid #28a745 !important;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.1) !important;
+}
+
+.stat-item {
+    flex: 1 !important;
+    text-align: center !important;
+}
+
+.stat-label {
+    display: block !important;
+    font-size: 16px !important;
+    color: #333 !important;
+    margin-bottom: 8px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.3px !important;
+}
+
+.stat-value {
+    display: block !important;
+    font-size: 24px !important;
+    font-weight: 700 !important;
+    color: #1a1a1a !important;
+    letter-spacing: 0.5px !important;
+}
+
+.stat-value.success {
+    color: #28a745 !important;
+}
+
+.stat-value.failed {
+    color: #dc3545 !important;
+}
+
+.automation-starter-ui {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 600px !important;
+    max-height: 85vh !important;
+    background: white !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
+    z-index: 10000 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    overflow: hidden !important;
+    border: 1px solid #e1e5e9 !important;
+}
+
+.automation-header {
+    background: linear-gradient(135deg, #0077b5, #005885) !important;
+    color: white !important;
+    padding: 20px 24px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+.automation-header h3 {
+    margin: 0 !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.3px !important;
+}
+
+.automation-close {
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    font-size: 20px !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+}
+
+.automation-close:hover {
+    background: rgba(255,255,255,0.25) !important;
+    transform: scale(1.1) !important;
+}
+
+.automation-content {
+    padding: 24px !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+}
+
+.profile-automation-indicator {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    padding: 12px 20px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    z-index: 10001 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    max-width: 300px !important;
+    word-wrap: break-word !important;
+    animation: slideIn 0.3s ease-out !important;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.linkedin-notification {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    color: white !important;
+    padding: 15px 20px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    z-index: 10001 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    max-width: 350px !important;
+    word-wrap: break-word !important;
+    animation: slideIn 0.3s ease-out !important;
+}
+
+.linkedin-notification-info {
+    background: #007bff !important;
+}
+
+.linkedin-notification-success {
+    background: #28a745 !important;
+}
+
+.linkedin-notification-error {
+    background: #dc3545 !important;
+}
+
+.linkedin-notification-warning {
+    background: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.popup-blocker-content {
+    max-width: 350px !important;
+}
+
+.notification-title {
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+}
+
+.notification-message {
+    font-size: 14px !important;
+    margin-bottom: 12px !important;
+}
+
+.notification-details {
+    font-size: 12px !important;
+    opacity: 0.9 !important;
+}
+
+.notification-close {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    font-size: 18px !important;
+    cursor: pointer !important;
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.notification-close:hover {
+    background: rgba(255,255,255,0.2) !important;
+}
+
+.notification-actions {
+    display: flex !important;
+    gap: 6px !important;
+    margin-top: 12px !important;
+    flex-wrap: wrap !important;
+}
+
+.notification-btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-decoration: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+}
+
+.notification-btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-1px) !important;
+}
+
+@media (max-width: 768px) {
+    .linkedin-search-floating-ui {
+        width: 420px !important;
+        right: 10px !important;
+        top: 60px !important;
+        max-height: 75vh !important;
+    }
+    .linkedin-search-content {
+        padding: 20px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .linkedin-search-floating-ui {
+        width: 380px !important;
+        right: 5px !important;
+        top: 50px !important;
+        max-height: 70vh !important;
+    }
+    .linkedin-search-content {
+        padding: 16px !important;
+    }
+    .automation-controls {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+}
+
+.linkedin-search-floating-ui.dragging {
+    transition: none !important;
+    user-select: none !important;
+}
+
+.linkedin-search-floating-ui.minimized .linkedin-search-content {
+    display: none !important;
+}

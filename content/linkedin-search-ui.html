@@ -1,0 +1,90 @@
+<div class="linkedin-search-floating-ui">
+    <div class="linkedin-search-header">
+        <h3 class="linkedin-search-title" data-text="ui.title">LinkedIn Search</h3>
+        <div class="linkedin-search-controls">
+            <button class="linkedin-search-minimize" title="Minimize">−</button>
+            <button class="linkedin-search-close" title="Close">&times;</button>
+        </div>
+    </div>
+    <div class="linkedin-search-content">
+        <div class="linkedin-search-controls">
+            <button class="linkedin-search-btn start" id="collect-profiles-btn" data-text="messages.buttons.startCollecting">START COLLECTING</button>
+        </div>
+        <div class="linkedin-search-status">
+            <div class="status-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text" data-text="messages.status.ready">Ready to start collecting profiles</span>
+            </div>
+        </div>
+
+        <div class="connection-stats">
+            <div class="stat-card send-connect">
+                <div class="stat-label" data-text="ui.stats.sendConnect">Send Connect:</div>
+                <div class="stat-number" id="send-connect-count">0</div>
+            </div>
+            <div class="stat-card field-connect">
+                <div class="stat-label" data-text="ui.stats.fieldConnect">Field Connect:</div>
+                <div class="stat-number" id="field-connect-count">0</div>
+            </div>
+        </div>
+
+        <div class="profiles-section">
+            <div class="profiles-header">
+                <span class="profiles-count" data-text="ui.profiles.label">Profiles: <span id="profile-count">0</span></span>
+                <button class="clear-btn" id="clear-profiles" data-text="messages.buttons.clearAll">Clear All</button>
+            </div>
+            <div class="profiles-list" id="profiles-list">
+                <div class="empty-profiles" data-text="messages.empty.profiles">
+                    No profiles collected yet. Click "START COLLECTING" to begin.
+                </div>
+            </div>
+        </div>
+
+        <button class="linkedin-search-btn next" id="start-connecting-btn" style="display: none;" data-text="messages.buttons.startConnecting">
+            Process Profiles
+        </button>
+    </div>
+</div>
+
+<!-- Automation UI Template -->
+<div class="automation-starter-ui" id="automation-ui-template" style="display: none;">
+    <div class="automation-header">
+        <h3>Processing Profiles</h3>
+        <button class="automation-close" title="Close">&times;</button>
+    </div>
+    <div class="automation-content">
+        <div class="progress-section">
+            <div class="progress-text">Progress: <span id="automation-progress">0 / 0</span></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <div class="current-status">Current Status: <span id="current-status">Ready to start</span></div>
+        </div>
+
+        <div class="prompt-section" id="prompt-section">
+            <label for="custom-prompt">Custom Prompt:</label>
+            <textarea id="custom-prompt" placeholder="Enter your custom prompt for message generation..." rows="4"></textarea>
+            <button id="set-prompt-btn" class="set-prompt-btn">Set Prompt</button>
+        </div>
+
+        <div class="prompt-display" id="prompt-display" style="display: none;">
+            <div class="prompt-label">Using Custom Prompt:</div>
+            <div class="prompt-text" id="current-prompt-text"></div>
+            <button id="change-prompt-btn" class="change-prompt-btn">Change Prompt</button>
+        </div>
+
+        <div class="profiles-list-section">
+            <div class="profiles-list-header">Profile List:</div>
+            <div class="profiles-list-automation" id="profiles-list-automation"></div>
+        </div>
+
+        <div class="automation-controls">
+            <button id="start-automation-btn" class="start-automation-btn" disabled>🚀 Start Automation</button>
+            <button id="pause-automation-btn" class="pause-automation-btn" style="display: none;">⏸️ Pause</button>
+            <button id="stop-automation-btn" class="stop-automation-btn" style="display: none;">⏹️ Stop</button>
+        </div>
+    </div>
+</div>

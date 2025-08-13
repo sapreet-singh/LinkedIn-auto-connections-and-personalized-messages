@@ -246,6 +246,28 @@ textarea {
     box-shadow: 0 4px 12px rgba(10, 102, 194, 0.3);
 }
 
+.btn-linkedin-search {
+    background: linear-gradient(135deg, #0077b5, #005885);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.btn-linkedin-search:hover {
+    background: linear-gradient(135deg, #005885, #003d5c);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 119, 181, 0.3);
+}
+
 .btn-danger {
     background-color: #dc3545;
     color: white;

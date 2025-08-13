@@ -759,6 +759,15 @@ const LaunchManager = {
             salesNavBtn.dataset.listenerAttached = 'true';
         }
 
+        // Setup LinkedIn Search button
+        const linkedinSearchBtn = document.getElementById('linkedin-search-btn');
+        if (linkedinSearchBtn && !linkedinSearchBtn.dataset.listenerAttached) {
+            linkedinSearchBtn.addEventListener('click', () => {
+                LinkedInSearchFloatingManager.launch();
+            });
+            linkedinSearchBtn.dataset.listenerAttached = 'true';
+        }
+
         // Setup Create Campaign button
         const createCampaignBtn = document.getElementById('create-campaign');
         if (createCampaignBtn && !createCampaignBtn.dataset.listenerAttached) {
@@ -1962,6 +1971,30 @@ const SalesNavigatorFloatingManager = {
 
         } catch (error) {
             Utils.showNotification('Error launching Sales Navigator', 'error');
+        }
+    }
+};
+
+const LinkedInSearchFloatingManager = {
+    async launch() {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const currentTab = tabs[0];
+
+            // Navigate to LinkedIn search page
+            await chrome.tabs.update(currentTab.id, {
+                url: 'https://www.linkedin.com/search/results/people/?origin=FACETED_SEARCH'
+            });
+
+            Utils.showNotification('Opening LinkedIn Search...', 'info');
+
+            // The LinkedIn Search UI will automatically load via content script
+            setTimeout(() => {
+                Utils.showNotification('LinkedIn Search opened! The floating UI will appear automatically.', 'success');
+            }, 3000);
+
+        } catch (error) {
+            Utils.showNotification('Error launching LinkedIn Search', 'error');
         }
     }
 };
