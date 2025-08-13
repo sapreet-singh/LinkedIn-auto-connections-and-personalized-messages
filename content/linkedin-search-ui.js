@@ -279,22 +279,45 @@ class LinkedInSearchFloatingUI {
     }
 
     isProfileElement(element) {
-        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', '[componentkey]'];
-        return selectors.some(selector =>
-            element.matches && element.matches(selector) ||
-            element.querySelector && element.querySelector(selector)
-        );
+        const selectors = [
+            // New LinkedIn layout selectors only
+            'div._2c29d41c._41db7c7a.dbd91781._4a774068.c1850194.de64d16b',
+            'div:has(figure._5b09ce5a) div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[href*="/in/"][data-view-name="search-result-lockup-title"])',
+            'div[componentkey]:has(a[href*="/in/"])'
+        ];
+        return selectors.some(selector => {
+            try {
+                return element.matches && element.matches(selector) ||
+                       element.querySelector && element.querySelector(selector);
+            } catch (e) {
+                // Handle invalid selectors gracefully
+                return false;
+            }
+        });
     }
 
     collectCurrentPageProfiles() {
         if (!this.isCollecting) return;
-        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', 'div[componentkey]:has(a[href*="/in/"])', 'div:has(> div > figure img[alt]) div:has(a[href*="/in/"])'];
+        const selectors = [
+            // New LinkedIn layout selectors only
+            'div._2c29d41c._41db7c7a.dbd91781._4a774068.c1850194.de64d16b',
+            'div:has(figure._5b09ce5a) div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[href*="/in/"][data-view-name="search-result-lockup-title"])',
+            'div[componentkey]:has(a[href*="/in/"])'
+        ];
         let profileElements = [];
         for (const selector of selectors) {
             try {
                 profileElements = document.querySelectorAll(selector);
-                if (profileElements.length > 0) break;
+                if (profileElements.length > 0) {
+                    console.log(`Found ${profileElements.length} profiles using selector: ${selector}`);
+                    break;
+                }
             } catch (e) {
+                console.log(`Selector failed: ${selector}`, e);
                 continue;
             }
         }
@@ -308,11 +331,15 @@ class LinkedInSearchFloatingUI {
 
     extractProfileData(element) {
         try {
+            // New LinkedIn layout selectors for name element
             const nameElement = element.querySelector('a[href*="/in/"][data-view-name="search-result-lockup-title"]') ||
-                               element.querySelector('.entity-result__title-text a') ||
-                               element.querySelector('.actor-name a') ||
+                               element.querySelector('a[data-view-name="search-result-lockup-title"]') ||
                                element.querySelector('a[href*="/in/"]');
-            if (!nameElement) return null;
+            
+            if (!nameElement) {
+                console.log('No name element found in profile container');
+                return null;
+            }
 
             let name = nameElement.textContent?.trim();
             if (name && name.includes(' is reachable')) {
@@ -321,33 +348,50 @@ class LinkedInSearchFloatingUI {
 
             const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
             let title = '', company = '', location = '';
-            const parentContainer = nameElement.closest('div[componentkey]') || element;
+            
+            // Find the parent container that contains all profile information
+            const parentContainer = nameElement.closest('div[componentkey]') || 
+                                  nameElement.closest('div:has(figure img)') || 
+                                  element;
+            
             const textElements = parentContainer.querySelectorAll('p');
 
             textElements.forEach((p) => {
                 const text = p.textContent?.trim();
                 if (!text || text.includes(name)) return;
-                if (!title && text && !text.includes('•') && !text.includes(',')) {
+                
+                // Skip elements with verification badges or connection info
+                if (text.includes('•') && (text.includes('1st') || text.includes('2nd') || text.includes('3rd'))) {
+                    return;
+                }
+                
+                if (!title && text && !text.includes('•') && !text.includes(',') && text.length > 3) {
                     title = text;
-                } else if (!location && text && (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK'))) {
+                } else if (!location && text && (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK') || text.includes('Punjab'))) {
                     location = text;
                 }
             });
 
+            // Extract company from title if it contains " at "
             if (title && title.includes(' at ')) {
                 const parts = title.split(' at ');
                 title = parts[0]?.trim() || '';
                 company = parts[1]?.trim() || '';
             }
 
-            const imageElement = parentContainer.querySelector('img[alt="' + name + '"]') ||
+            // Try multiple selectors for profile image
+            const imageElement = parentContainer.querySelector(`img[alt="${name}"]`) ||
                                parentContainer.querySelector('img[src*="profile"]') ||
-                               parentContainer.querySelector('figure img');
+                               parentContainer.querySelector('figure img') ||
+                               parentContainer.querySelector('img[alt*="' + name.split(' ')[0] + '"]');
+
             const profilePic = imageElement?.src || '';
+
+            console.log(`Extracted profile: ${name} - ${title} at ${company} - ${location}`);
 
             return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search' };
         } catch (error) {
-            console.log('Failed to extract profile data');
+            console.log('Failed to extract profile data:', error);
             return null;
         }
     }
