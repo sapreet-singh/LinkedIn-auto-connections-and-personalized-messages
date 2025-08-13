@@ -52,11 +52,13 @@ class SalesNavigatorFloatingUI {
         this.currentLinkedInProfileUrl = null;
         this.isProcessingThreeDotMenu = false;
         this.profileStatuses = {};
-        this.profileDelay = 5000;
+        this.profileDelay = 10000;
         this.sendConnectCount = 0;
         this.FailedConnectCount = 0;
         this.customPrompt = '';
         this.promptSet = false;
+        this.typingTotalDurationMs = 60000;
+        this.sendDelayAfterTypingMs = 30000;
         this.loadSavedCounters();
         this.loadBatchSettings();
         this.autoProcessingTimeout = null;
@@ -1336,7 +1338,7 @@ class SalesNavigatorFloatingUI {
                         }
 
                         this.saveState();
-                        await this.wait(1000);
+                        await this.wait(10000);
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
@@ -1431,7 +1433,7 @@ class SalesNavigatorFloatingUI {
             const statusElement = document.getElementById('workflow-current-status');
             if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
 
-            await this.wait(1500);
+            await this.wait(8000);
 
             // Check if email is required first
             const emailInput = document.querySelector('input[type="email"]') ||
@@ -1453,30 +1455,25 @@ class SalesNavigatorFloatingUI {
                       document.querySelector('.send-invite textarea');
 
         if (!textarea) {
-            await this.wait(1000);
+            await this.wait(7000);
             textarea = document.querySelector('textarea') ||
                       document.querySelector('input[type="text"][maxlength="300"]');
         }
 
         if (textarea) {
-            if (statusElement) statusElement.textContent = 'Found textarea, filling message...';
+            if (statusElement) statusElement.textContent = 'Found textarea, typing message word-by-word...';
 
             textarea.value = '';
             textarea.focus();
 
-            const message = this.generatedMessage || 'Hello dear';
-            for (let i = 0; i < message.length; i++) {
-                textarea.value += message[i];
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
-                await this.wait(30);
-            }
+            const message = this.generatedMessage;
+            await this.typeMessageWordByWord(textarea, message);
 
             textarea.dispatchEvent(new Event('change', { bubbles: true }));
             textarea.dispatchEvent(new Event('blur', { bubbles: true }));
 
-            if (statusElement) statusElement.textContent = 'Message filled! Looking for Send button...';
-            await this.wait(1000);
+            if (statusElement) statusElement.textContent = `Message typed. Waiting ${Math.round(this.sendDelayAfterTypingMs/1000)}s before sending...`;
+            await this.wait(this.sendDelayAfterTypingMs);
 
             return await this.clickSendInvitationButton();
         } else {
@@ -1487,8 +1484,8 @@ class SalesNavigatorFloatingUI {
                          document.querySelector('[aria-labelledby*="send-invite"]');
 
             if (popup) {
-                if (statusElement) statusElement.textContent = 'Popup found but textarea missing - trying alternative approach...';
-                await this.wait(1000);
+                if (statusElement) statusElement.textContent = `Popup found but textarea missing - sending in ${Math.round(this.sendDelayAfterTypingMs/1000)}s...`;
+                await this.wait(this.sendDelayAfterTypingMs);
                 return await this.clickSendInvitationButton();
             } else {
                 if (statusElement) statusElement.textContent = 'Send invitation popup not found - skipping';
@@ -1588,6 +1585,46 @@ class SalesNavigatorFloatingUI {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    async typeMessageWordByWord(textarea, message) {
+        try {
+            const maxlengthAttr = textarea.getAttribute('maxlength');
+            const maxCharacters = maxlengthAttr ? parseInt(maxlengthAttr, 10) : 300;
+            const rawWords = (message || '').split(/\s+/).filter(w => w && w.length > 0);
+            if (rawWords.length === 0) return;
+
+            const wordsWithinLimit = [];
+            let runningLength = 0;
+            for (let i = 0; i < rawWords.length; i++) {
+                const word = rawWords[i];
+                const separator = i === 0 ? '' : ' ';
+                if (runningLength + separator.length + word.length <= maxCharacters) {
+                    wordsWithinLimit.push(word);
+                    runningLength += separator.length + word.length;
+                } else {
+                    break;
+                }
+            }
+
+            const totalWords = Math.max(1, wordsWithinLimit.length);
+            const delayPerWordMs = Math.max(50, Math.floor(this.typingTotalDurationMs / totalWords));
+
+            textarea.value = '';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+            for (let i = 0; i < wordsWithinLimit.length; i++) {
+                const word = wordsWithinLimit[i];
+                textarea.value = i === 0 ? word : `${textarea.value} ${word}`;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+                await this.wait(delayPerWordMs);
+            }
+        } catch (e) {
+            const fallback = (message || '').slice(0, 300);
+            textarea.value = fallback;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
     completeWorkflow() {
         const statusElement = document.getElementById('workflow-current-status');
         const progressElement = document.getElementById('workflow-progress');
@@ -1617,7 +1654,6 @@ class SalesNavigatorFloatingUI {
                 <div style="color: #155724;">
                     <div>✅ Successfully processed: ${completedCount} profiles</div>
                     ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
-                    <div>💬 Message used: "${this.generatedMessage || 'No message generated'}"</div>
                     <div style="margin-top: 12px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404;">
                         🔄 Returning to Sales Navigator search in 5 seconds to start new collection...
                     </div>
