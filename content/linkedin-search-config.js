@@ -27,7 +27,7 @@ const LinkedInSearchConfig = {
         buttons: {
             startCollecting: 'START COLLECTING',
             pauseCollecting: 'PAUSE COLLECTING',
-            startConnecting: 'Next: Start Connecting',
+            startConnecting: 'Process Profiles',
             clearAll: 'Clear All'
         },
         empty: {

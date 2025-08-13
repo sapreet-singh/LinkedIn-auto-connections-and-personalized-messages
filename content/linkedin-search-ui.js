@@ -215,8 +215,6 @@ class LinkedInSearchFloatingUI {
         });
     }
 
-
-
     toggleCollecting() {
         if (this.isCollecting) {
             this.pauseCollecting();
@@ -368,12 +366,9 @@ class LinkedInSearchFloatingUI {
         this.showNextButton();
     }
 
-
-
     updateProfileCount() {
         const countElement = this.ui.querySelector('#profile-count');
         countElement.textContent = this.collectedProfiles.length;
-
         const nextBtn = this.ui.querySelector('#start-connecting-btn');
         nextBtn.textContent = `Next: Start Connecting (${this.collectedProfiles.length})`;
     }
@@ -473,7 +468,6 @@ class LinkedInSearchFloatingUI {
         if (existingAutomationUI) {
             existingAutomationUI.remove();
         }
-
         // Create automation starter UI
         const automationUI = await this.createAutomationUI();
         console.log('Automation UI to append:', automationUI, 'Type:', typeof automationUI, 'Is Node:', automationUI instanceof Node);
@@ -507,24 +501,20 @@ class LinkedInSearchFloatingUI {
 
     async restoreAutomationUI() {
         console.log('Restoring automation UI after profile processing...');
-
         // Check if automation UI already exists
         if (document.querySelector('.automation-starter-ui')) {
             console.log('Automation UI already exists, no need to restore');
             return;
         }
-
         // Try to restore automation state from session storage
         const uiAutomationState = sessionStorage.getItem('linkedinUIAutomationState');
         if (uiAutomationState) {
             try {
                 const savedState = JSON.parse(uiAutomationState);
                 console.log('Restoring automation state:', savedState);
-
                 // Restore the automation state and profiles
                 this.automationState = savedState.automationState;
                 this.collectedProfiles = savedState.collectedProfiles || [];
-
                 console.log('Restored automation state:', this.automationState);
                 console.log('Restored profiles count:', this.collectedProfiles.length);
                 console.log('Prompt set status:', this.automationState.promptSet);
@@ -543,7 +533,6 @@ class LinkedInSearchFloatingUI {
             this.ui.style.display = 'none';
             this.ui.style.visibility = 'hidden';
         }
-
         console.log('Automation UI restored successfully');
     }
 
@@ -1468,8 +1457,6 @@ class LinkedInSearchFloatingUI {
         }, 5000);
     }
 
-
-
     // Utility method to update any element text using configuration
     updateElementText(elementId, configPath, fallbackText = '') {
         const element = this.ui.querySelector(`#${elementId}`);
@@ -1547,20 +1534,15 @@ class LinkedInSearchFloatingUI {
         notification.innerHTML = `
             <div class="notification-title">✅ Automation Completed!</div>
             <div class="notification-message">All profiles processed successfully.</div>
-            <div class="notification-actions">
-                <button class="notification-btn" onclick="window['linkedInSearchUI'].startNewAutomationWithSameProfiles()">🔄 Restart with Same Profiles</button>
-                <button class="notification-btn" onclick="window['linkedInSearchUI'].startNewAutomation()">🆕 Start Fresh</button>
-                <button class="notification-btn" onclick="this.parentElement.parentElement.remove()">✕ Close</button>
-            </div>
         `;
         document.body.appendChild(notification);
 
-        // Auto-remove after 15 seconds
+        // Auto-remove after 3 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.remove();
             }
-        }, 15000);
+        }, 3000);
     }
 
     startNewAutomation() {
@@ -1623,15 +1605,6 @@ class LinkedInSearchFloatingUI {
 }
 
 // Profile automation is now handled by linkedin-profile-automation.js
-
-
-
-
-
-
-
-
-
 // Auto-initialize when on LinkedIn search pages
 function initLinkedInSearchUI() {
     if (window.location.href.includes('linkedin.com/search')) {
