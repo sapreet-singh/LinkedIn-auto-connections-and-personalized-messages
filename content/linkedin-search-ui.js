@@ -1065,12 +1065,7 @@ class LinkedInSearchFloatingUI {
         if (this.automationState.isRunning) {
             // Completed successfully
             this.automationState.isRunning = false;
-            startBtn.textContent = 'Automation Completed ✓';
-            startBtn.style.backgroundColor = '#28a745';
-            startBtn.style.display = 'inline-block';
-            pauseBtn.style.display = 'none';
-            stopBtn.style.display = 'none';
-
+            
             const currentStatusElement = document.querySelector('#current-status');
             if (currentStatusElement) {
                 currentStatusElement.textContent = 'All profiles processed successfully!';
@@ -1079,6 +1074,11 @@ class LinkedInSearchFloatingUI {
             // Clean up session storage
             sessionStorage.removeItem('linkedinUIAutomationState');
             console.log('Automation completed successfully!');
+            
+            // Close automation UI and show completion notification
+            setTimeout(() => {
+                this.closeAutomationUI();
+            }, 2000);
         }
     }
 
@@ -1179,26 +1179,39 @@ class LinkedInSearchFloatingUI {
         }
 
         console.log('Profile processing loop completed');
+        
+        // If we completed all profiles and automation is still running, complete it
+        if (this.automationState.isRunning) {
+            console.log('All profiles processed, completing automation');
+            this.automationState.isRunning = false;
+            this.updateAutomationProgress();
+            
+            // Close automation UI after a short delay
+            setTimeout(() => {
+                this.closeAutomationUI();
+            }, 2000);
+        }
     }
 
     async continueAutomationAfterProfile() {
         console.log('Continuing automation after profile processing...');
         console.log('Current automation state:', this.automationState);
         console.log('Current profile index:', this.automationState?.currentIndex || this.automationState?.currentProfileIndex);
+        console.log('Total profiles collected:', this.collectedProfiles.length);
 
         if (!this.automationState?.isRunning) {
             console.log('Automation is not running, cannot continue');
             return;
         }
 
-        // Update the current index to the next profile
+        // Get the current index (the profile we just processed)
         const currentIndex = this.automationState.currentIndex || this.automationState.currentProfileIndex || 0;
-        const nextIndex = currentIndex + 1;
+        console.log('Current index:', currentIndex, 'Total profiles:', this.collectedProfiles.length, 'Last index:', this.collectedProfiles.length - 1);
 
-        console.log(`Moving from profile ${currentIndex} to profile ${nextIndex}`);
-
-        if (nextIndex >= this.collectedProfiles.length) {
+        // Check if we just processed the last profile
+        if (currentIndex >= this.collectedProfiles.length) {
             console.log('All profiles processed, completing automation');
+            console.log('Reason: currentIndex', currentIndex, '>=', this.collectedProfiles.length);
             this.automationState.isRunning = false;
             this.updateAutomationProgress();
 
@@ -1213,20 +1226,53 @@ class LinkedInSearchFloatingUI {
             return;
         }
 
-        // Update the automation state
-        this.automationState.currentIndex = nextIndex;
-        this.automationState.currentProfileIndex = nextIndex;
+        // Check if there are more profiles to process
+        if (currentIndex + 1 < this.collectedProfiles.length) {
+            // Move to the next profile
+            const nextIndex = currentIndex + 1;
+            console.log(`Moving from profile ${currentIndex} to profile ${nextIndex}`);
 
-        // Save the updated state
-        this.saveAutomationState();
+            // Update the automation state
+            this.automationState.currentIndex = nextIndex;
+            this.automationState.currentProfileIndex = nextIndex;
 
-        // Continue processing from the next profile
-        console.log(`Continuing with profile ${nextIndex + 1}/${this.collectedProfiles.length}`);
-        await this.processNextProfileInSequence(nextIndex);
+            // Save the updated state
+            this.saveAutomationState();
+
+            // Continue processing from the next profile
+            console.log(`Continuing with profile ${nextIndex + 1}/${this.collectedProfiles.length}`);
+            await this.processNextProfileInSequence(nextIndex);
+        } else {
+            // No more profiles to process, complete automation
+            console.log('No more profiles to process, completing automation');
+            this.automationState.isRunning = false;
+            this.updateAutomationProgress();
+
+            // Show completion message
+            const currentStatusElement = document.querySelector('#current-status');
+            if (currentStatusElement) {
+                currentStatusElement.textContent = 'All profiles processed successfully!';
+            }
+
+            // Clean up
+            sessionStorage.removeItem('linkedinUIAutomationState');
+            
+            // Close the automation UI and return to search UI
+            this.closeAutomationUI();
+        }
     }
 
     async processNextProfileInSequence(startIndex) {
         console.log(`Processing profiles starting from index ${startIndex}`);
+
+        // Check if startIndex is valid
+        if (startIndex >= this.collectedProfiles.length) {
+            console.log(`Start index ${startIndex} is out of bounds (total profiles: ${this.collectedProfiles.length}), completing automation`);
+            this.automationState.isRunning = false;
+            this.updateAutomationProgress();
+            this.closeAutomationUI();
+            return;
+        }
 
         for (let i = startIndex; i < this.collectedProfiles.length; i++) {
             if (!this.automationState.isRunning) {
@@ -1461,6 +1507,109 @@ class LinkedInSearchFloatingUI {
         if (this.ui) {
             this.ui.remove();
         }
+    }
+
+    closeAutomationUI() {
+        // Remove the automation UI
+        const automationUI = document.querySelector('.automation-starter-ui');
+        if (automationUI) {
+            automationUI.remove();
+        }
+
+        // Show the search UI again
+        if (this.ui) {
+            this.ui.style.display = 'flex';
+            this.ui.style.visibility = 'visible';
+        }
+
+        // Reset automation state
+        this.automationState = {
+            currentProfileIndex: 0,
+            totalProfiles: this.collectedProfiles.length,
+            isRunning: false,
+            customPrompt: '',
+            promptSet: false
+        };
+
+        // Show completion notification with options
+        this.showCompletionNotification();
+        
+        console.log('Automation UI closed, returned to search UI');
+    }
+
+    showCompletionNotification() {
+        // Remove any existing notifications
+        const existingNotifications = document.querySelectorAll('.linkedin-automation-notification');
+        existingNotifications.forEach(notification => notification.remove());
+
+        const notification = document.createElement('div');
+        notification.className = 'linkedin-automation-notification linkedin-notification linkedin-notification-success';
+        notification.innerHTML = `
+            <div class="notification-title">✅ Automation Completed!</div>
+            <div class="notification-message">All profiles processed successfully.</div>
+            <div class="notification-actions">
+                <button class="notification-btn" onclick="window['linkedInSearchUI'].startNewAutomationWithSameProfiles()">🔄 Restart with Same Profiles</button>
+                <button class="notification-btn" onclick="window['linkedInSearchUI'].startNewAutomation()">🆕 Start Fresh</button>
+                <button class="notification-btn" onclick="this.parentElement.parentElement.remove()">✕ Close</button>
+            </div>
+        `;
+        document.body.appendChild(notification);
+
+        // Auto-remove after 15 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 15000);
+    }
+
+    startNewAutomation() {
+        // Remove completion notification
+        const notifications = document.querySelectorAll('.linkedin-automation-notification');
+        notifications.forEach(notification => notification.remove());
+
+        // Reset automation state for new run
+        this.resetAutomation();
+        
+        // Start a new automation
+        this.startConnecting();
+    }
+
+    startNewAutomationWithSameProfiles() {
+        // Remove completion notification
+        const notifications = document.querySelectorAll('.linkedin-automation-notification');
+        notifications.forEach(notification => notification.remove());
+
+        // Reset automation state but keep profiles
+        this.automationState = {
+            currentProfileIndex: 0,
+            totalProfiles: this.collectedProfiles.length,
+            isRunning: false,
+            customPrompt: this.automationState.customPrompt || '',
+            promptSet: this.automationState.promptSet || false
+        };
+        
+        // Start a new automation
+        this.startConnecting();
+    }
+
+    resetAutomation() {
+        // Reset automation state
+        this.automationState = {
+            currentProfileIndex: 0,
+            totalProfiles: this.collectedProfiles.length,
+            isRunning: false,
+            customPrompt: '',
+            promptSet: false
+        };
+
+        // Clear session storage
+        sessionStorage.removeItem('linkedinUIAutomationState');
+        
+        // Update UI
+        this.updateAutomationProgress();
+        
+        console.log('Automation reset, ready to start fresh');
     }
 
     toggleMinimize() {
