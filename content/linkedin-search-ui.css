@@ -184,7 +184,7 @@
     border: 1px solid #c3e6cb !important;
 }
 
-.stat-card.field-connect {
+.stat-card.Failed-connect {
     background: #fff3cd !important;
     border: 1px solid #ffeaa7 !important;
 }
@@ -204,7 +204,7 @@
     color: #28a745 !important;
 }
 
-.field-connect .stat-number {
+.Failed-connect .stat-number {
     color: #ffc107 !important;
 }
 
@@ -461,7 +461,26 @@
     box-shadow: 0 4px 16px rgba(40, 167, 69, 0.15) !important;
 }
 
+.prompt-display {
+    margin-bottom: 20px !important;
+    padding: 15px !important;
+    background: #e8f5e8 !important;
+    border-radius: 10px !important;
+    border: 2px solid #28a745 !important;
+    border-left: 6px solid #28a745 !important;
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.15) !important;
+}
+
 .prompt-section label {
+    display: block !important;
+    margin-bottom: 14px !important;
+    font-weight: 700 !important;
+    color: #333 !important;
+    font-size: 16px !important;
+    letter-spacing: 0.5px !important;
+}
+
+.prompt-label {
     display: block !important;
     margin-bottom: 14px !important;
     font-weight: 700 !important;
@@ -503,13 +522,34 @@
     text-transform: uppercase !important;
     letter-spacing: 0.5px !important;
     box-shadow: 0 3px 12px rgba(40, 167, 69, 0.2) !important;
-    min-width: 100px !important;
+    min-width: 40px !important;
 }
 
 .set-prompt-btn:hover {
     background: #1e4d2b !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+}
+
+.change-prompt-btn {
+    background: #6c757d !important;
+    color: white !important;
+    border: none !important;
+    padding: 6px 10px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.change-prompt-btn:hover {
+    background: #5a6268 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 
 .prompt-text {
@@ -520,6 +560,7 @@
     margin-bottom: 8px !important;
     font-size: 14px !important;
     line-height: 1.4 !important;
+    white-space: pre-wrap !important; /* preserve line breaks in displayed prompt */
 }
 
 .profiles-list-section {

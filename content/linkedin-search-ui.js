@@ -692,13 +692,13 @@ class LinkedInSearchFloatingUI {
         console.log('Processing connection requests for:', this.collectedProfiles);
 
         const sendRatio = this.config.stats?.sendConnectRatio || 0.7;
-        const fieldRatio = this.config.stats?.fieldConnectRatio || 0.3;
+        const FailedRatio = this.config.stats?.FailedConnectRatio || 0.3;
 
         const sendConnectCount = this.ui.querySelector('#send-connect-count');
-        const fieldConnectCount = this.ui.querySelector('#field-connect-count');
+        const FailedConnectCount = this.ui.querySelector('#Failed-connect-count');
 
         sendConnectCount.textContent = Math.floor(this.collectedProfiles.length * sendRatio);
-        fieldConnectCount.textContent = Math.floor(this.collectedProfiles.length * fieldRatio);
+        FailedConnectCount.textContent = Math.floor(this.collectedProfiles.length * FailedRatio);
     }
 
     setupAutomationEventListeners(automationUI) {
@@ -767,7 +767,7 @@ class LinkedInSearchFloatingUI {
         if (changePromptBtn && customPromptTextarea) {
             changePromptBtn.addEventListener('click', () => {
                 this.automationState.promptSet = false;
-                this.automationState.customPrompt = '';
+                // Keep existing customPrompt content so user can edit it instead of starting from scratch
 
                 // Save the updated automation state
                 this.saveAutomationState();
@@ -778,7 +778,8 @@ class LinkedInSearchFloatingUI {
 
                 if (promptSection) promptSection.style.display = 'block';
                 if (promptDisplay) promptDisplay.style.display = 'none';
-                customPromptTextarea.value = '';
+                // Prefill textarea with the previously saved prompt for editing convenience
+                customPromptTextarea.value = this.automationState?.customPrompt || '';
 
                 // Disable start button
                 if (startAutomationBtn) {
@@ -786,7 +787,7 @@ class LinkedInSearchFloatingUI {
                     startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
                 }
 
-                console.log('Prompt cleared and state saved');
+                console.log('Prompt edit mode enabled and state saved');
             });
         }
 
@@ -1028,7 +1029,7 @@ class LinkedInSearchFloatingUI {
         collectBtn.classList.add('start');
         nextBtn.style.display = 'none';
         this.ui.querySelector('#send-connect-count').textContent = '0';
-        this.ui.querySelector('#field-connect-count').textContent = '0';
+        this.ui.querySelector('#Failed-connect-count').textContent = '0';
         this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting profiles', false);
     }
 
