@@ -337,7 +337,7 @@ class SalesNavigatorFloatingUI {
         this.makeDraggable(header);
     }
 
-    makeDraggable(handle) {
+     makeDraggable(handle) {
         let isDragging = false;
         let currentX, currentY, initialX, initialY;
         let xOffset = 0, yOffset = 0;
@@ -357,20 +357,15 @@ class SalesNavigatorFloatingUI {
                 currentY = e.clientY - initialY;
                 xOffset = currentX;
                 yOffset = currentY;
-                const rect = this.ui.getBoundingClientRect();
-                const maxX = window.innerWidth - rect.width;
-                const maxY = window.innerHeight - rect.height;
-                currentX = Math.max(0, Math.min(currentX, maxX));
-                currentY = Math.max(0, Math.min(currentY, maxY));
                 this.ui.style.transform = `translate(${currentX}px, ${currentY}px)`;
             }
         });
 
         document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                this.ui.style.cursor = 'move';
-            }
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+            this.ui.style.cursor = 'move';
         });
     }
 
