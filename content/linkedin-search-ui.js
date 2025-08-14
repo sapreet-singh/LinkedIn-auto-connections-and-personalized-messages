@@ -325,6 +325,7 @@ class LinkedInSearchFloatingUI {
             const profile = this.extractProfileData(element);
             if (profile && !this.isDuplicateProfile(profile)) {
                 this.addProfile(profile);
+            } else if (!profile) {
             }
         });
     }
@@ -379,6 +380,12 @@ class LinkedInSearchFloatingUI {
                 company = parts[1]?.trim() || '';
             }
 
+            // Check connection status - only add profiles with "Connect" button
+            const connectionStatus = this.checkConnectionStatus(parentContainer);
+            if (connectionStatus !== 'connect') {
+                return null;
+            }
+
             // Try multiple selectors for profile image
             const imageElement = parentContainer.querySelector(`img[alt="${name}"]`) ||
                                parentContainer.querySelector('img[src*="profile"]') ||
@@ -387,12 +394,71 @@ class LinkedInSearchFloatingUI {
 
             const profilePic = imageElement?.src || '';
 
-            console.log(`Extracted profile: ${name} - ${title} at ${company} - ${location}`);
+            console.log(`Extracted profile: ${name} - ${title} at ${company} - ${location} (Status: ${connectionStatus})`);
 
-            return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search' };
+            return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search', connectionStatus };
         } catch (error) {
             console.log('Failed to extract profile data:', error);
             return null;
+        }
+    }
+
+    checkConnectionStatus(container) {
+        try {
+            const buttons = container.querySelectorAll('button');
+            
+            for (const button of buttons) {
+                const buttonText = button.textContent?.trim().toLowerCase() || '';
+                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                // Check for "Connect" button
+                if ((buttonText.includes('connect') || ariaLabel.includes('connect')) && 
+                    !buttonText.includes('following') && 
+                    !ariaLabel.includes('following')) {
+                    return 'connect';
+                }
+                
+                // Check for "Follow" button
+                if (buttonText.includes('follow') || ariaLabel.includes('follow')) {
+                    return 'follow';
+                }
+                
+                // Check for "Message" button
+                if (buttonText.includes('message') || ariaLabel.includes('message')) {
+                    return 'message';
+                }
+                
+                // Check for "Pending" status (usually shows as "Pending" or "Invitation sent")
+                if (buttonText.includes('pending') || 
+                    buttonText.includes('invitation sent') || 
+                    buttonText.includes('invite sent') ||
+                    ariaLabel.includes('pending') || 
+                    ariaLabel.includes('invitation sent') || 
+                    ariaLabel.includes('invite sent')) {
+                    return 'pending';
+                }
+            }
+            
+            // If no specific button found, check for connection-related text in the container
+            const containerText = container.textContent?.toLowerCase() || '';
+            
+            if (containerText.includes('pending') || containerText.includes('invitation sent')) {
+                return 'pending';
+            }
+            
+            if (containerText.includes('follow')) {
+                return 'follow';
+            }
+            
+            if (containerText.includes('message')) {
+                return 'message';
+            }
+            
+            // Default to 'unknown' if no status can be determined
+            return 'unknown';
+            
+        } catch (error) {
+            console.log('Error checking connection status:', error);
+            return 'unknown';
         }
     }
 
@@ -419,7 +485,7 @@ class LinkedInSearchFloatingUI {
 
     updateProfilesList() {
         const profilesList = this.ui.querySelector('#profiles-list');
-        const emptyMessage = this.config.messages?.empty?.profiles || 'No profiles collected yet. Click "START COLLECTING" to begin.';
+        const emptyMessage = this.config.messages?.empty?.profiles || 'No connect profiles collected yet. Click "START COLLECTING" to begin.';
 
         if (this.collectedProfiles.length === 0) {
             profilesList.innerHTML = `<div class="empty-profiles">${emptyMessage}</div>`;
@@ -493,7 +559,7 @@ class LinkedInSearchFloatingUI {
         nextBtn.textContent = `${buttonText} (${this.collectedProfiles.length})`;
 
         const statusMessage = `${this.config.messages?.status?.collected || 'profiles collected. Ready to connect!'}`;
-        this.updateStatus('status', `Collected ${this.collectedProfiles.length} ${statusMessage}`, false);
+        this.updateStatus('status', `Collected ${this.collectedProfiles.length} connect profiles. Ready to connect!`, false);
     }
 
     async startConnecting() {
@@ -1074,7 +1140,7 @@ class LinkedInSearchFloatingUI {
         nextBtn.style.display = 'none';
         this.ui.querySelector('#send-connect-count').textContent = '0';
         this.ui.querySelector('#Failed-connect-count').textContent = '0';
-        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting profiles', false);
+        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting connect profiles only', false);
     }
 
     async startAutomationProcess(automationUI) {
