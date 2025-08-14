@@ -6,6 +6,9 @@ class LinkedInProfileAutomation {
         this.config = window.LinkedInSearchConfig?.automation || {};
         this.maxRetries = this.config.timing?.maxRetries || 5;
         this.retryDelay = this.config.timing?.retryDelay || 1000;
+        this.typingDuration = this.config.timing?.typingDuration || 400000;
+        this.sendDelay = this.config.timing?.sendDelay || 9000;
+        this.postSendDelay = this.config.timing?.postSendDelay || 10000;
         this.init();
     }
 
@@ -61,7 +64,7 @@ class LinkedInProfileAutomation {
         if (this.isProcessing) return;
         this.isProcessing = true;
 
-        // Set a timeout to prevent getting stuck
+        const totalProcessTime = this.typingDuration + this.sendDelay + this.postSendDelay + 15000;
         const timeoutId = setTimeout(() => {
             console.log('Profile automation timeout reached');
             this.showAutomationIndicator('Automation timeout - returning to search', 'error');
@@ -69,7 +72,7 @@ class LinkedInProfileAutomation {
                 success: false,
                 error: 'Automation timeout - profile took too long to process'
             });
-        }, 30000); // 30 second timeout
+        }, totalProcessTime);
 
         try {
             console.log('Starting profile connection for:', this.automationState.profileName);
@@ -110,15 +113,15 @@ class LinkedInProfileAutomation {
                 return;
             }
 
-            // Step 3: Success
+            // Step 3: Success - wait before moving to next profile
             clearTimeout(timeoutId);
-            this.showAutomationIndicator('Connection sent successfully!', 'success');
+            this.showAutomationIndicator(`Connection sent successfully! Waiting ${this.postSendDelay/1000} seconds before next profile...`, 'success');
             setTimeout(() => {
                 this.returnToSearchWithResult({
                     success: true,
                     message: 'Connection request sent successfully'
                 });
-            }, 1000);
+            }, this.postSendDelay);
 
         } catch (error) {
             console.error('Error processing connection:', error);
@@ -290,29 +293,18 @@ class LinkedInProfileAutomation {
                 console.log('Found textarea, adding message...');
                 this.showAutomationIndicator('Adding custom message...');
 
-                // Clear existing text and add the message
+                // Clear existing text and focus
                 noteTextarea.value = '';
                 noteTextarea.focus();
 
-                // Set the message value
-                noteTextarea.value = this.automationState.message;
-
-                // Trigger events to ensure LinkedIn recognizes the input
-                noteTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                noteTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-                noteTextarea.dispatchEvent(new Event('keyup', { bubbles: true }));
-
-                console.log('Message added successfully:', this.automationState.message);
-
-                // Wait a bit for the UI to update
-                await new Promise(resolve => setTimeout(resolve, 500));
+                // Type message with realistic delay (1 minute total duration)
+                await this.typeMessageWithDelay(noteTextarea, this.automationState.message);
+                // Message typed successfully, now look for send button
+                this.showAutomationIndicator('Message typed successfully! Looking for Send button...', 'success');
             } else {
                 console.log('No textarea found, proceeding without custom message');
             }
-
-            // Wait a bit then look for send button
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
+            // Look for send button after typing
             this.showAutomationIndicator('Looking for Send button...');
 
             // Look for send button - exact match for your HTML structure
@@ -367,7 +359,9 @@ class LinkedInProfileAutomation {
                 console.log('Send button aria-label:', sendButton.getAttribute('aria-label'));
                 this.showAutomationIndicator('Sending connection request...');
                 sendButton.click();
-
+                // Wait for send button click to process (using configured delay)
+                await new Promise(resolve => setTimeout(resolve, this.sendDelay));
+                
                 return { success: true };
             } else {
                 console.log('Send button not found, checking if connection was already sent');
@@ -419,6 +413,43 @@ class LinkedInProfileAutomation {
         } catch (error) {
             resolve({ success: false, error: `Error filling message: ${error.message}` });
         }
+    }
+
+    typeMessageWithDelay(textarea, message) {
+        return new Promise((resolve) => {
+            const totalDuration = this.typingDuration;
+            const totalCharacters = message.length;
+            const delayPerCharacter = totalDuration / totalCharacters;
+            
+            let index = 0;
+            const startTime = Date.now();
+              this.showAutomationIndicator(`Typing message... `,'info');
+            
+            const typeChar = () => {
+                if (index < message.length) {
+                    textarea.value += message[index];
+                    
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                    textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+                    
+                    index++;
+
+                    const progress = Math.round((index / totalCharacters) * 100);
+                    const elapsed = Date.now() - startTime;
+                    const remaining = Math.round((totalDuration - elapsed) / 1000);
+
+                    setTimeout(typeChar, delayPerCharacter);
+                } else {
+                    // Finished typing
+                    this.showAutomationIndicator('Message typing completed!', 'success');
+                    resolve();
+                }
+            };
+            
+            // Start typing
+            typeChar();
+        });
     }
 
     typeMessage(textarea, message) {

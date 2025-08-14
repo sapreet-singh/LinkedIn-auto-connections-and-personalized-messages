@@ -22,9 +22,9 @@
                 <div class="stat-label" data-text="ui.stats.sendConnect">Send Connect:</div>
                 <div class="stat-number" id="send-connect-count">0</div>
             </div>
-            <div class="stat-card field-connect">
-                <div class="stat-label" data-text="ui.stats.fieldConnect">Field Connect:</div>
-                <div class="stat-number" id="field-connect-count">0</div>
+            <div class="stat-card Failed-connect">
+                <div class="stat-label" data-text="ui.stats.FailedConnect">Failed Connect:</div>
+                <div class="stat-number" id="Failed-connect-count">0</div>
             </div>
         </div>
 
@@ -67,13 +67,21 @@
         <div class="prompt-section" id="prompt-section">
             <label for="custom-prompt">Custom Prompt:</label>
             <textarea id="custom-prompt" placeholder="Enter your custom prompt for message generation..." rows="4"></textarea>
-            <button id="set-prompt-btn" class="set-prompt-btn">Set Prompt</button>
+            <button id="set-prompt-btn" class="set-prompt-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                </svg>
+            </button>
         </div>
 
         <div class="prompt-display" id="prompt-display" style="display: none;">
             <div class="prompt-label">Using Custom Prompt:</div>
             <div class="prompt-text" id="current-prompt-text"></div>
-            <button id="change-prompt-btn" class="change-prompt-btn">Change Prompt</button>
+            <button id="change-prompt-btn" class="change-prompt-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                </svg>
+            </button>
         </div>
 
         <div class="profiles-list-section">

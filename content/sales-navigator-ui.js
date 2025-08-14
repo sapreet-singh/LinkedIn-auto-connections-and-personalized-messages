@@ -1,4 +1,3 @@
-// Prevent multiple script executions
 if (window.salesNavigatorUILoaded) {
     console.log('Sales Navigator UI script already loaded, skipping');
 } else {
@@ -53,13 +52,14 @@ class SalesNavigatorFloatingUI {
         this.currentLinkedInProfileUrl = null;
         this.isProcessingThreeDotMenu = false;
         this.profileStatuses = {};
-        this.profileDelay = 5000;
+        this.profileDelay = 10000;
         this.sendConnectCount = 0;
-        this.fieldConnectCount = 0;
+        this.FailedConnectCount = 0;
         this.customPrompt = '';
         this.promptSet = false;
+        this.typingTotalDurationMs = 60000;
+        this.sendDelayAfterTypingMs = 30000;
         this.loadSavedCounters();
-
         this.loadBatchSettings();
         this.autoProcessingTimeout = null;
 
@@ -105,7 +105,7 @@ class SalesNavigatorFloatingUI {
                 this.workflowPaused = state.workflowPaused || false;
                 this.profileStatuses = state.profileStatuses || {};
                 this.sendConnectCount = state.sendConnectCount || 0;
-                this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.FailedConnectCount = state.FailedConnectCount || 0;
                 this.customPrompt = state.customPrompt || '';
                 this.promptSet = state.promptSet || false;
                 if (this.currentWorkflowStep === 'processing') {
@@ -270,7 +270,6 @@ class SalesNavigatorFloatingUI {
 
     createUI() {
         if (this.ui) return;
-
         const existingUI = document.querySelector('.sales-navigator-floating-ui');
         if (existingUI) {
             console.log('Sales Navigator UI already exists in DOM, skipping creation');
@@ -301,7 +300,7 @@ class SalesNavigatorFloatingUI {
                 </div>
                 <div class="send-connect-section">
                     <div class="connect-count">Send Connect: <span id="send-connect-count">0</span></div>
-                    <div class="connect-count">Field Connect: <span id="field-connect-count">0</span></div>
+                    <div class="connect-count">Failed Connect: <span id="Failed-connect-count">0</span></div>
                 </div>
                 <div class="profiles-section">
                     <div class="profiles-header">
@@ -312,7 +311,7 @@ class SalesNavigatorFloatingUI {
                         <div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>
                     </div>
                 </div>
-                <button class="sales-nav-btn next" id="next-button" style="display: none;">Next: Process Profiles (0)</button>
+                <button class="sales-nav-btn next" id="next-button" style="display: none;">Process Profiles (0)</button>
                 <div class="workflow-status" id="workflow-status" style="display: none;">
                     <div id="workflow-text">Ready to process profiles</div>
                 </div>
@@ -329,7 +328,6 @@ class SalesNavigatorFloatingUI {
         const minimizeBtn = this.ui.querySelector('.sales-nav-minimize');
         const clearBtn = this.ui.querySelector('#clear-profiles');
         const header = this.ui.querySelector('.sales-nav-header');
-
         startBtn.addEventListener('click', () => this.startCollecting());
         pauseBtn.addEventListener('click', () => this.pauseCollecting());
         nextBtn.addEventListener('click', () => this.startWorkflow());
@@ -343,7 +341,6 @@ class SalesNavigatorFloatingUI {
         let isDragging = false;
         let currentX, currentY, initialX, initialY;
         let xOffset = 0, yOffset = 0;
-
         handle.addEventListener('mousedown', (e) => {
             initialX = e.clientX - xOffset;
             initialY = e.clientY - yOffset;
@@ -434,12 +431,11 @@ class SalesNavigatorFloatingUI {
                 this.automationRunning = state.automationRunning || false;
                 this.workflowPaused = state.workflowPaused || false;
                 this.sendConnectCount = state.sendConnectCount || 0;
-                this.fieldConnectCount = state.fieldConnectCount || 0;
+                this.FailedConnectCount = state.FailedConnectCount || 0;
                 this.customPrompt = state.customPrompt || '';
                 this.promptSet = state.promptSet || false;
                 this.currentLinkedInProfileUrl = null;
                 this.showWorkflowPopup();
-
                 setTimeout(() => {
                     this.updateButtonStates();
                     this.restoreProfileStatuses();
@@ -642,7 +638,7 @@ class SalesNavigatorFloatingUI {
             statusText.textContent = 'Collection paused';
             if (this.profiles.length > 0) {
                 nextBtn.style.display = 'block';
-                nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+                nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
             } else {
                 nextBtn.style.display = 'none';
             }
@@ -655,7 +651,7 @@ class SalesNavigatorFloatingUI {
         countElement.textContent = this.profiles.length;
         if (this.profiles.length > 0 && !this.isCollecting) {
             nextBtn.style.display = 'block';
-            nextBtn.textContent = `Next: Process Profiles (${this.profiles.length})`;
+            nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
         } else if (this.profiles.length === 0) {
             nextBtn.style.display = 'none';
         }
@@ -663,20 +659,19 @@ class SalesNavigatorFloatingUI {
 
     updateConnectCounts() {
         const sendConnectElement = this.ui?.querySelector('#send-connect-count');
-        const fieldConnectElement = this.ui?.querySelector('#field-connect-count');
+        const FailedConnectElement = this.ui?.querySelector('#Failed-connect-count');
 
         if (sendConnectElement) {
             sendConnectElement.textContent = this.sendConnectCount;
         }
-        if (fieldConnectElement) {
-            fieldConnectElement.textContent = this.fieldConnectCount;
+        if (FailedConnectElement) {
+            FailedConnectElement.textContent = this.FailedConnectCount;
         }
-
         // Also update in workflow popup if it exists
         const workflowSendConnect = document.getElementById('send-connect-count');
-        const workflowFieldConnect = document.getElementById('field-connect-count');
+        const workflowFailedConnect = document.getElementById('Failed-connect-count');
         if (workflowSendConnect) workflowSendConnect.textContent = this.sendConnectCount;
-        if (workflowFieldConnect) workflowFieldConnect.textContent = this.fieldConnectCount;
+        if (workflowFailedConnect) workflowFailedConnect.textContent = this.FailedConnectCount;
     }
 
     updateProfilesList() {
@@ -704,7 +699,6 @@ class SalesNavigatorFloatingUI {
                 </div>
             </div>
         `).join('');
-
         // Add event listeners for profile actions
         listElement.querySelectorAll('.profile-url').forEach(urlElement => {
             urlElement.addEventListener('click', (e) => {
@@ -778,14 +772,12 @@ class SalesNavigatorFloatingUI {
             workflowPaused: this.workflowPaused,
             profileStatuses: this.profileStatuses || {},
             sendConnectCount: this.sendConnectCount || 0,
-            fieldConnectCount: this.fieldConnectCount || 0,
+            FailedConnectCount: this.FailedConnectCount || 0,
             customPrompt: this.customPrompt || '',
             promptSet: this.promptSet || false
         };
         localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
     }
-
-
 
     updateButtonStates() {
         const startBtn = document.getElementById('start-automation');
@@ -811,7 +803,6 @@ class SalesNavigatorFloatingUI {
         const overlay = document.createElement('div');
         overlay.id = 'workflow-popup-overlay';
         overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.3) !important; z-index: 999999 !important; display: flex !important; justify-content: flex-end !important; align-items: flex-start !important; pointer-events: none !important; padding: 20px !important;`;
-
         const popup = document.createElement('div');
         popup.id = 'workflow-popup';
         popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 450px !important; max-height: 90vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important; margin-top: 20px !important;`;
@@ -835,14 +826,19 @@ class SalesNavigatorFloatingUI {
                     <strong>Custom Prompt: </strong>
                     <textarea id="custom-prompt-input" placeholder="Enter your custom prompt for message generation..."
                         style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 14px;">${this.customPrompt}</textarea>
-                    <button id="set-prompt-btn" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">Set Prompt</button>
+                    <button id="set-prompt-btn" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
+                            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                        </svg>
+                    </button>
                 </div>
                 <div id="prompt-display" style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 8px; ${!this.promptSet ? 'display: none;' : ''}">
                     <strong>Using Custom Prompt: </strong><span id="current-prompt-text" style="font-style: italic;">${this.customPrompt}</span>
-                    <button id="change-prompt-btn" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px;">Change</button>
-                </div>
-                <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-top: 8px;">
-                    <strong>Current Profile URL: </strong><span id="workflow-profile-url" style="font-size: 12px; word-break: break-all;">${this.getCurrentProfileUrl()}</span>
+                    <button id="change-prompt-btn" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
+                            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                        </svg>
+                    </button>
                 </div>
                 <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; margin-top: 8px;">
                     <strong>LinkedIn URL: </strong><span id="workflow-linkedin-url" style="font-size: 12px; word-break: break-all;">${this.currentLinkedInProfileUrl || 'Will be captured from profile'}</span>
@@ -928,7 +924,6 @@ class SalesNavigatorFloatingUI {
     }
 
     restoreProfileStatuses() {
-
         Object.keys(this.profileStatuses).forEach(index => {
             const savedStatus = this.profileStatuses[index];
             if (savedStatus) {
@@ -1317,8 +1312,6 @@ class SalesNavigatorFloatingUI {
                     }
                     const copiedUrl = linkedinUrl;
 
-
-
                     if (copiedUrl) {
                         this.currentLinkedInProfileUrl = copiedUrl;
                         this.updateWorkflowUI();
@@ -1329,7 +1322,6 @@ class SalesNavigatorFloatingUI {
                              const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
                              console.log('Message Data:', messageData);
                            // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
-
                             if (messageData && messageData.message) {
                                 this.generatedMessage = messageData.message;
                                 this.updateWorkflowUI();
@@ -1346,7 +1338,7 @@ class SalesNavigatorFloatingUI {
                         }
 
                         this.saveState();
-                        await this.wait(1000);
+                        await this.wait(10000);
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
@@ -1441,7 +1433,7 @@ class SalesNavigatorFloatingUI {
             const statusElement = document.getElementById('workflow-current-status');
             if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
 
-            await this.wait(1500);
+            await this.wait(8000);
 
             // Check if email is required first
             const emailInput = document.querySelector('input[type="email"]') ||
@@ -1463,30 +1455,25 @@ class SalesNavigatorFloatingUI {
                       document.querySelector('.send-invite textarea');
 
         if (!textarea) {
-            await this.wait(1000);
+            await this.wait(7000);
             textarea = document.querySelector('textarea') ||
                       document.querySelector('input[type="text"][maxlength="300"]');
         }
 
         if (textarea) {
-            if (statusElement) statusElement.textContent = 'Found textarea, filling message...';
+            if (statusElement) statusElement.textContent = 'Found textarea, typing message word-by-word...';
 
             textarea.value = '';
             textarea.focus();
 
-            const message = this.generatedMessage || 'Hello dear';
-            for (let i = 0; i < message.length; i++) {
-                textarea.value += message[i];
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
-                await this.wait(30);
-            }
+            const message = this.generatedMessage;
+            await this.typeMessageWordByWord(textarea, message);
 
             textarea.dispatchEvent(new Event('change', { bubbles: true }));
             textarea.dispatchEvent(new Event('blur', { bubbles: true }));
 
-            if (statusElement) statusElement.textContent = 'Message filled! Looking for Send button...';
-            await this.wait(1000);
+            if (statusElement) statusElement.textContent = `Message typed. Waiting ${Math.round(this.sendDelayAfterTypingMs/1000)}s before sending...`;
+            await this.wait(this.sendDelayAfterTypingMs);
 
             return await this.clickSendInvitationButton();
         } else {
@@ -1497,8 +1484,8 @@ class SalesNavigatorFloatingUI {
                          document.querySelector('[aria-labelledby*="send-invite"]');
 
             if (popup) {
-                if (statusElement) statusElement.textContent = 'Popup found but textarea missing - trying alternative approach...';
-                await this.wait(1000);
+                if (statusElement) statusElement.textContent = `Popup found but textarea missing - sending in ${Math.round(this.sendDelayAfterTypingMs/1000)}s...`;
+                await this.wait(this.sendDelayAfterTypingMs);
                 return await this.clickSendInvitationButton();
             } else {
                 if (statusElement) statusElement.textContent = 'Send invitation popup not found - skipping';
@@ -1560,13 +1547,13 @@ class SalesNavigatorFloatingUI {
             }
         } else if (sendButton && sendButton.disabled) {
             if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
-            this.fieldConnectCount++;
+            this.FailedConnectCount++;
             this.updateConnectCounts();
             this.closeConnectionModal();
             return { skipped: true, reason: 'send_button_disabled' };
         } else {
             if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
-            this.fieldConnectCount++;
+            this.FailedConnectCount++;
             this.updateConnectCounts();
             this.closeConnectionModal();
             return { skipped: true, reason: 'send_button_not_found' };
@@ -1598,6 +1585,46 @@ class SalesNavigatorFloatingUI {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    async typeMessageWordByWord(textarea, message) {
+        try {
+            const maxlengthAttr = textarea.getAttribute('maxlength');
+            const maxCharacters = maxlengthAttr ? parseInt(maxlengthAttr, 10) : 300;
+            const rawWords = (message || '').split(/\s+/).filter(w => w && w.length > 0);
+            if (rawWords.length === 0) return;
+
+            const wordsWithinLimit = [];
+            let runningLength = 0;
+            for (let i = 0; i < rawWords.length; i++) {
+                const word = rawWords[i];
+                const separator = i === 0 ? '' : ' ';
+                if (runningLength + separator.length + word.length <= maxCharacters) {
+                    wordsWithinLimit.push(word);
+                    runningLength += separator.length + word.length;
+                } else {
+                    break;
+                }
+            }
+
+            const totalWords = Math.max(1, wordsWithinLimit.length);
+            const delayPerWordMs = Math.max(50, Math.floor(this.typingTotalDurationMs / totalWords));
+
+            textarea.value = '';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+            for (let i = 0; i < wordsWithinLimit.length; i++) {
+                const word = wordsWithinLimit[i];
+                textarea.value = i === 0 ? word : `${textarea.value} ${word}`;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+                await this.wait(delayPerWordMs);
+            }
+        } catch (e) {
+            const fallback = (message || '').slice(0, 300);
+            textarea.value = fallback;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
     completeWorkflow() {
         const statusElement = document.getElementById('workflow-current-status');
         const progressElement = document.getElementById('workflow-progress');
@@ -1627,7 +1654,6 @@ class SalesNavigatorFloatingUI {
                 <div style="color: #155724;">
                     <div>✅ Successfully processed: ${completedCount} profiles</div>
                     ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
-                    <div>💬 Message used: "${this.generatedMessage || 'No message generated'}"</div>
                     <div style="margin-top: 12px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404;">
                         🔄 Returning to Sales Navigator search in 5 seconds to start new collection...
                     </div>
@@ -1638,7 +1664,7 @@ class SalesNavigatorFloatingUI {
 
         // Save counters before clearing state
         const savedSendConnectCount = this.sendConnectCount;
-        const savedFieldConnectCount = this.fieldConnectCount;
+        const savedFailedConnectCount = this.FailedConnectCount;
 
         localStorage.removeItem('salesNavWorkflow');
         this.currentWorkflowStep = 'collecting';
@@ -1654,7 +1680,7 @@ class SalesNavigatorFloatingUI {
 
         // Restore counters after clearing state
         this.sendConnectCount = savedSendConnectCount;
-        this.fieldConnectCount = savedFieldConnectCount;
+        this.FailedConnectCount = savedFailedConnectCount;
 
         setTimeout(() => {
             if (statusElement) {
@@ -1663,7 +1689,7 @@ class SalesNavigatorFloatingUI {
             // Save counters to localStorage for persistence across page navigation
             localStorage.setItem('salesNavCounters', JSON.stringify({
                 sendConnectCount: this.sendConnectCount,
-                fieldConnectCount: this.fieldConnectCount
+                FailedConnectCount: this.FailedConnectCount
             }));
             const salesNavUrl = 'https://www.linkedin.com/sales/search/people?viewAllFilters=true';
             window.location.href = salesNavUrl;
@@ -1675,12 +1701,12 @@ class SalesNavigatorFloatingUI {
             if (savedCounters) {
                 const counters = JSON.parse(savedCounters);
                 this.sendConnectCount = counters.sendConnectCount || 0;
-                this.fieldConnectCount = counters.fieldConnectCount || 0;
+                this.FailedConnectCount = counters.FailedConnectCount || 0;
             }
         } catch (error) {
             console.error('Error loading saved counters:', error);
             this.sendConnectCount = 0;
-            this.fieldConnectCount = 0;
+            this.FailedConnectCount = 0;
         }
     }
 
@@ -1704,7 +1730,6 @@ class SalesNavigatorFloatingUI {
                 break;
             }
         }
-
         // Also try pressing Escape key
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }));
     }
@@ -1721,6 +1746,4 @@ if (typeof window.salesNavUI === 'undefined' &&
     } catch (error) {
         console.error('Error creating SalesNavigatorFloatingUI instance:', error);
     }
-}
-
-}
+}}

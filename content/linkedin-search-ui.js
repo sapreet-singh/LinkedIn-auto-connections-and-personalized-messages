@@ -279,22 +279,45 @@ class LinkedInSearchFloatingUI {
     }
 
     isProfileElement(element) {
-        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', '[componentkey]'];
-        return selectors.some(selector =>
-            element.matches && element.matches(selector) ||
-            element.querySelector && element.querySelector(selector)
-        );
+        const selectors = [
+            // New LinkedIn layout selectors only
+            'div._2c29d41c._41db7c7a.dbd91781._4a774068.c1850194.de64d16b',
+            'div:has(figure._5b09ce5a) div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[href*="/in/"][data-view-name="search-result-lockup-title"])',
+            'div[componentkey]:has(a[href*="/in/"])'
+        ];
+        return selectors.some(selector => {
+            try {
+                return element.matches && element.matches(selector) ||
+                       element.querySelector && element.querySelector(selector);
+            } catch (e) {
+                // Handle invalid selectors gracefully
+                return false;
+            }
+        });
     }
 
     collectCurrentPageProfiles() {
         if (!this.isCollecting) return;
-        const selectors = ['.entity-result', '[data-chameleon-result-urn]', '.reusable-search__result-container', '.search-results__result-item', 'div[componentkey]:has(a[href*="/in/"])', 'div:has(> div > figure img[alt]) div:has(a[href*="/in/"])'];
+        const selectors = [
+            // New LinkedIn layout selectors only
+            'div._2c29d41c._41db7c7a.dbd91781._4a774068.c1850194.de64d16b',
+            'div:has(figure._5b09ce5a) div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[data-view-name="search-result-lockup-title"])',
+            'div:has(a[href*="/in/"][data-view-name="search-result-lockup-title"])',
+            'div[componentkey]:has(a[href*="/in/"])'
+        ];
         let profileElements = [];
         for (const selector of selectors) {
             try {
                 profileElements = document.querySelectorAll(selector);
-                if (profileElements.length > 0) break;
+                if (profileElements.length > 0) {
+                    console.log(`Found ${profileElements.length} profiles using selector: ${selector}`);
+                    break;
+                }
             } catch (e) {
+                console.log(`Selector failed: ${selector}`, e);
                 continue;
             }
         }
@@ -302,17 +325,22 @@ class LinkedInSearchFloatingUI {
             const profile = this.extractProfileData(element);
             if (profile && !this.isDuplicateProfile(profile)) {
                 this.addProfile(profile);
+            } else if (!profile) {
             }
         });
     }
 
     extractProfileData(element) {
         try {
+            // New LinkedIn layout selectors for name element
             const nameElement = element.querySelector('a[href*="/in/"][data-view-name="search-result-lockup-title"]') ||
-                               element.querySelector('.entity-result__title-text a') ||
-                               element.querySelector('.actor-name a') ||
+                               element.querySelector('a[data-view-name="search-result-lockup-title"]') ||
                                element.querySelector('a[href*="/in/"]');
-            if (!nameElement) return null;
+            
+            if (!nameElement) {
+                console.log('No name element found in profile container');
+                return null;
+            }
 
             let name = nameElement.textContent?.trim();
             if (name && name.includes(' is reachable')) {
@@ -321,34 +349,116 @@ class LinkedInSearchFloatingUI {
 
             const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
             let title = '', company = '', location = '';
-            const parentContainer = nameElement.closest('div[componentkey]') || element;
+            
+            // Find the parent container that contains all profile information
+            const parentContainer = nameElement.closest('div[componentkey]') || 
+                                  nameElement.closest('div:has(figure img)') || 
+                                  element;
+            
             const textElements = parentContainer.querySelectorAll('p');
 
             textElements.forEach((p) => {
                 const text = p.textContent?.trim();
                 if (!text || text.includes(name)) return;
-                if (!title && text && !text.includes('•') && !text.includes(',')) {
+                
+                // Skip elements with verification badges or connection info
+                if (text.includes('•') && (text.includes('1st') || text.includes('2nd') || text.includes('3rd'))) {
+                    return;
+                }
+                
+                if (!title && text && !text.includes('•') && !text.includes(',') && text.length > 3) {
                     title = text;
-                } else if (!location && text && (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK'))) {
+                } else if (!location && text && (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK') || text.includes('Punjab'))) {
                     location = text;
                 }
             });
 
+            // Extract company from title if it contains " at "
             if (title && title.includes(' at ')) {
                 const parts = title.split(' at ');
                 title = parts[0]?.trim() || '';
                 company = parts[1]?.trim() || '';
             }
 
-            const imageElement = parentContainer.querySelector('img[alt="' + name + '"]') ||
+            // Check connection status - only add profiles with "Connect" button
+            const connectionStatus = this.checkConnectionStatus(parentContainer);
+            if (connectionStatus !== 'connect') {
+                return null;
+            }
+
+            // Try multiple selectors for profile image
+            const imageElement = parentContainer.querySelector(`img[alt="${name}"]`) ||
                                parentContainer.querySelector('img[src*="profile"]') ||
-                               parentContainer.querySelector('figure img');
+                               parentContainer.querySelector('figure img') ||
+                               parentContainer.querySelector('img[alt*="' + name.split(' ')[0] + '"]');
+
             const profilePic = imageElement?.src || '';
 
-            return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search' };
+            console.log(`Extracted profile: ${name} - ${title} at ${company} - ${location} (Status: ${connectionStatus})`);
+
+            return { name, url, title, company, location, profilePic, timestamp: Date.now(), source: 'linkedin-search', connectionStatus };
         } catch (error) {
-            console.log('Failed to extract profile data');
+            console.log('Failed to extract profile data:', error);
             return null;
+        }
+    }
+
+    checkConnectionStatus(container) {
+        try {
+            const buttons = container.querySelectorAll('button');
+            
+            for (const button of buttons) {
+                const buttonText = button.textContent?.trim().toLowerCase() || '';
+                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                // Check for "Connect" button
+                if ((buttonText.includes('connect') || ariaLabel.includes('connect')) && 
+                    !buttonText.includes('following') && 
+                    !ariaLabel.includes('following')) {
+                    return 'connect';
+                }
+                
+                // Check for "Follow" button
+                if (buttonText.includes('follow') || ariaLabel.includes('follow')) {
+                    return 'follow';
+                }
+                
+                // Check for "Message" button
+                if (buttonText.includes('message') || ariaLabel.includes('message')) {
+                    return 'message';
+                }
+                
+                // Check for "Pending" status (usually shows as "Pending" or "Invitation sent")
+                if (buttonText.includes('pending') || 
+                    buttonText.includes('invitation sent') || 
+                    buttonText.includes('invite sent') ||
+                    ariaLabel.includes('pending') || 
+                    ariaLabel.includes('invitation sent') || 
+                    ariaLabel.includes('invite sent')) {
+                    return 'pending';
+                }
+            }
+            
+            // If no specific button found, check for connection-related text in the container
+            const containerText = container.textContent?.toLowerCase() || '';
+            
+            if (containerText.includes('pending') || containerText.includes('invitation sent')) {
+                return 'pending';
+            }
+            
+            if (containerText.includes('follow')) {
+                return 'follow';
+            }
+            
+            if (containerText.includes('message')) {
+                return 'message';
+            }
+            
+            // Default to 'unknown' if no status can be determined
+            return 'unknown';
+            
+        } catch (error) {
+            console.log('Error checking connection status:', error);
+            return 'unknown';
         }
     }
 
@@ -375,7 +485,7 @@ class LinkedInSearchFloatingUI {
 
     updateProfilesList() {
         const profilesList = this.ui.querySelector('#profiles-list');
-        const emptyMessage = this.config.messages?.empty?.profiles || 'No profiles collected yet. Click "START COLLECTING" to begin.';
+        const emptyMessage = this.config.messages?.empty?.profiles || 'No connect profiles collected yet. Click "START COLLECTING" to begin.';
 
         if (this.collectedProfiles.length === 0) {
             profilesList.innerHTML = `<div class="empty-profiles">${emptyMessage}</div>`;
@@ -449,7 +559,7 @@ class LinkedInSearchFloatingUI {
         nextBtn.textContent = `${buttonText} (${this.collectedProfiles.length})`;
 
         const statusMessage = `${this.config.messages?.status?.collected || 'profiles collected. Ready to connect!'}`;
-        this.updateStatus('status', `Collected ${this.collectedProfiles.length} ${statusMessage}`, false);
+        this.updateStatus('status', `Collected ${this.collectedProfiles.length} connect profiles. Ready to connect!`, false);
     }
 
     async startConnecting() {
@@ -692,13 +802,13 @@ class LinkedInSearchFloatingUI {
         console.log('Processing connection requests for:', this.collectedProfiles);
 
         const sendRatio = this.config.stats?.sendConnectRatio || 0.7;
-        const fieldRatio = this.config.stats?.fieldConnectRatio || 0.3;
+        const FailedRatio = this.config.stats?.FailedConnectRatio || 0.3;
 
         const sendConnectCount = this.ui.querySelector('#send-connect-count');
-        const fieldConnectCount = this.ui.querySelector('#field-connect-count');
+        const FailedConnectCount = this.ui.querySelector('#Failed-connect-count');
 
         sendConnectCount.textContent = Math.floor(this.collectedProfiles.length * sendRatio);
-        fieldConnectCount.textContent = Math.floor(this.collectedProfiles.length * fieldRatio);
+        FailedConnectCount.textContent = Math.floor(this.collectedProfiles.length * FailedRatio);
     }
 
     setupAutomationEventListeners(automationUI) {
@@ -767,7 +877,7 @@ class LinkedInSearchFloatingUI {
         if (changePromptBtn && customPromptTextarea) {
             changePromptBtn.addEventListener('click', () => {
                 this.automationState.promptSet = false;
-                this.automationState.customPrompt = '';
+                // Keep existing customPrompt content so user can edit it instead of starting from scratch
 
                 // Save the updated automation state
                 this.saveAutomationState();
@@ -778,7 +888,8 @@ class LinkedInSearchFloatingUI {
 
                 if (promptSection) promptSection.style.display = 'block';
                 if (promptDisplay) promptDisplay.style.display = 'none';
-                customPromptTextarea.value = '';
+                // Prefill textarea with the previously saved prompt for editing convenience
+                customPromptTextarea.value = this.automationState?.customPrompt || '';
 
                 // Disable start button
                 if (startAutomationBtn) {
@@ -786,7 +897,7 @@ class LinkedInSearchFloatingUI {
                     startAutomationBtn.textContent = '🚀 Start Automation (Set Prompt First)';
                 }
 
-                console.log('Prompt cleared and state saved');
+                console.log('Prompt edit mode enabled and state saved');
             });
         }
 
@@ -1028,8 +1139,8 @@ class LinkedInSearchFloatingUI {
         collectBtn.classList.add('start');
         nextBtn.style.display = 'none';
         this.ui.querySelector('#send-connect-count').textContent = '0';
-        this.ui.querySelector('#field-connect-count').textContent = '0';
-        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting profiles', false);
+        this.ui.querySelector('#Failed-connect-count').textContent = '0';
+        this.updateStatus('status', this.config.messages?.status?.ready || 'Ready to start collecting connect profiles only', false);
     }
 
     async startAutomationProcess(automationUI) {

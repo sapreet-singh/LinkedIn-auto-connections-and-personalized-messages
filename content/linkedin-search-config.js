@@ -90,7 +90,10 @@ const LinkedInSearchConfig = {
             buttonClickDelay: 1000,
             retryDelay: 1000,
             maxRetries: 5,
-            typeDelay: 10
+            typeDelay: 10,
+            typingDuration: 40000,
+            sendDelay: 2000,
+            postSendDelay: 10000
         },
         messages: {
             processing: 'LinkedIn Automation Active - Processing profile...',
