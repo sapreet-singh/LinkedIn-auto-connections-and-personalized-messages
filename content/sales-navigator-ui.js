@@ -58,7 +58,7 @@ class SalesNavigatorFloatingUI {
         this.customPrompt = '';
         this.promptSet = false;
         this.typingTotalDurationMs = 60000;
-        this.sendDelayAfterTypingMs = 30000;
+        this.sendDelayAfterTypingMs = 15000;
         this.loadSavedCounters();
         this.loadBatchSettings();
         this.autoProcessingTimeout = null;
@@ -337,7 +337,7 @@ class SalesNavigatorFloatingUI {
         this.makeDraggable(header);
     }
 
-    makeDraggable(handle) {
+     makeDraggable(handle) {
         let isDragging = false;
         let currentX, currentY, initialX, initialY;
         let xOffset = 0, yOffset = 0;
@@ -357,20 +357,15 @@ class SalesNavigatorFloatingUI {
                 currentY = e.clientY - initialY;
                 xOffset = currentX;
                 yOffset = currentY;
-                const rect = this.ui.getBoundingClientRect();
-                const maxX = window.innerWidth - rect.width;
-                const maxY = window.innerHeight - rect.height;
-                currentX = Math.max(0, Math.min(currentX, maxX));
-                currentY = Math.max(0, Math.min(currentY, maxY));
                 this.ui.style.transform = `translate(${currentX}px, ${currentY}px)`;
             }
         });
 
         document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                this.ui.style.cursor = 'move';
-            }
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+            this.ui.style.cursor = 'move';
         });
     }
 
@@ -1263,6 +1258,46 @@ class SalesNavigatorFloatingUI {
         });
     }
 
+    // Helper: reliably resolve the overflow menu opened by a trigger button
+    getOverflowMenuForButton(button) {
+        if (!button) return null;
+        const menuId = button.getAttribute('aria-controls');
+        let menu = menuId ? document.getElementById(menuId) : null;
+        if (!menu || !this.isElementVisible(menu)) {
+            const candidates = Array.from(document.querySelectorAll('div[role="menu"], [id^="hue-menu-"]'));
+            const visibleMenus = candidates.filter(el => this.isElementVisible(el));
+            const preferred = visibleMenus.find(el => {
+                const text = (el.textContent || '').toLowerCase();
+                return text.includes('copy') || text.includes('connect') || text.includes('linkedin');
+            });
+            menu = preferred || visibleMenus.pop() || menu;
+        }
+        return menu || null;
+    }
+
+    // Helper: visibility check for menus rendered in portals
+    isElementVisible(element) {
+        if (!element) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        if (element.offsetParent !== null) return true;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    // Helper: find a menu item by text patterns
+    findMenuItemByText(menu, patterns) {
+        if (!menu) return null;
+        const items = Array.from(menu.querySelectorAll('a, button, div, span'));
+        return items.find(el => {
+            const text = (el.textContent || '').toLowerCase().trim();
+            return patterns.some(p => {
+                if (typeof p === 'string') return text.includes(p);
+                try { return p.test(text); } catch { return false; }
+            });
+        }) || null;
+    }
+
     async showThreeDotMenu() {
         if (this.isProcessingThreeDotMenu) return;
         this.isProcessingThreeDotMenu = true;
@@ -1278,18 +1313,12 @@ class SalesNavigatorFloatingUI {
             button.click();
             if (statusElement) statusElement.textContent = 'Three-dot menu clicked!';
             await this.wait(1000);
-            const menu = document.querySelector('#hue-menu-ember48') ||
-                        document.querySelector('[id^="hue-menu-"]') ||
-                        document.querySelector('div[role="menu"]');
-
+            let menu = this.getOverflowMenuForButton(button);
             if (menu) {
                 if (statusElement) statusElement.textContent = 'Menu opened! Looking for LinkedIn profile option...';
                 await this.wait(500);
-                const copyUrlOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
-                    const text = (el.textContent || '').toLowerCase().trim();
-                    return text.includes('copy linkedin.com url') || text.includes('copy linkedin url') || text.includes('copy url') || text === 'copy linkedin.com url';
-                });
-
+                const copyUrlOption = this.findMenuItemByText(menu, ['copy linkedin.com url','copy linkedin url','copy url',/copy\s+linkedin/i]);
+                console.log('Copy URL Option:', copyUrlOption);
                 if (copyUrlOption) {
                     if (statusElement) statusElement.textContent = 'Extracting LinkedIn URL...';
                     let linkedinUrl = this.extractLinkedInUrlFromPage();
@@ -1311,7 +1340,7 @@ class SalesNavigatorFloatingUI {
                         }
                     }
                     const copiedUrl = linkedinUrl;
-
+                    console.log('Copied URL:', copiedUrl);
                     if (copiedUrl) {
                         this.currentLinkedInProfileUrl = copiedUrl;
                         this.updateWorkflowUI();
@@ -1344,6 +1373,25 @@ class SalesNavigatorFloatingUI {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
                     }
                 } else {
+                    const viewProfile = this.findMenuItemByText(menu, [
+                        'view linkedin profile',
+                        /view\s+profile/i
+                    ]);
+                    if (viewProfile) {
+                        if (statusElement) statusElement.textContent = 'Copy option not found. Opening LinkedIn profile...';
+                        viewProfile.click();
+                        await this.wait(2000);
+                        const urlFromPage = this.extractLinkedInUrlFromPage();
+                        if (urlFromPage) {
+                            this.currentLinkedInProfileUrl = urlFromPage;
+                            this.updateWorkflowUI();
+                            if (statusElement) statusElement.textContent = 'LinkedIn URL captured from profile!';
+                            this.saveState();
+                            await this.wait(10000);
+                            await this.clickConnectButton(true);
+                            return;
+                        }
+                    }
                     if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
                 }
             } else {
@@ -1374,9 +1422,8 @@ class SalesNavigatorFloatingUI {
         let menu = null;
 
         if (menuAlreadyOpen) {
-            menu = document.querySelector('#hue-menu-ember48') ||
-                   document.querySelector('[id^="hue-menu-"]') ||
-                   document.querySelector('div[role="menu"]');
+            const trigger = document.querySelector('button[aria-label="Open actions overflow menu"], button[id^="hue-menu-trigger-"], button._overflow-menu--trigger_1xow7n');
+            menu = this.getOverflowMenuForButton(trigger);
         } else {
             document.body.click();
             await this.wait(500);
@@ -1389,10 +1436,7 @@ class SalesNavigatorFloatingUI {
                 if (statusElement) statusElement.textContent = 'Opening three-dot menu for Connect...';
                 button.click();
                 await this.wait(1000);
-
-                menu = document.querySelector('#hue-menu-ember48') ||
-                       document.querySelector('[id^="hue-menu-"]') ||
-                       document.querySelector('div[role="menu"]');
+                menu = this.getOverflowMenuForButton(button);
             } else {
                 if (statusElement) statusElement.textContent = 'Three-dot button not found for Connect';
                 this.isProcessingThreeDotMenu = false;

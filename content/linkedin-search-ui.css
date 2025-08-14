@@ -845,9 +845,8 @@
 
 .automation-starter-ui {
     position: fixed !important;
-    top: 50% !important;
-    left: 50% !important;
-    transform: translate(-50%, -50%) !important;
+    top: 80px !important;
+    right: 20px !important;
     width: 600px !important;
     max-height: 85vh !important;
     background: white !important;
@@ -1061,6 +1060,52 @@
     user-select: none !important;
 }
 
+.linkedin-search-floating-ui .linkedin-search-header:active {
+    background: linear-gradient(135deg, #0959a8, #003a6b) !important;
+    transform: scale(0.98) !important;
+}
+
+.linkedin-search-floating-ui:not(.dragging) {
+    transition: transform 0.1s ease-out !important;
+}
+
+.linkedin-search-floating-ui.dragging * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+}
+
 .linkedin-search-floating-ui.minimized .linkedin-search-content {
     display: none !important;
+}
+
+.automation-starter-ui.dragging {
+    transition: none !important;
+    user-select: none !important;
+    cursor: grabbing !important;
+}
+
+.automation-starter-ui .automation-header {
+    cursor: move !important;
+}
+
+.automation-starter-ui .automation-header:hover {
+    background: linear-gradient(135deg, #0066a3, #004a7a) !important;
+}
+
+.automation-starter-ui .automation-header:active {
+    background: linear-gradient(135deg, #005a8f, #00406b) !important;
+    transform: scale(0.98) !important;
+}
+
+.automation-starter-ui:not(.dragging) {
+    transition: transform 0.1s ease-out !important;
+}
+
+.automation-starter-ui.dragging * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
 }

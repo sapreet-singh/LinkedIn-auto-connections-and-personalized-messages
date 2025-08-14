@@ -215,6 +215,41 @@ class LinkedInSearchFloatingUI {
         });
     }
 
+    makeAutomationUIDraggable(handle, automationUI) {
+        let isDragging = false;
+        let currentX, currentY, initialX, initialY;
+        let xOffset = 0, yOffset = 0;
+
+        handle.addEventListener('mousedown', (e) => {
+            initialX = e.clientX - xOffset;
+            initialY = e.clientY - yOffset;
+            if (e.target === handle || handle.contains(e.target)) {
+                isDragging = true;
+                automationUI.style.cursor = 'grabbing';
+                automationUI.classList.add('dragging');
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                xOffset = currentX;
+                yOffset = currentY;
+                automationUI.style.transform = `translate(${currentX}px, ${currentY}px)`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+            automationUI.style.cursor = 'move';
+            automationUI.classList.remove('dragging');
+        });
+    }
+
     toggleCollecting() {
         if (this.isCollecting) {
             this.pauseCollecting();
@@ -584,6 +619,11 @@ class LinkedInSearchFloatingUI {
 
         if (automationUI && automationUI instanceof Node) {
             document.body.appendChild(automationUI);
+
+            const automationHeader = automationUI.querySelector('.automation-header');
+            if (automationHeader) {
+                this.makeAutomationUIDraggable(automationHeader, automationUI);
+            }
         } else {
             console.error('Invalid automation UI element:', automationUI);
             throw new Error('Failed to create valid automation UI element');
@@ -637,6 +677,14 @@ class LinkedInSearchFloatingUI {
 
         // Restore the automation UI
         await this.showAutomationStarterUI();
+        
+        const restoredAutomationUI = document.querySelector('.automation-starter-ui');
+        if (restoredAutomationUI) {
+            const automationHeader = restoredAutomationUI.querySelector('.automation-header');
+            if (automationHeader) {
+                this.makeAutomationUIDraggable(automationHeader, restoredAutomationUI);
+            }
+        }
 
         // Make sure the search UI is hidden
         if (this.ui) {
