@@ -8,8 +8,8 @@ const CONSTANTS = {
         SALES_NAVIGATOR: 'https://www.linkedin.com/sales/search/people'
     },
     API: {
-        BASE_URL: 'http://localhost:7008/api/linkedin',
-        ENDPOINTS: { MESSAGES: '/messages' }
+        BASE_URL: 'https://localhost:7007',
+        ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
     }
 };
 
@@ -326,8 +326,6 @@ const Utils = {
         return card;
     }
 };
-
-
 
 const ModalManager = {
     init() {
@@ -924,8 +922,6 @@ const CampaignManager = {
         AppState.collectedProfiles = [];
     }
 };
-
-
 
 const ProfileManager = {
     view() {
@@ -1995,142 +1991,6 @@ const LinkedInSearchFloatingManager = {
 
         } catch (error) {
             Utils.showNotification('Error launching LinkedIn Search', 'error');
-        }
-    }
-};
-
-const SalesNavigatorManager = {
-    openSearch() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            chrome.tabs.update(tabs[0].id, { url: CONSTANTS.URLS.SALES_NAVIGATOR }, () => {
-                Utils.showNotification('Sales Navigator search opened. Use the advanced filters to refine your search, then click "Start Collecting People"', 'info');
-            });
-        });
-    },
-
-    startCollecting() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const tab = tabs[0];
-
-            if (!tab.url.includes('linkedin.com/sales')) {
-                Utils.showNotification('Please navigate to Sales Navigator first', 'error');
-                return;
-            }
-
-            const campaignModal = DOMCache.get('campaign-modal');
-            if (campaignModal) {
-                Utils.show(campaignModal);
-                WizardManager.showStep(3, 'collecting');
-            }
-            Utils.showNotification('Starting real-time profile collection...', 'info');
-
-            if (tab.url.includes('sales/search/people')) {
-                this.startSearch(tab.id, { type: 'sales-navigator', realTime: true });
-            } else {
-                this.openSearch();
-                setTimeout(() => this.startSearch(tab.id, { type: 'sales-navigator', realTime: true }), 3000);
-            }
-        });
-    },
-
-    startMultiPageCollecting() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const tab = tabs[0];
-
-            if (!tab.url.includes('linkedin.com/sales')) {
-                Utils.showNotification('Please navigate to Sales Navigator first', 'error');
-                return;
-            }
-
-            const campaignModal = DOMCache.get('campaign-modal');
-            if (campaignModal) {
-                Utils.show(campaignModal);
-                WizardManager.showStep(3, 'collecting');
-            }
-
-            // Initialize page progress display
-            ProfileCollector.initializePageProgress();
-
-            Utils.showNotification('Starting multi-page profile collection (1-4 pages)...', 'info');
-
-            // DISABLE multi-page collection for Sales Navigator
-            if (tab.url.includes('sales/search/people')) {
-                Utils.showNotification('Multi-page collection is disabled for Sales Navigator. Only collecting from the current page.', 'warning');
-                this.startSearch(tab.id, { type: 'sales-navigator', realTime: true });
-            } else {
-                this.openSearch();
-                setTimeout(() => this.startMultiPageSearch(tab.id, { type: 'sales-navigator', maxPages: 4, realTime: true }), 3000);
-            }
-        });
-    },
-
-    async startSearch(tabId, searchCriteria) {
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId }, files: ['content/linkedin-content.js']
-            });
-
-            setTimeout(async () => {
-                try {
-                    await Utils.sendTabMessage(tabId, {
-                        action: 'startRealTimeCollection',
-                        criteria: searchCriteria
-                    });
-                    Utils.showNotification('Real-time collection started! Profiles will appear as they are found.', 'info');
-                } catch (error) {
-                    console.error('Message sending error:', error);
-                    Utils.showNotification('Collection started. Profiles will appear as they are found.', 'info');
-                }
-            }, 1500);
-        } catch (error) {
-            console.error('Script injection error:', error);
-            Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');
-        }
-    },
-
-    async startMultiPageSearch(tabId, searchCriteria) {
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId }, files: ['content/linkedin-content.js']
-            });
-
-            setTimeout(async () => {
-                try {
-                    await Utils.sendTabMessage(tabId, {
-                        action: 'startMultiPageCollection',
-                        maxPages: searchCriteria.maxPages || 4,
-                        criteria: searchCriteria
-                    });
-                    Utils.showNotification('Multi-page collection started! This may take a few minutes...', 'info');
-                } catch (error) {
-                    console.error('Message sending error:', error);
-                    Utils.showNotification('Multi-page collection started. Profiles will appear as they are found.', 'info');
-                }
-            }, 1500);
-        } catch (error) {
-            console.error('Script injection error:', error);
-            Utils.showNotification('Please refresh the Sales Navigator page and try again.', 'error');
-        }
-    },
-
-    addProfilesToCampaign(profiles) {
-        const validProfiles = profiles.filter(p => p.name && p.url);
-        if (validProfiles.length === 0) return;
-
-        const processedProfiles = validProfiles.map(profile => ({
-            ...profile,
-            collectedAt: new Date().toISOString(),
-            source: 'sales-navigator'
-        }));
-
-        AppState.collectedProfiles.push(...processedProfiles);
-        ProfileManager.updateList();
-        DOMCache.get('collected-number').textContent = AppState.collectedProfiles.length;
-        Utils.showNotification(`Added ${validProfiles.length} profiles to campaign automatically`, 'success');
-        const campaignModal = DOMCache.get('campaign-modal');
-        if (campaignModal) {
-            Utils.show(campaignModal);
-            WizardManager.showStep(3, 'collecting');
         }
     }
 };

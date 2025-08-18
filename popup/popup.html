@@ -33,9 +33,6 @@
         <div class="tab-content active" id="campaigns">
             <div class="section">
                 <h3>Active Campaigns</h3>
-                <div id="campaign-list">
-                    <div class="empty-state">No campaigns yet. Create your first campaign!</div>
-                </div>
                 <button class="btn btn-primary" id="create-campaign">+ New Campaign</button>
                 <button class="btn btn-secondary" id="sales-navigator-btn">SALES NAVIGATOR</button>
                 <button class="btn btn-linkedin-search" id="linkedin-search-btn">ADD PEOPLE FROM LINKEDIN SEARCH</button>
@@ -80,10 +77,6 @@
                     <div class="step-indicator">Create campaign: step 2 out of 4</div>
 
                     <div class="add-people-options">
-                        <button class="option-btn" id="linkedin-search-option">
-                            <div class="option-title">ADD PEOPLE FROM LINKEDIN SEARCH</div>
-                        </button>
-
                         <button class="option-btn" id="network-option">
                             <div class="option-title">ADD PEOPLE FROM MY NETWORK</div>
                         </button>
@@ -91,12 +84,12 @@
                         <div class="or-divider">Or</div>
 
                         <!-- Reusable CSV upload component -->
-                        <div class="csv-upload-area" id="csv-upload-main">
+                        <!-- <div class="csv-upload-area" id="csv-upload-main">
                             <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
                             <button class="upload-btn" id="csv-upload-btn">Click to import the file</button>
                             <input type="file" id="csv-file-input" accept=".csv" class="hidden">
                             <div class="upload-hint">or drop it here</div>
-                        </div>
+                        </div> -->
                     </div>
                 </div>
 
@@ -126,36 +119,6 @@
                             <p>View and select from your existing LinkedIn connections</p>
                             <button class="btn btn-secondary" id="browse-connections">BROWSE MY CONNECTIONS</button>
                         </div>
-                    </div>
-                </div>
-
-
-                <!-- Step 3: LinkedIn Search Filters -->
-                <div class="wizard-step" id="step-3-search">
-                    <div class="wizard-header">
-                        <button class="back-btn" id="back-to-step-2">&larr;</button>
-                        <h3>Add people</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
-                    </div>
-                    <div class="step-indicator">Create campaign: step 3 out of 4</div>
-
-                    <!-- Reusable search instructions component -->
-                    <div class="search-instructions">
-                        <p>- Use native LinkedIn search filters to specify your target audience. Scroll the filters to see more fields.</p>
-                        <p>- Once specified, click "Apply LinkedIn filters" to see the results and then press "Start Collecting People" to collect the people.</p>
-                    </div>
-
-                    <div class="search-actions">
-                        <button class="btn btn-primary" id="collecting-profile">COLLECTING PROFILE</button>
-                    </div>
-
-                    <div class="or-divider">Or</div>
-
-                    <!-- Reference to reusable CSV upload (removed duplicate) -->
-                    <div class="csv-upload-reference">
-                        <div class="upload-text">Have a CSV file with your prospects' LinkedIn profile URLs?</div>
-                        <button class="upload-btn" id="csv-upload-btn-2">Click to import the file</button>
-                        <div class="upload-hint">or drop it here</div>
                     </div>
                 </div>
 
@@ -228,13 +191,6 @@
                 </div>
             </div>
         </div>
-
-        <footer>
-            <div class="stats">
-                <span>Today: <span id="today-count">0</span> connections</span>
-                <span>Total: <span id="total-count">0</span> connections</span>
-            </div>
-        </footer>
     </div>
 
     <script src="popup.js"></script>
