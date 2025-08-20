@@ -5,8 +5,12 @@ if (window.salesNavigatorUILoaded) {
 
 const CONSTANTS = {
     API: {
-        BASE_URL: 'https://ai-saas-api.autsync.live',
-        ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
+        BASE_URL: 'https://localhost:7120',
+        ENDPOINTS: { 
+            MESSAGES: '/api/linkedin/message',
+            PROFILES: '/api/linkedin/profiles'
+        }
+
     }
 };
 
@@ -28,10 +32,52 @@ const APIService = {
                 throw new Error(`API request failed: ${response.status} ${response.statusText}`);
             }
             const apiData = await response.json();
-            const messageTest = apiData?.messages?.message1;
+            console.log("api Message", apiData)
+            const messageTest = apiData?.messages?.message;
+            console.log("Message", messageTest)
             return { message: messageTest };
         } catch (error) {
+            console.log('API Service Error:', error);
             console.error('API Service Error:', error);
+            throw error;
+        }
+    },
+    async addProfile(profile, customPrompt, message, profileUrl, reason ) {
+        try {
+            console.log("Request Data",profile, customPrompt, message, profileUrl)
+            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.PROFILES}`, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    linkedinUrl: profileUrl || null,
+                    name: profile.name || null,
+                    title: profile.title || null,
+                    location: profile.location || null,
+                    profilePicUrl: profile.profilePic || null,
+                    prompt: customPrompt || null,
+                    message: message || null,
+                    reason: reason || null,
+                    createdAt: new Date(profile.timestamp).toISOString()
+                })
+            });
+            if (!response.ok) {
+                if (response.status === 409) {
+                    throw new Error('Profile with this URL already exists');
+                }
+                throw new Error(`Failed to add profile: ${response.status} ${response.statusText}`);
+            }
+            const result = await response.json();
+            return {
+                profileId: result.profileId,
+                connectionRequestId: result.connectionRequestId,
+                messageId: result.messageId || null,
+                promptId: result.promptId || null
+            };
+        } catch (error) {
+            console.error('Profile API Error:', error);
             throw error;
         }
     }
@@ -52,7 +98,7 @@ class SalesNavigatorFloatingUI {
         this.currentLinkedInProfileUrl = null;
         this.isProcessingThreeDotMenu = false;
         this.profileStatuses = {};
-        this.profileDelay = 10000;
+        this.profileDelay = 50000;
         this.sendConnectCount = 0;
         this.FailedConnectCount = 0;
         this.customPrompt = '';
@@ -756,11 +802,35 @@ class SalesNavigatorFloatingUI {
         this.showWorkflowPopup();
     }
 
-    saveState() {
+    // saveState() {
+    //     const state = {
+    //         currentWorkflowStep: this.currentWorkflowStep,
+    //         currentProfileIndex: this.currentProfileIndex,
+    //         profiles: this.profiles,
+    //         generatedMessage: this.generatedMessage,
+    //         processedProfiles: this.processedProfiles || [],
+    //         automationRunning: this.automationRunning,
+    //         workflowPaused: this.workflowPaused,
+    //         profileStatuses: this.profileStatuses || {},
+    //         sendConnectCount: this.sendConnectCount || 0,
+    //         FailedConnectCount: this.FailedConnectCount || 0,
+    //         customPrompt: this.customPrompt || '',
+    //         promptSet: this.promptSet || false
+    //     };
+    //     localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+    // }
+
+       saveState() {
         const state = {
             currentWorkflowStep: this.currentWorkflowStep,
             currentProfileIndex: this.currentProfileIndex,
-            profiles: this.profiles,
+            profiles: this.profiles.map(p => ({
+                ...p,
+                profileId: p.profileId,
+                connectionRequestId: p.connectionRequestId,
+                messageId: p.messageId,
+                promptId: p.promptId
+            })),
             generatedMessage: this.generatedMessage,
             processedProfiles: this.processedProfiles || [],
             automationRunning: this.automationRunning,
@@ -1343,21 +1413,21 @@ class SalesNavigatorFloatingUI {
                     console.log('Copied URL:', copiedUrl);
                     if (copiedUrl) {
                         this.currentLinkedInProfileUrl = copiedUrl;
+                        
                         this.updateWorkflowUI();
                         if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
 
-                        const staticMessage = "Hi, I'm Ishu, a full-stack developer with expertise in .NET, Angular, and React. I'd love to support your development needs. Let's connect and explore how I can add value to your team.";
+                        const profile = this.profiles[this.currentProfileIndex];
+                        const staticMessage = `Hi ${profile.name || 'there'}, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
                         try {
-                             const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
-                             console.log('Message Data:', messageData);
-                           // const messageData = { message: "Hi, I’m Ishu, a full-stack developer with expertise in .NET, Angular, and React. I’d love to support your development needs. Let’s connect and explore how I can add value to your team." };
+                            const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
                             if (messageData && messageData.message) {
-                                this.generatedMessage = messageData.message;
-                                this.updateWorkflowUI();
+                                this.generatedMessage = messageData.message.slice(0, 300); // Enforce 300-char limit
+                                console.log("Recived Message", messageData)
                                 if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
-
                             } else {
                                 this.generatedMessage = staticMessage;
+                                 console.log("Test Message", staticMessage)
                                 if (statusElement) statusElement.textContent = 'API response invalid - using static message';
                             }
                         } catch (error) {
@@ -1366,11 +1436,16 @@ class SalesNavigatorFloatingUI {
                             if (statusElement) statusElement.textContent = 'API error - using static message';
                         }
 
+                        this.updateWorkflowUI();
                         this.saveState();
                         await this.wait(10000);
                         await this.clickConnectButton(true);
                     } else {
                         if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
+                        this.FailedConnectCount++;
+                        this.updateConnectCounts();
+                        this.currentProfileIndex++;
+                        this.scheduleNextProfile();
                     }
                 } else {
                     const viewProfile = this.findMenuItemByText(menu, [
@@ -1386,22 +1461,169 @@ class SalesNavigatorFloatingUI {
                             this.currentLinkedInProfileUrl = urlFromPage;
                             this.updateWorkflowUI();
                             if (statusElement) statusElement.textContent = 'LinkedIn URL captured from profile!';
+                            
+                            const profile = this.profiles[this.currentProfileIndex];
+                            const staticMessage = `Hi ${profile.name || 'there'}, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
+                            try {
+                                const messageData = await APIService.generateMessage(this.customPrompt, urlFromPage);
+                                if (messageData && messageData.message) {
+                                    this.generatedMessage = messageData.message.slice(0, 300);
+                                    if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
+                                } else {
+                                    this.generatedMessage = staticMessage;
+                                    if (statusElement) statusElement.textContent = 'API response invalid - using static message';
+                                }
+                            } catch (error) {
+                                console.error('API call failed:', error);
+                                this.generatedMessage = staticMessage;
+                                if (statusElement) statusElement.textContent = 'API error - using static message';
+                            }
+
                             this.saveState();
                             await this.wait(10000);
                             await this.clickConnectButton(true);
-                            return;
+                        } else {
+                            if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from profile';
+                            this.FailedConnectCount++;
+                            this.updateConnectCounts();
+                            this.currentProfileIndex++;
+                            this.scheduleNextProfile();
                         }
+                    } else {
+                        if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
+                        this.FailedConnectCount++;
+                        this.updateConnectCounts();
+                        this.currentProfileIndex++;
+                        this.scheduleNextProfile();
                     }
-                    if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
                 }
             } else {
                 if (statusElement) statusElement.textContent = 'Menu not visible after click';
+                this.FailedConnectCount++;
+                this.updateConnectCounts();
+                this.currentProfileIndex++;
+                this.scheduleNextProfile();
             }
-            return;
         } else {
             if (statusElement) statusElement.textContent = 'Three-dot button not found';
+            this.FailedConnectCount++;
+            this.updateConnectCounts();
+            this.currentProfileIndex++;
+            this.scheduleNextProfile();
         }
         this.isProcessingThreeDotMenu = false;
+    }
+
+    async clickSendInvitationButton() {
+        const statusElement = document.getElementById('workflow-current-status');
+        let sendButton = document.querySelector('button[aria-label="Send invitation"]') ||
+                        document.querySelector('button[data-control-name="send_invitation"]') ||
+                        Array.from(document.querySelectorAll('button')).find(btn => {
+                            const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                            return text === 'send invitation' || text === 'send' || text.includes('send invitation');
+                        });
+
+        if (!sendButton) {
+            const modal = document.querySelector('[data-test-modal]') ||
+                         document.querySelector('.send-invite') ||
+                         document.querySelector('[aria-labelledby*="send-invite"]');
+
+            if (modal) {
+                sendButton = modal.querySelector('button[type="submit"]') ||
+                            Array.from(modal.querySelectorAll('button')).find(btn => {
+                                const text = btn.textContent && btn.textContent.trim().toLowerCase();
+                                return text.includes('send') || text.includes('invitation');
+                            });
+            }
+        }
+
+        const profile = this.profiles[this.currentProfileIndex];
+
+        if (sendButton && !sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Clicking Send Invitation...';
+            sendButton.click();
+            await this.wait(3000);
+
+            const successMessage = document.querySelector('[data-test-toast-message]') ||
+                                  Array.from(document.querySelectorAll('div, span')).find(el => {
+                                      const text = el.textContent && el.textContent.toLowerCase();
+                                      return text && (text.includes('invitation sent') || text.includes('request sent'));
+                                  });
+
+            if (successMessage) {
+                if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
+
+                // Call API to store profile, connection request, message, and prompt
+                try {
+                console.log("Test 1")
+                 const apiResponse = await APIService.addProfile(
+                    profile,
+                    this.promptSet ? this.customPrompt : null,
+                    this.generatedMessage,
+                    this.currentLinkedInProfileUrl
+                );
+                    if (apiResponse) {
+                        profile.profileId = apiResponse.profileId;
+                        profile.connectionRequestId = apiResponse.connectionRequestId;
+                        profile.messageId = apiResponse.messageId;
+                        profile.promptId = apiResponse.promptId;
+                        console.log(`Profile stored after invitation: ProfileId=${apiResponse.profileId}, ConnectionRequestId=${apiResponse.connectionRequestId}, MessageId=${apiResponse.messageId || 'none'}, PromptId=${apiResponse.promptId || 'none'}`);
+                        this.saveState();
+                    } else {
+                        console.error('API call to addProfile returned null');
+                    }
+                } catch (error) {
+                    console.error('Failed to store profile in API:', error);
+                }
+
+                return { sent: true };
+            } else {
+                if (statusElement) statusElement.textContent = 'Invitation sent';
+                this.sendConnectCount++;
+                this.updateConnectCounts();
+
+                // Call API even if success message not found, assuming send succeeded
+                try {
+                    console.log("Test 2")
+                    const apiResponse = await APIService.addProfile(
+                        profile,
+                        this.promptSet ? this.customPrompt : null,
+                        this.generatedMessage,
+                        this.currentLinkedInProfileUrl,
+                        statusElement.textContent
+
+                    );
+                    if (apiResponse) {
+                        profile.profileId = apiResponse.profileId;
+                        profile.connectionRequestId = apiResponse.connectionRequestId;
+                        profile.messageId = apiResponse.messageId;
+                        profile.promptId = apiResponse.promptId;
+                        console.log(`Profile stored after invitation: ProfileId=${apiResponse.profileId}, ConnectionRequestId=${apiResponse.connectionRequestId}, MessageId=${apiResponse.messageId || 'none'}, PromptId=${apiResponse.promptId || 'none'}`);
+                        this.saveState();
+                    } else {
+                        console.error('API call to addProfile returned null');
+                    }
+                } catch (error) {
+                    console.error('Failed to store profile in API:', error);
+                }
+
+                return { sent: true };
+            }
+        } else if (sendButton && sendButton.disabled) {
+            if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
+            this.FailedConnectCount++;
+            this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_disabled' };
+        } else {
+            if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
+            this.FailedConnectCount++;
+            this.updateConnectCounts();
+            this.closeConnectionModal();
+            return { skipped: true, reason: 'send_button_not_found' };
+        }
     }
 
     async clickConnectButton(menuAlreadyOpen = false) {
@@ -1541,66 +1763,6 @@ class SalesNavigatorFloatingUI {
             console.error('Error in fillInvitationMessage:', error);
             const statusElement = document.getElementById('workflow-current-status');
             if (statusElement) statusElement.textContent = 'Error filling invitation message';
-        }
-    }
-
-    async clickSendInvitationButton() {
-        const statusElement = document.getElementById('workflow-current-status');
-        let sendButton = document.querySelector('button[aria-label="Send invitation"]') ||
-                        document.querySelector('button[data-control-name="send_invitation"]') ||
-                        Array.from(document.querySelectorAll('button')).find(btn => {
-                            const text = btn.textContent && btn.textContent.trim().toLowerCase();
-                            return text === 'send invitation' || text === 'send' || text.includes('send invitation');
-                        });
-
-        if (!sendButton) {
-            const modal = document.querySelector('[data-test-modal]') ||
-                         document.querySelector('.send-invite') ||
-                         document.querySelector('[aria-labelledby*="send-invite"]');
-
-            if (modal) {
-                sendButton = modal.querySelector('button[type="submit"]') ||
-                           Array.from(modal.querySelectorAll('button')).find(btn => {
-                               const text = btn.textContent && btn.textContent.trim().toLowerCase();
-                               return text.includes('send') || text.includes('invitation');
-                           });
-            }
-        }
-
-        if (sendButton && !sendButton.disabled) {
-            if (statusElement) statusElement.textContent = 'Clicking Send Invitation...';
-            sendButton.click();
-            await this.wait(3000);
-
-            const successMessage = document.querySelector('[data-test-toast-message]') ||
-                                  Array.from(document.querySelectorAll('div, span')).find(el => {
-                                      const text = el.textContent && el.textContent.toLowerCase();
-                                      return text && (text.includes('invitation sent') || text.includes('request sent'));
-                                  });
-
-            if (successMessage) {
-                if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
-                this.sendConnectCount++;
-                this.updateConnectCounts();
-                return { sent: true };
-            } else {
-                if (statusElement) statusElement.textContent = 'Invitation sent';
-                this.sendConnectCount++;
-                this.updateConnectCounts();
-                return { sent: true };
-            }
-        } else if (sendButton && sendButton.disabled) {
-            if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
-            this.FailedConnectCount++;
-            this.updateConnectCounts();
-            this.closeConnectionModal();
-            return { skipped: true, reason: 'send_button_disabled' };
-        } else {
-            if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
-            this.FailedConnectCount++;
-            this.updateConnectCounts();
-            this.closeConnectionModal();
-            return { skipped: true, reason: 'send_button_not_found' };
         }
     }
 

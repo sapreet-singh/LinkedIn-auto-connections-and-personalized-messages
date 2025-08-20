@@ -902,7 +902,7 @@ const CampaignManager = {
     load() {
         const campaignList = DOMCache.get('campaign-list');
         // Show empty state - no persistent storage
-        campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
+        //campaignList.innerHTML = '<div class="empty-state">No campaigns yet. Create your first campaign!</div>';
     },
 
     create() {
