@@ -5,7 +5,7 @@ if (window.salesNavigatorUILoaded) {
 
 const CONSTANTS = {
     API: {
-        BASE_URL: 'http://65.2.54.38:8080',
+        BASE_URL: 'https://ai-saas-api.autsync.live',
         ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
     }
 };
