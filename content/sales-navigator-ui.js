@@ -5,7 +5,7 @@ if (window.salesNavigatorUILoaded) {
 
 const CONSTANTS = {
     API: {
-        BASE_URL: 'https://localhost:7007',
+        BASE_URL: 'http://65.2.54.38:8080',
         ENDPOINTS: { MESSAGES: '/api/linkedin/messages' }
     }
 };
