@@ -1,197 +1,255 @@
 if (window.salesNavigatorUILoaded) {
-    console.log('Sales Navigator UI script already loaded, skipping');
+  console.log("Sales Navigator UI script already loaded, skipping");
 } else {
-    window.salesNavigatorUILoaded = true;
+  window.salesNavigatorUILoaded = true;
 
-const CONSTANTS = {
+  const CONSTANTS = {
     API: {
-        BASE_URL: 'https://localhost:7120',
-        ENDPOINTS: { 
-            MESSAGES: '/api/linkedin/message',
-            PROFILES: '/api/linkedin/profiles'
-        }
-
-    }
-};
-
-const APIService = {
-    async generateMessage(customPrompt, profileUrl) {
-        try {
-            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`, {
-                method: 'POST',
-                headers: {
-                    'accept': '*/*',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    url: profileUrl,
-                    prompt: customPrompt
-                })
-            });
-            if (!response.ok) {
-                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-            }
-            const apiData = await response.json();
-            console.log("api Message", apiData)
-            const messageTest = apiData?.messages?.message;
-            console.log("Message", messageTest)
-            return { message: messageTest };
-        } catch (error) {
-            console.log('API Service Error:', error);
-            console.error('API Service Error:', error);
-            throw error;
-        }
+      BASE_URL: "https://localhost:7120",
+      ENDPOINTS: {
+        MESSAGES: "/api/linkedin/message",
+        PROFILES: "/api/linkedin/profiles",
+        STATUS: "/api/linkedin/GetStatus",
+      },
     },
-    async addProfile(profile, customPrompt, message, profileUrl, reason ) {
-        try {
-            console.log("Request Data",profile, customPrompt, message, profileUrl)
-            const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.PROFILES}`, {
-                method: 'POST',
-                headers: {
-                    'accept': '*/*',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    linkedinUrl: profileUrl || null,
-                    name: profile.name || null,
-                    title: profile.title || null,
-                    location: profile.location || null,
-                    profilePicUrl: profile.profilePic || null,
-                    prompt: customPrompt || null,
-                    message: message || null,
-                    reason: reason || null,
-                    createdAt: new Date(profile.timestamp).toISOString()
-                })
-            });
-            if (!response.ok) {
-                if (response.status === 409) {
-                    throw new Error('Profile with this URL already exists');
-                }
-                throw new Error(`Failed to add profile: ${response.status} ${response.statusText}`);
-            }
-            const result = await response.json();
-            return {
-                profileId: result.profileId,
-                connectionRequestId: result.connectionRequestId,
-                messageId: result.messageId || null,
-                promptId: result.promptId || null
-            };
-        } catch (error) {
-            console.error('Profile API Error:', error);
-            throw error;
-        }
-    }
-};
+  };
 
-class SalesNavigatorFloatingUI {
+  const APIService = {
+    async generateMessage(customPrompt, profileUrl) {
+      try {
+        const response = await fetch(
+          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`,
+          {
+            method: "POST",
+            headers: {
+              accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: profileUrl,
+              prompt: customPrompt,
+            }),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText}`
+          );
+        }
+        const apiData = await response.json();
+        console.log("api Message", apiData);
+        const messageTest = apiData?.messages?.message;
+        console.log("Message", messageTest);
+        return { message: messageTest };
+      } catch (error) {
+        console.log("API Service Error:", error);
+        console.error("API Service Error:", error);
+        throw error;
+      }
+    },
+    async addProfile(profile, customPrompt, message, profileUrl, reason) {
+      try {
+        console.log("Request Data", profile, customPrompt, message, profileUrl);
+        const response = await fetch(
+          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.PROFILES}`,
+          {
+            method: "POST",
+            headers: {
+              accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              linkedinUrl: profileUrl || null,
+              name: profile.name || null,
+              title: profile.title || null,
+              location: profile.location || null,
+              profilePicUrl: profile.profilePic || null,
+              prompt: customPrompt || null,
+              message: message || null,
+              reason: reason || null,
+              status: "pending" || null,
+              createdAt: new Date(profile.timestamp).toISOString(),
+            }),
+          }
+        );
+        if (!response.ok) {
+          if (response.status === 409) {
+            throw new Error("Profile with this URL already exists");
+          }
+          throw new Error(
+            `Failed to add profile: ${response.status} ${response.statusText}`
+          );
+        }
+        const result = await response.json();
+        return {
+          profileId: result.profileId,
+          connectionRequestId: result.connectionRequestId,
+          messageId: result.messageId || null,
+          promptId: result.promptId || null,
+        };
+      } catch (error) {
+        console.error("Profile API Error:", error);
+        throw error;
+      }
+    },
+    async getStatus() {
+      try {
+        const response = await fetch(
+          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.STATUS}`,
+          {
+            method: "GET",
+            headers: {
+              accept: "*/*",
+            },
+          }
+        );
+        if (!response.ok) {
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText}`
+          );
+        }
+        const apiData = await response.json();
+        return {
+          sendConnectCount: apiData.sendConnect || 0,
+          FailedConnectCount: apiData.failedConnect ||0,
+        };
+      } catch (error) {
+        console.error("API Service Error (GetStatus):", error);
+        throw error;
+      }
+    },
+  };
+
+  class SalesNavigatorFloatingUI {
     constructor() {
-        this.isCollecting = false;
-        this.profiles = [];
-        this.ui = null;
-        this.currentWorkflowStep = 'collecting';
-        this.currentProfileIndex = 0;
-        this.generatedMessage = null;
-        this.processedProfiles = [];
-        this.workflowPaused = false;
-        this.automationRunning = false;
-        this.workflowPopup = null;
-        this.currentLinkedInProfileUrl = null;
-        this.isProcessingThreeDotMenu = false;
-        this.profileStatuses = {};
-        this.profileDelay = 50000;
-        this.sendConnectCount = 0;
-        this.FailedConnectCount = 0;
-        this.customPrompt = '';
-        this.promptSet = false;
-        this.typingTotalDurationMs = 60000;
-        this.sendDelayAfterTypingMs = 15000;
-        this.loadSavedCounters();
-        this.loadBatchSettings();
-        this.autoProcessingTimeout = null;
+      this.isCollecting = false;
+      this.profiles = [];
+      this.ui = null;
+      this.currentWorkflowStep = "collecting";
+      this.currentProfileIndex = 0;
+      this.generatedMessage = null;
+      this.processedProfiles = [];
+      this.workflowPaused = false;
+      this.automationRunning = false;
+      this.workflowPopup = null;
+      this.currentLinkedInProfileUrl = null;
+      this.isProcessingThreeDotMenu = false;
+      this.profileStatuses = {};
+      this.profileDelay = 50000;
+      this.sendConnectCount = 0;
+      this.FailedConnectCount = 0;
+      this.customPrompt = "";
+      this.promptSet = false;
+      this.typingTotalDurationMs = 60000;
+      this.sendDelayAfterTypingMs = 15000;
+      this.loadSavedCounters();
+      this.loadBatchSettings();
+      this.autoProcessingTimeout = null;
 
-        if (this.isSalesNavigatorSearchPage()) {
-            this.init();
-        } else if (this.isLinkedInProfilePage() || this.isSalesNavigatorProfilePage()) {
-            this.checkAndRestoreWorkflow();
-        }
+      if (this.isSalesNavigatorSearchPage()) {
+        this.init();
+      } else if (
+        this.isLinkedInProfilePage() ||
+        this.isSalesNavigatorProfilePage()
+      ) {
+        this.checkAndRestoreWorkflow();
+      }
     }
 
     isSalesNavigatorSearchPage() {
-        const url = window.location.href;
-        return url.includes('/sales/search/people') && url.includes('linkedin.com');
+      const url = window.location.href;
+      return (
+        url.includes("/sales/search/people") && url.includes("linkedin.com")
+      );
     }
 
     isLinkedInProfilePage() {
-        const url = window.location.href;
-        return url.includes('/in/') && url.includes('linkedin.com');
+      const url = window.location.href;
+      return url.includes("/in/") && url.includes("linkedin.com");
     }
 
     isSalesNavigatorProfilePage() {
-        const url = window.location.href;
-        return url.includes('/sales/lead/') && url.includes('linkedin.com');
+      const url = window.location.href;
+      return url.includes("/sales/lead/") && url.includes("linkedin.com");
     }
 
     init() {
-        if (!this.isSalesNavigatorSearchPage()) return;
-        this.injectCSS();
-        this.createUI();
-        this.setupEventListeners();
-        this.startAutoDetection();
+      if (!this.isSalesNavigatorSearchPage()) return;
+      this.injectCSS();
+      this.createUI();
+      this.setupEventListeners();
+      this.startAutoDetection();
 
-        const saved = localStorage.getItem('salesNavWorkflow');
-        if (saved) {
-            try {
-                const state = JSON.parse(saved);
-                this.currentWorkflowStep = state.currentWorkflowStep || 'collecting';
-                this.currentProfileIndex = state.currentProfileIndex || 0;
-                this.profiles = state.profiles || [];
-                this.generatedMessage = state.generatedMessage;
-                this.processedProfiles = state.processedProfiles || [];
-                this.automationRunning = state.automationRunning || false;
-                this.workflowPaused = state.workflowPaused || false;
-                this.profileStatuses = state.profileStatuses || {};
-                this.sendConnectCount = state.sendConnectCount || 0;
-                this.FailedConnectCount = state.FailedConnectCount || 0;
-                this.customPrompt = state.customPrompt || '';
-                this.promptSet = state.promptSet || false;
-                if (this.currentWorkflowStep === 'processing') {
-                    this.hideCollectionUI();
-                    this.showWorkflowPopup();
-                    this.updateButtonStates();
-                } else {
-                    this.showUI();
-                    this.updateProfilesList();
-                    this.updateProfilesCount();
-                    this.updateConnectCounts();
-                    this.updateUI();
-                }
-            } catch (e) {
-                localStorage.removeItem('salesNavWorkflow');
-            }
-        } else {
-            setTimeout(() => this.showUI(), 1000);
+      const saved = localStorage.getItem("salesNavWorkflow");
+      if (saved) {
+        try {
+          const state = JSON.parse(saved);
+          this.currentWorkflowStep = state.currentWorkflowStep || "collecting";
+          this.currentProfileIndex = state.currentProfileIndex || 0;
+          this.profiles = state.profiles || [];
+          this.generatedMessage = state.generatedMessage;
+          this.processedProfiles = state.processedProfiles || [];
+          this.automationRunning = state.automationRunning || false;
+          this.workflowPaused = state.workflowPaused || false;
+          this.profileStatuses = state.profileStatuses || {};
+          this.sendConnectCount = state.sendConnectCount || 0;
+          this.FailedConnectCount = state.FailedConnectCount || 0;
+          this.customPrompt = state.customPrompt || "";
+          this.promptSet = state.promptSet || false;
+          if (this.currentWorkflowStep === "processing") {
+            this.hideCollectionUI();
+            this.showWorkflowPopup();
+            this.updateButtonStates();
+          } else {
+            this.showUI();
+            this.updateProfilesList();
+            this.updateProfilesCount();
+            this.updateConnectCounts();
+            this.updateUI();
+          }
+        } catch (e) {
+          localStorage.removeItem("salesNavWorkflow");
         }
+      } else {
+        setTimeout(() => this.showUI(), 1000);
+      }
+      this.updateStatusFromAPI();
+      // Update status every 5 minutes
+      setInterval(() => this.updateStatusFromAPI(), 3000);
+    }
+
+    async updateStatusFromAPI() {
+      try {
+        const status = await APIService.getStatus();
+        this.sendConnectCount = status.sendConnectCount;
+        this.FailedConnectCount = status.FailedConnectCount;
+        this.updateConnectCounts();
+        this.saveState(); // Ensure counts are saved
+      } catch (error) {
+        console.error("Failed to update status from API:", error);
+        // Fallback to existing counts if API fails
+      }
     }
 
     injectCSS() {
-        if (document.getElementById('sales-navigator-ui-styles')) return;
-        const link = document.createElement('link');
-        link.id = 'sales-navigator-ui-styles';
-        link.rel = 'stylesheet';
-        link.href = chrome.runtime.getURL('content/sales-navigator-ui.css');
-        link.onerror = () => this.injectInlineCSS();
-        document.head.appendChild(link);
-        setTimeout(() => {
-            if (!document.querySelector('.sales-navigator-floating-ui')) {
-                this.injectInlineCSS();
-            }
-        }, 2000);
+      if (document.getElementById("sales-navigator-ui-styles")) return;
+      const link = document.createElement("link");
+      link.id = "sales-navigator-ui-styles";
+      link.rel = "stylesheet";
+      link.href = chrome.runtime.getURL("content/sales-navigator-ui.css");
+      link.onerror = () => this.injectInlineCSS();
+      document.head.appendChild(link);
+      setTimeout(() => {
+        if (!document.querySelector(".sales-navigator-floating-ui")) {
+          this.injectInlineCSS();
+        }
+      }, 2000);
     }
 
     injectInlineCSS() {
-        const style = document.createElement('style');
-        style.id = 'sales-navigator-ui-inline-styles';
-        style.textContent = `
+      const style = document.createElement("style");
+      style.id = "sales-navigator-ui-inline-styles";
+      style.textContent = `
             .sales-navigator-floating-ui {
                 position: fixed !important;
                 top: 20px !important;
@@ -311,21 +369,23 @@ class SalesNavigatorFloatingUI {
                 cursor: not-allowed !important;
             }
         `;
-        document.head.appendChild(style);
+      document.head.appendChild(style);
     }
 
     createUI() {
-        if (this.ui) return;
-        const existingUI = document.querySelector('.sales-navigator-floating-ui');
-        if (existingUI) {
-            console.log('Sales Navigator UI already exists in DOM, skipping creation');
-            this.ui = existingUI;
-            return;
-        }
+      if (this.ui) return;
+      const existingUI = document.querySelector(".sales-navigator-floating-ui");
+      if (existingUI) {
+        console.log(
+          "Sales Navigator UI already exists in DOM, skipping creation"
+        );
+        this.ui = existingUI;
+        return;
+      }
 
-        this.ui = document.createElement('div');
-        this.ui.className = 'sales-navigator-floating-ui';
-        this.ui.innerHTML = `
+      this.ui = document.createElement("div");
+      this.ui.className = "sales-navigator-floating-ui";
+      this.ui.innerHTML = `
             <div class="sales-nav-header">
                 <h3 class="sales-nav-title">Sales Navigator</h3>
                 <div class="sales-nav-controls">
@@ -363,443 +423,517 @@ class SalesNavigatorFloatingUI {
                 </div>
             </div>
         `;
-        document.body.appendChild(this.ui);
+      document.body.appendChild(this.ui);
     }
 
     setupEventListeners() {
-        const startBtn = this.ui.querySelector('#start-collecting');
-        const pauseBtn = this.ui.querySelector('#pause-collecting');
-        const nextBtn = this.ui.querySelector('#next-button');
-        const closeBtn = this.ui.querySelector('.sales-nav-close');
-        const minimizeBtn = this.ui.querySelector('.sales-nav-minimize');
-        const clearBtn = this.ui.querySelector('#clear-profiles');
-        const header = this.ui.querySelector('.sales-nav-header');
-        startBtn.addEventListener('click', () => this.startCollecting());
-        pauseBtn.addEventListener('click', () => this.pauseCollecting());
-        nextBtn.addEventListener('click', () => this.startWorkflow());
-        closeBtn.addEventListener('click', () => this.closeUI());
-        minimizeBtn.addEventListener('click', () => this.toggleMinimize());
-        clearBtn.addEventListener('click', () => this.clearProfiles());
-        this.makeDraggable(header);
+      const startBtn = this.ui.querySelector("#start-collecting");
+      const pauseBtn = this.ui.querySelector("#pause-collecting");
+      const nextBtn = this.ui.querySelector("#next-button");
+      const closeBtn = this.ui.querySelector(".sales-nav-close");
+      const minimizeBtn = this.ui.querySelector(".sales-nav-minimize");
+      const clearBtn = this.ui.querySelector("#clear-profiles");
+      const header = this.ui.querySelector(".sales-nav-header");
+      startBtn.addEventListener("click", () => this.startCollecting());
+      pauseBtn.addEventListener("click", () => this.pauseCollecting());
+      nextBtn.addEventListener("click", () => this.startWorkflow());
+      closeBtn.addEventListener("click", () => this.closeUI());
+      minimizeBtn.addEventListener("click", () => this.toggleMinimize());
+      clearBtn.addEventListener("click", () => this.clearProfiles());
+      this.makeDraggable(header);
     }
 
-     makeDraggable(handle) {
-        let isDragging = false;
-        let currentX, currentY, initialX, initialY;
-        let xOffset = 0, yOffset = 0;
-        handle.addEventListener('mousedown', (e) => {
-            initialX = e.clientX - xOffset;
-            initialY = e.clientY - yOffset;
-            if (e.target === handle || handle.contains(e.target)) {
-                isDragging = true;
-                this.ui.style.cursor = 'grabbing';
-            }
-        });
+    makeDraggable(handle) {
+      let isDragging = false;
+      let currentX, currentY, initialX, initialY;
+      let xOffset = 0,
+        yOffset = 0;
+      handle.addEventListener("mousedown", (e) => {
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+        if (e.target === handle || handle.contains(e.target)) {
+          isDragging = true;
+          this.ui.style.cursor = "grabbing";
+        }
+      });
 
-        document.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                e.preventDefault();
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-                xOffset = currentX;
-                yOffset = currentY;
-                this.ui.style.transform = `translate(${currentX}px, ${currentY}px)`;
-            }
-        });
+      document.addEventListener("mousemove", (e) => {
+        if (isDragging) {
+          e.preventDefault();
+          currentX = e.clientX - initialX;
+          currentY = e.clientY - initialY;
+          xOffset = currentX;
+          yOffset = currentY;
+          this.ui.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        }
+      });
 
-        document.addEventListener('mouseup', () => {
-            initialX = currentX;
-            initialY = currentY;
-            isDragging = false;
-            this.ui.style.cursor = 'move';
-        });
+      document.addEventListener("mouseup", () => {
+        initialX = currentX;
+        initialY = currentY;
+        isDragging = false;
+        this.ui.style.cursor = "move";
+      });
     }
 
     startAutoDetection() {
-        if (window.location.href.includes('/sales/') || window.location.href.includes('/in/')) {
-            setTimeout(() => this.showUI(), 2000);
-            this.checkAndRestoreWorkflow();
-        }
+      if (
+        window.location.href.includes("/sales/") ||
+        window.location.href.includes("/in/")
+      ) {
+        setTimeout(() => this.showUI(), 2000);
+        this.checkAndRestoreWorkflow();
+      }
 
-        let lastUrl = location.href;
-        const urlObserver = new MutationObserver(() => {
-            const url = location.href;
-            if (url !== lastUrl) {
-                lastUrl = url;
-                if (url.includes('/sales/') || url.includes('/sales/search/people')) {
-                    setTimeout(() => {
-                        this.showUI();
-                        const savedState = localStorage.getItem('salesNavWorkflow');
-                        if (savedState) {
-                            try {
-                                const state = JSON.parse(savedState);
-                                if (state.currentWorkflowStep === 'processing') {
-                                    this.showWorkflowPopup();
-                                }
-                            } catch (e) {
-                                console.error('Error checking workflow state:', e);
-                            }
-                        }
-                    }, 2000);
-                } else if (url.includes('/in/') && url.includes('linkedin.com')) {
-                    setTimeout(() => this.checkAndRestoreWorkflow(), 2000);
+      let lastUrl = location.href;
+      const urlObserver = new MutationObserver(() => {
+        const url = location.href;
+        if (url !== lastUrl) {
+          lastUrl = url;
+          if (url.includes("/sales/") || url.includes("/sales/search/people")) {
+            setTimeout(() => {
+              this.showUI();
+              const savedState = localStorage.getItem("salesNavWorkflow");
+              if (savedState) {
+                try {
+                  const state = JSON.parse(savedState);
+                  if (state.currentWorkflowStep === "processing") {
+                    this.showWorkflowPopup();
+                  }
+                } catch (e) {
+                  console.error("Error checking workflow state:", e);
                 }
-            }
-        });
+              }
+            }, 2000);
+          } else if (url.includes("/in/") && url.includes("linkedin.com")) {
+            setTimeout(() => this.checkAndRestoreWorkflow(), 2000);
+          }
+        }
+      });
 
-        urlObserver.observe(document, { subtree: true, childList: true });
-        setTimeout(() => {
-            if (window.location.href.includes('/sales/') || window.location.href.includes('/sales/search/people')) {
-                this.showUI();
-            } else if (window.location.href.includes('/in/') && window.location.href.includes('linkedin.com')) {
-                this.checkAndRestoreWorkflow();
-            }
-        }, 5000);
+      urlObserver.observe(document, { subtree: true, childList: true });
+      setTimeout(() => {
+        if (
+          window.location.href.includes("/sales/") ||
+          window.location.href.includes("/sales/search/people")
+        ) {
+          this.showUI();
+        } else if (
+          window.location.href.includes("/in/") &&
+          window.location.href.includes("linkedin.com")
+        ) {
+          this.checkAndRestoreWorkflow();
+        }
+      }, 5000);
     }
 
     checkAndRestoreWorkflow() {
-        const savedState = localStorage.getItem('salesNavWorkflow');
-        if (!savedState) return;
-        try {
-            const state = JSON.parse(savedState);
-            if (state.currentWorkflowStep === 'processing') {
-                this.currentWorkflowStep = state.currentWorkflowStep;
-                this.currentProfileIndex = state.currentProfileIndex;
-                this.profiles = state.profiles || [];
-                this.generatedMessage = state.generatedMessage;
-                this.processedProfiles = state.processedProfiles || [];
-                this.profileStatuses = state.profileStatuses || {};
-                this.automationRunning = state.automationRunning || false;
-                this.workflowPaused = state.workflowPaused || false;
-                this.sendConnectCount = state.sendConnectCount || 0;
-                this.FailedConnectCount = state.FailedConnectCount || 0;
-                this.customPrompt = state.customPrompt || '';
-                this.promptSet = state.promptSet || false;
-                this.currentLinkedInProfileUrl = null;
-                this.showWorkflowPopup();
-                setTimeout(() => {
-                    this.updateButtonStates();
-                    this.restoreProfileStatuses();
-                }, 500);
+      const savedState = localStorage.getItem("salesNavWorkflow");
+      if (!savedState) return;
+      try {
+        const state = JSON.parse(savedState);
+        if (state.currentWorkflowStep === "processing") {
+          this.currentWorkflowStep = state.currentWorkflowStep;
+          this.currentProfileIndex = state.currentProfileIndex;
+          this.profiles = state.profiles || [];
+          this.generatedMessage = state.generatedMessage;
+          this.processedProfiles = state.processedProfiles || [];
+          this.profileStatuses = state.profileStatuses || {};
+          this.automationRunning = state.automationRunning || false;
+          this.workflowPaused = state.workflowPaused || false;
+          this.sendConnectCount = state.sendConnectCount || 0;
+          this.FailedConnectCount = state.FailedConnectCount || 0;
+          this.customPrompt = state.customPrompt || "";
+          this.promptSet = state.promptSet || false;
+          this.currentLinkedInProfileUrl = null;
+          this.showWorkflowPopup();
+          setTimeout(() => {
+            this.updateButtonStates();
+            this.restoreProfileStatuses();
+          }, 500);
 
-                setTimeout(() => this.processNextProfile(), 3000);
-            }
-        } catch (error) {
-            localStorage.removeItem('salesNavWorkflow');
+          setTimeout(() => this.processNextProfile(), 3000);
         }
+      } catch (error) {
+        localStorage.removeItem("salesNavWorkflow");
+      }
     }
 
     showUI() {
-        if (this.currentWorkflowStep === 'processing') return;
-        if (this.ui) {
-            this.ui.style.display = 'flex';
-            this.ui.style.visibility = 'visible';
-            this.ui.style.opacity = '1';
-            this.updateConnectCounts();
-        }
+      if (this.currentWorkflowStep === "processing") return;
+      if (this.ui) {
+        this.ui.style.display = "flex";
+        this.ui.style.visibility = "visible";
+        this.ui.style.opacity = "1";
+        this.updateConnectCounts();
+      }
     }
 
     hideCollectionUI() {
-        if (this.ui) {
-            this.ui.style.display = 'none';
-            this.ui.style.visibility = 'hidden';
-            this.ui.style.opacity = '0';
-        }
+      if (this.ui) {
+        this.ui.style.display = "none";
+        this.ui.style.visibility = "hidden";
+        this.ui.style.opacity = "0";
+      }
     }
 
     getCurrentProfileUrl() {
-        if (this.currentProfileIndex < this.profiles.length) {
-            return this.profiles[this.currentProfileIndex].url || 'No URL available';
-        }
-        return 'No profile selected';
+      if (this.currentProfileIndex < this.profiles.length) {
+        return (
+          this.profiles[this.currentProfileIndex].url || "No URL available"
+        );
+      }
+      return "No profile selected";
     }
 
     closeUI() {
-        if (this.ui) this.ui.style.display = 'none';
-        this.pauseCollecting();
+      if (this.ui) this.ui.style.display = "none";
+      this.pauseCollecting();
     }
 
     toggleMinimize() {
-        const content = this.ui.querySelector('.sales-nav-content');
-        const minimizeBtn = this.ui.querySelector('.sales-nav-minimize');
-        if (content.style.display === 'none') {
-            content.style.display = 'block';
-            minimizeBtn.textContent = '−';
-            minimizeBtn.title = 'Minimize';
-            this.ui.style.height = 'auto';
-        } else {
-            content.style.display = 'none';
-            minimizeBtn.textContent = '+';
-            minimizeBtn.title = 'Expand';
-            this.ui.style.height = 'auto';
-        }
+      const content = this.ui.querySelector(".sales-nav-content");
+      const minimizeBtn = this.ui.querySelector(".sales-nav-minimize");
+      if (content.style.display === "none") {
+        content.style.display = "block";
+        minimizeBtn.textContent = "−";
+        minimizeBtn.title = "Minimize";
+        this.ui.style.height = "auto";
+      } else {
+        content.style.display = "none";
+        minimizeBtn.textContent = "+";
+        minimizeBtn.title = "Expand";
+        this.ui.style.height = "auto";
+      }
     }
 
     startCollecting() {
-        this.isCollecting = true;
-        this.updateUI();
-        this.setupProfileObserver();
+      this.isCollecting = true;
+      this.updateUI();
+      this.setupProfileObserver();
+      this.collectCurrentPageProfiles();
+      this.collectingInterval = setInterval(() => {
         this.collectCurrentPageProfiles();
-        this.collectingInterval = setInterval(() => {
-            this.collectCurrentPageProfiles();
-        }, 3000);
+      }, 3000);
     }
 
     pauseCollecting() {
-        this.isCollecting = false;
-        this.updateUI();
-        if (this.observer) {
-            this.observer.disconnect();
-            this.observer = null;
-        }
-        if (this.collectingInterval) {
-            clearInterval(this.collectingInterval);
-            this.collectingInterval = null;
-        }
+      this.isCollecting = false;
+      this.updateUI();
+      if (this.observer) {
+        this.observer.disconnect();
+        this.observer = null;
+      }
+      if (this.collectingInterval) {
+        clearInterval(this.collectingInterval);
+        this.collectingInterval = null;
+      }
     }
 
     setupProfileObserver() {
-        if (this.observer) return;
-        this.observer = new MutationObserver((mutations) => {
-            if (!this.isCollecting) return;
-            let hasNewProfiles = false;
-            mutations.forEach((mutation) => {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === 1 && this.isProfileElement(node)) {
-                        hasNewProfiles = true;
-                    }
-                });
-            });
-            if (hasNewProfiles) {
-                setTimeout(() => this.collectCurrentPageProfiles(), 500);
+      if (this.observer) return;
+      this.observer = new MutationObserver((mutations) => {
+        if (!this.isCollecting) return;
+        let hasNewProfiles = false;
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === 1 && this.isProfileElement(node)) {
+              hasNewProfiles = true;
             }
+          });
         });
-        this.observer.observe(document.body, { childList: true, subtree: true });
+        if (hasNewProfiles) {
+          setTimeout(() => this.collectCurrentPageProfiles(), 500);
+        }
+      });
+      this.observer.observe(document.body, { childList: true, subtree: true });
     }
 
     isProfileElement(element) {
-        const selectors = ['.artdeco-entity-lockup', '[data-chameleon-result-urn]', '.search-results__result-item', '.result-lockup'];
-        return selectors.some(selector =>
-            element.matches && element.matches(selector) ||
-            element.querySelector && element.querySelector(selector)
-        );
+      const selectors = [
+        ".artdeco-entity-lockup",
+        "[data-chameleon-result-urn]",
+        ".search-results__result-item",
+        ".result-lockup",
+      ];
+      return selectors.some(
+        (selector) =>
+          (element.matches && element.matches(selector)) ||
+          (element.querySelector && element.querySelector(selector))
+      );
     }
 
     collectCurrentPageProfiles() {
-        if (!this.isCollecting) return;
-        const selectors = ['.artdeco-entity-lockup', '[data-chameleon-result-urn]', '.search-results__result-item', '.result-lockup'];
-        let profileElements = [];
-        for (const selector of selectors) {
-            profileElements = document.querySelectorAll(selector);
-            if (profileElements.length > 0) break;
+      if (!this.isCollecting) return;
+      const selectors = [
+        ".artdeco-entity-lockup",
+        "[data-chameleon-result-urn]",
+        ".search-results__result-item",
+        ".result-lockup",
+      ];
+      let profileElements = [];
+      for (const selector of selectors) {
+        profileElements = document.querySelectorAll(selector);
+        if (profileElements.length > 0) break;
+      }
+      profileElements.forEach((element) => {
+        const profile = this.extractProfileData(element);
+        if (profile && !this.isDuplicateProfile(profile)) {
+          this.addProfile(profile);
         }
-        profileElements.forEach(element => {
-            const profile = this.extractProfileData(element);
-            if (profile && !this.isDuplicateProfile(profile)) {
-                this.addProfile(profile);
-            }
-        });
+      });
     }
 
     extractProfileData(element) {
-        try {
-            const nameElement = element.querySelector('a[href*="/sales/lead/"], a[href*="/in/"]');
-            const titleBlock = element.querySelector('.artdeco-entity-lockup__subtitle');
-            const locationElement = element.querySelector('.artdeco-entity-lockup__caption');
-            const imageElement = element.querySelector('img[src*="profile"]');
-            if (!nameElement) return null;
-            let name = nameElement.textContent?.trim();
-            if (name && name.includes(' is reachable')) {
-                name = name.replace(' is reachable', '').trim();
-            }
-            const url = nameElement.href.startsWith('http') ? nameElement.href : `https://www.linkedin.com${nameElement.getAttribute('href')}`;
-            const location = locationElement?.textContent?.trim() || '';
-            const profilePic = imageElement?.src || '';
-            let title = '', company = '';
-            if (titleBlock) {
-                const raw = titleBlock.innerText.trim();
-                if (raw.includes(' at ')) {
-                    const parts = raw.split(' at ');
-                    title = parts[0]?.trim() || '';
-                    company = parts[1]?.trim() || '';
-                } else {
-                    title = raw;
-                }
-            }
-            return {
-                name, url, title, company, location, profilePic,
-                timestamp: Date.now(), source: 'sales-navigator'
-            };
-        } catch (error) {
-            console.error('Error extracting profile data:', error);
-            return null;
+      try {
+        const nameElement = element.querySelector(
+          'a[href*="/sales/lead/"], a[href*="/in/"]'
+        );
+        const titleBlock = element.querySelector(
+          ".artdeco-entity-lockup__subtitle"
+        );
+        const locationElement = element.querySelector(
+          ".artdeco-entity-lockup__caption"
+        );
+        const imageElement = element.querySelector('img[src*="profile"]');
+        if (!nameElement) return null;
+        let name = nameElement.textContent?.trim();
+        if (name && name.includes(" is reachable")) {
+          name = name.replace(" is reachable", "").trim();
         }
+        const url = nameElement.href.startsWith("http")
+          ? nameElement.href
+          : `https://www.linkedin.com${nameElement.getAttribute("href")}`;
+        const location = locationElement?.textContent?.trim() || "";
+        const profilePic = imageElement?.src || "";
+        let title = "",
+          company = "";
+        if (titleBlock) {
+          const raw = titleBlock.innerText.trim();
+          if (raw.includes(" at ")) {
+            const parts = raw.split(" at ");
+            title = parts[0]?.trim() || "";
+            company = parts[1]?.trim() || "";
+          } else {
+            title = raw;
+          }
+        }
+        return {
+          name,
+          url,
+          title,
+          company,
+          location,
+          profilePic,
+          timestamp: Date.now(),
+          source: "sales-navigator",
+        };
+      } catch (error) {
+        console.error("Error extracting profile data:", error);
+        return null;
+      }
     }
 
     isDuplicateProfile(newProfile) {
-        return this.profiles.some(profile =>
-            profile.url === newProfile.url ||
-            (profile.name === newProfile.name && profile.title === newProfile.title)
-        );
+      return this.profiles.some(
+        (profile) =>
+          profile.url === newProfile.url ||
+          (profile.name === newProfile.name &&
+            profile.title === newProfile.title)
+      );
     }
 
     addProfile(profile) {
-        this.profiles.push(profile);
-        this.updateProfilesList();
-        this.updateProfilesCount();
-        this.sendProfileToExtension(profile);
+      this.profiles.push(profile);
+      this.updateProfilesList();
+      this.updateProfilesCount();
+      this.sendProfileToExtension(profile);
     }
 
     sendProfileToExtension(profile) {
-        try {
-            chrome.runtime.sendMessage({
-                action: 'profileCollected',
-                profiles: [profile],
-                source: 'sales-navigator-ui'
-            });
-        } catch (error) {}
+      try {
+        chrome.runtime.sendMessage({
+          action: "profileCollected",
+          profiles: [profile],
+          source: "sales-navigator-ui",
+        });
+      } catch (error) {}
     }
 
     updateUI() {
-        const startBtn = this.ui.querySelector('#start-collecting');
-        const pauseBtn = this.ui.querySelector('#pause-collecting');
-        const nextBtn = this.ui.querySelector('#next-button');
-        const statusDot = this.ui.querySelector('#status-dot');
-        const statusText = this.ui.querySelector('#status-text');
+      const startBtn = this.ui.querySelector("#start-collecting");
+      const pauseBtn = this.ui.querySelector("#pause-collecting");
+      const nextBtn = this.ui.querySelector("#next-button");
+      const statusDot = this.ui.querySelector("#status-dot");
+      const statusText = this.ui.querySelector("#status-text");
 
-        if (this.isCollecting) {
-            startBtn.disabled = true;
-            pauseBtn.disabled = false;
-            statusDot.className = 'status-dot collecting';
-            statusText.innerHTML = 'Collecting profiles... <span class="collecting-animation"></span>';
+      if (this.isCollecting) {
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        statusDot.className = "status-dot collecting";
+        statusText.innerHTML =
+          'Collecting profiles... <span class="collecting-animation"></span>';
+      } else {
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        statusDot.className = "status-dot paused";
+        statusText.textContent = "Collection paused";
+        if (this.profiles.length > 0) {
+          nextBtn.style.display = "block";
+          nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
         } else {
-            startBtn.disabled = false;
-            pauseBtn.disabled = true;
-            statusDot.className = 'status-dot paused';
-            statusText.textContent = 'Collection paused';
-            if (this.profiles.length > 0) {
-                nextBtn.style.display = 'block';
-                nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
-            } else {
-                nextBtn.style.display = 'none';
-            }
+          nextBtn.style.display = "none";
         }
+      }
     }
 
     updateProfilesCount() {
-        const countElement = this.ui.querySelector('#profiles-count');
-        const nextBtn = this.ui.querySelector('#next-button');
-        countElement.textContent = this.profiles.length;
-        if (this.profiles.length > 0 && !this.isCollecting) {
-            nextBtn.style.display = 'block';
-            nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
-        } else if (this.profiles.length === 0) {
-            nextBtn.style.display = 'none';
-        }
+      const countElement = this.ui.querySelector("#profiles-count");
+      const nextBtn = this.ui.querySelector("#next-button");
+      countElement.textContent = this.profiles.length;
+      if (this.profiles.length > 0 && !this.isCollecting) {
+        nextBtn.style.display = "block";
+        nextBtn.textContent = `Process Profiles (${this.profiles.length})`;
+      } else if (this.profiles.length === 0) {
+        nextBtn.style.display = "none";
+      }
     }
 
     updateConnectCounts() {
-        const sendConnectElement = this.ui?.querySelector('#send-connect-count');
-        const FailedConnectElement = this.ui?.querySelector('#Failed-connect-count');
+      const sendConnectElement = this.ui?.querySelector("#send-connect-count");
+      const FailedConnectElement = this.ui?.querySelector(
+        "#Failed-connect-count"
+      );
 
-        if (sendConnectElement) {
-            sendConnectElement.textContent = this.sendConnectCount;
-        }
-        if (FailedConnectElement) {
-            FailedConnectElement.textContent = this.FailedConnectCount;
-        }
-        // Also update in workflow popup if it exists
-        const workflowSendConnect = document.getElementById('send-connect-count');
-        const workflowFailedConnect = document.getElementById('Failed-connect-count');
-        if (workflowSendConnect) workflowSendConnect.textContent = this.sendConnectCount;
-        if (workflowFailedConnect) workflowFailedConnect.textContent = this.FailedConnectCount;
+      if (sendConnectElement) {
+        sendConnectElement.textContent = this.sendConnectCount;
+      }
+      if (FailedConnectElement) {
+        FailedConnectElement.textContent = this.FailedConnectCount;
+      }
+      // Also update in workflow popup if it exists
+      const workflowSendConnect = document.getElementById("send-connect-count");
+      const workflowFailedConnect = document.getElementById(
+        "Failed-connect-count"
+      );
+      if (workflowSendConnect)
+        workflowSendConnect.textContent = this.sendConnectCount;
+      if (workflowFailedConnect)
+        workflowFailedConnect.textContent = this.FailedConnectCount;
     }
 
     updateProfilesList() {
-        const listElement = this.ui.querySelector('#profiles-list');
-        if (this.profiles.length === 0) {
-            listElement.innerHTML = '<div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>';
-            return;
-        }
-        listElement.innerHTML = this.profiles.map((profile, index) => `
+      const listElement = this.ui.querySelector("#profiles-list");
+      if (this.profiles.length === 0) {
+        listElement.innerHTML =
+          '<div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>';
+        return;
+      }
+      listElement.innerHTML = this.profiles
+        .map(
+          (profile, index) => `
             <div class="profile-item" data-profile-index="${index}">
                 <div class="profile-image">
-                    ${profile.profilePic ?
-                        `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">` :
-                        `<div class="profile-initial">${profile.name ? profile.name.charAt(0).toUpperCase() : '?'}</div>`
+                    ${
+                      profile.profilePic
+                        ? `<img src="${profile.profilePic}" alt="${profile.name}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">`
+                        : `<div class="profile-initial">${
+                            profile.name
+                              ? profile.name.charAt(0).toUpperCase()
+                              : "?"
+                          }</div>`
                     }
                 </div>
                 <div class="profile-info">
-                    <div class="profile-name" title="${profile.name}">${profile.name}</div>
-                    <div class="profile-title" title="${profile.title}">${profile.title}</div>
-                    ${profile.company ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>` : ''}
-                    <div class="profile-url" title="${profile.url}" data-url="${profile.url}" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
+                    <div class="profile-name" title="${profile.name}">${
+            profile.name
+          }</div>
+                    <div class="profile-title" title="${profile.title}">${
+            profile.title
+          }</div>
+                    ${
+                      profile.company
+                        ? `<div class="profile-company" title="${profile.company}">${profile.company}</div>`
+                        : ""
+                    }
+                    <div class="profile-url" title="${profile.url}" data-url="${
+            profile.url
+          }" style="cursor: pointer;">${this.shortenUrl(profile.url)}</div>
                 </div>
                 <div class="profile-actions">
-                    <button class="profile-action-btn remove-profile-btn" data-url="${profile.url}" title="Remove">✕</button>
+                    <button class="profile-action-btn remove-profile-btn" data-url="${
+                      profile.url
+                    }" title="Remove">✕</button>
                 </div>
             </div>
-        `).join('');
-        // Add event listeners for profile actions
-        listElement.querySelectorAll('.profile-url').forEach(urlElement => {
-            urlElement.addEventListener('click', (e) => {
-                const url = e.target.getAttribute('data-url');
-                this.copyProfileUrl(url);
-            });
+        `
+        )
+        .join("");
+      // Add event listeners for profile actions
+      listElement.querySelectorAll(".profile-url").forEach((urlElement) => {
+        urlElement.addEventListener("click", (e) => {
+          const url = e.target.getAttribute("data-url");
+          this.copyProfileUrl(url);
         });
+      });
 
-        listElement.querySelectorAll('.remove-profile-btn').forEach(removeBtn => {
-            removeBtn.addEventListener('click', (e) => {
-                const url = e.target.getAttribute('data-url');
-                this.removeProfile(url);
-            });
+      listElement
+        .querySelectorAll(".remove-profile-btn")
+        .forEach((removeBtn) => {
+          removeBtn.addEventListener("click", (e) => {
+            const url = e.target.getAttribute("data-url");
+            this.removeProfile(url);
+          });
         });
     }
 
     shortenUrl(url) {
-        if (!url) return '';
-        const match = url.match(/\/in\/([^\/\?]+)/);
-        if (match) return `linkedin.com/in/${match[1]}`;
-        return url.length > 30 ? url.substring(0, 30) + '...' : url;
+      if (!url) return "";
+      const match = url.match(/\/in\/([^\/\?]+)/);
+      if (match) return `linkedin.com/in/${match[1]}`;
+      return url.length > 30 ? url.substring(0, 30) + "..." : url;
     }
 
     copyProfileUrl(url) {
-        navigator.clipboard.writeText(url).then(() => {
-            const notification = document.createElement('div');
-            notification.style.cssText = `position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;`;
-            notification.textContent = 'Profile URL copied!';
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 2000);
-        }).catch(err => console.error('Failed to copy URL:', err));
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          const notification = document.createElement("div");
+          notification.style.cssText = `position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; z-index: 10001; font-size: 12px;`;
+          notification.textContent = "Profile URL copied!";
+          document.body.appendChild(notification);
+          setTimeout(() => notification.remove(), 2000);
+        })
+        .catch((err) => console.error("Failed to copy URL:", err));
     }
 
     removeProfile(url) {
-        this.profiles = this.profiles.filter(profile => profile.url !== url);
-        this.updateProfilesList();
-        this.updateProfilesCount();
+      this.profiles = this.profiles.filter((profile) => profile.url !== url);
+      this.updateProfilesList();
+      this.updateProfilesCount();
     }
 
     clearProfiles() {
-        if (confirm('Are you sure you want to clear all collected profiles?')) {
-            this.profiles = [];
-            this.updateProfilesList();
-            this.updateProfilesCount();
-            this.updateUI();
-        }
+      if (confirm("Are you sure you want to clear all collected profiles?")) {
+        this.profiles = [];
+        this.updateProfilesList();
+        this.updateProfilesCount();
+        this.updateUI();
+      }
     }
 
     startWorkflow() {
-        if (this.profiles.length === 0) {
-            alert('No profiles to process');
-            return;
-        }
-        this.currentWorkflowStep = 'processing';
-        this.currentProfileIndex = 0;
-        this.generatedMessage = null;
-        this.processedProfiles = [];
-        this.hideCollectionUI();
-        this.saveState();
-        this.showWorkflowPopup();
+      if (this.profiles.length === 0) {
+        alert("No profiles to process");
+        return;
+      }
+      this.currentWorkflowStep = "processing";
+      this.currentProfileIndex = 0;
+      this.generatedMessage = null;
+      this.processedProfiles = [];
+      this.hideCollectionUI();
+      this.saveState();
+      this.showWorkflowPopup();
     }
 
     // saveState() {
@@ -820,85 +954,98 @@ class SalesNavigatorFloatingUI {
     //     localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
     // }
 
-       saveState() {
-        const state = {
-            currentWorkflowStep: this.currentWorkflowStep,
-            currentProfileIndex: this.currentProfileIndex,
-            profiles: this.profiles.map(p => ({
-                ...p,
-                profileId: p.profileId,
-                connectionRequestId: p.connectionRequestId,
-                messageId: p.messageId,
-                promptId: p.promptId
-            })),
-            generatedMessage: this.generatedMessage,
-            processedProfiles: this.processedProfiles || [],
-            automationRunning: this.automationRunning,
-            workflowPaused: this.workflowPaused,
-            profileStatuses: this.profileStatuses || {},
-            sendConnectCount: this.sendConnectCount || 0,
-            FailedConnectCount: this.FailedConnectCount || 0,
-            customPrompt: this.customPrompt || '',
-            promptSet: this.promptSet || false
-        };
-        localStorage.setItem('salesNavWorkflow', JSON.stringify(state));
+    saveState() {
+      const state = {
+        currentWorkflowStep: this.currentWorkflowStep,
+        currentProfileIndex: this.currentProfileIndex,
+        profiles: this.profiles.map((p) => ({
+          ...p,
+          profileId: p.profileId,
+          connectionRequestId: p.connectionRequestId,
+          messageId: p.messageId,
+          promptId: p.promptId,
+        })),
+        generatedMessage: this.generatedMessage,
+        processedProfiles: this.processedProfiles || [],
+        automationRunning: this.automationRunning,
+        workflowPaused: this.workflowPaused,
+        profileStatuses: this.profileStatuses || {},
+        sendConnectCount: this.sendConnectCount || 0,
+        FailedConnectCount: this.FailedConnectCount || 0,
+        customPrompt: this.customPrompt || "",
+        promptSet: this.promptSet || false,
+      };
+      localStorage.setItem("salesNavWorkflow", JSON.stringify(state));
     }
 
     updateButtonStates() {
-        const startBtn = document.getElementById('start-automation');
-        const pauseBtn = document.getElementById('pause-automation');
-        const resumeBtn = document.getElementById('resume-automation');
+      const startBtn = document.getElementById("start-automation");
+      const pauseBtn = document.getElementById("pause-automation");
+      const resumeBtn = document.getElementById("resume-automation");
 
-        if (this.automationRunning && !this.workflowPaused) {
-            if (startBtn) startBtn.style.display = 'none';
-            if (pauseBtn) pauseBtn.style.display = 'inline-block';
-            if (resumeBtn) resumeBtn.style.display = 'none';
-        } else if (this.automationRunning && this.workflowPaused) {
-            if (startBtn) startBtn.style.display = 'none';
-            if (pauseBtn) pauseBtn.style.display = 'none';
-            if (resumeBtn) resumeBtn.style.display = 'inline-block';
-        } else {
-            if (startBtn) startBtn.style.display = 'inline-block';
-            if (pauseBtn) pauseBtn.style.display = 'none';
-            if (resumeBtn) resumeBtn.style.display = 'none';
-        }
+      if (this.automationRunning && !this.workflowPaused) {
+        if (startBtn) startBtn.style.display = "none";
+        if (pauseBtn) pauseBtn.style.display = "inline-block";
+        if (resumeBtn) resumeBtn.style.display = "none";
+      } else if (this.automationRunning && this.workflowPaused) {
+        if (startBtn) startBtn.style.display = "none";
+        if (pauseBtn) pauseBtn.style.display = "none";
+        if (resumeBtn) resumeBtn.style.display = "inline-block";
+      } else {
+        if (startBtn) startBtn.style.display = "inline-block";
+        if (pauseBtn) pauseBtn.style.display = "none";
+        if (resumeBtn) resumeBtn.style.display = "none";
+      }
     }
 
     showWorkflowPopup() {
-        const overlay = document.createElement('div');
-        overlay.id = 'workflow-popup-overlay';
-        overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.3) !important; z-index: 999999 !important; display: flex !important; justify-content: flex-end !important; align-items: flex-start !important; pointer-events: none !important; padding: 20px !important;`;
-        const popup = document.createElement('div');
-        popup.id = 'workflow-popup';
-        popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 450px !important; max-height: 90vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important; margin-top: 20px !important;`;
+      const overlay = document.createElement("div");
+      overlay.id = "workflow-popup-overlay";
+      overlay.style.cssText = `position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; background: rgba(0, 0, 0, 0.3) !important; z-index: 999999 !important; display: flex !important; justify-content: flex-end !important; align-items: flex-start !important; pointer-events: none !important; padding: 20px !important;`;
+      const popup = document.createElement("div");
+      popup.id = "workflow-popup";
+      popup.style.cssText = `background: white !important; border-radius: 12px !important; padding: 24px !important; width: 450px !important; max-height: 90vh !important; overflow-y: auto !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important; position: relative !important; z-index: 1000000 !important; pointer-events: auto !important; margin-top: 20px !important;`;
 
-        popup.innerHTML = `
+      popup.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin: 0; color: #0073b1;">Processing Profiles</h2>
                 <button id="close-workflow-popup" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
             </div>
             <div style="margin-bottom: 20px;">
                 <div style="background: #f3f6f8; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <strong>Progress: </strong><span id="workflow-progress">0 / ${this.profiles.length}</span>
+                    <strong>Progress: </strong><span id="workflow-progress">0 / ${
+                      this.profiles.length
+                    }</span>
                 </div>
                 <div style="background: #e7f3ff; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
                     <strong>Current Status: </strong><span id="workflow-current-status">Starting workflow...</span>
                 </div>
                 <div style="background: #fff3cd; padding: 12px; border-radius: 8px;">
-                    <strong>Message: </strong><span id="workflow-message">${this.generatedMessage || 'Will be generated from custom prompt'}</span>
+                    <strong>Message: </strong><span id="workflow-message">${
+                      this.generatedMessage ||
+                      "Will be generated from custom prompt"
+                    }</span>
                 </div>
-                <div id="prompt-section" style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-top: 8px; ${this.promptSet ? 'display: none;' : ''}">
+                <div id="prompt-section" style="background: #e8f5e8; padding: 12px; border-radius: 8px; margin-top: 8px; ${
+                  this.promptSet ? "display: none;" : ""
+                }">
                     <strong>Custom Prompt: </strong>
                     <textarea id="custom-prompt-input" placeholder="Enter your custom prompt for message generation..."
-                        style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 14px;">${this.customPrompt}</textarea>
+                        style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 14px;">${
+                          this.customPrompt
+                        }</textarea>
                     <button id="set-prompt-btn" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
                             <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
                         </svg>
                     </button>
                 </div>
-                <div id="prompt-display" style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 8px; ${!this.promptSet ? 'display: none;' : ''}">
-                    <strong>Using Custom Prompt: </strong><span id="current-prompt-text" style="font-style: italic;">${this.customPrompt}</span>
+                <div id="prompt-display" style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 8px; ${
+                  !this.promptSet ? "display: none;" : ""
+                }">
+                    <strong>Using Custom Prompt: </strong><span id="current-prompt-text" style="font-style: italic;">${
+                      this.customPrompt
+                    }</span>
                     <button id="change-prompt-btn" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: inline-block; vertical-align: middle;">
                             <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
@@ -906,21 +1053,30 @@ class SalesNavigatorFloatingUI {
                     </button>
                 </div>
                 <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; margin-top: 8px;">
-                    <strong>LinkedIn URL: </strong><span id="workflow-linkedin-url" style="font-size: 12px; word-break: break-all;">${this.currentLinkedInProfileUrl || 'Will be captured from profile'}</span>
+                    <strong>LinkedIn URL: </strong><span id="workflow-linkedin-url" style="font-size: 12px; word-break: break-all;">${
+                      this.currentLinkedInProfileUrl ||
+                      "Will be captured from profile"
+                    }</span>
                 </div>
             </div>
 
             <div id="workflow-profiles-list" style="max-height: 300px; overflow-y: auto;">
-                ${this.profiles.map((profile, index) => `
+                ${this.profiles
+                  .map(
+                    (profile, index) => `
                     <div id="profile-${index}" style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee;">
                         <div id="status-icon-${index}" style="width: 20px; height: 20px; border-radius: 50%; background: #ddd; margin-right: 12px; display: flex; align-items: center; justify-content: center; font-size: 12px;">⏳</div>
                         <div style="flex: 1;">
                             <div style="font-weight: 500;">${profile.name}</div>
-                            <div style="font-size: 12px; color: #666;">${profile.title || ''}</div>
+                            <div style="font-size: 12px; color: #666;">${
+                              profile.title || ""
+                            }</div>
                         </div>
                         <div id="profile-status-${index}" style="font-size: 12px; color: #666;">Waiting</div>
                     </div>
-                `).join('')}
+                `
+                  )
+                  .join("")}
             </div>
             <div style="margin-top: 20px; text-align: center;">
                 <button id="start-automation" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-weight: 500; font-size: 16px;">🚀 Start Automation</button>
@@ -929,1027 +1085,1550 @@ class SalesNavigatorFloatingUI {
             </div>
         `;
 
-        popup.addEventListener('click', (e) => e.stopPropagation());
-        overlay.appendChild(popup);
-        document.body.appendChild(overlay);
+      popup.addEventListener("click", (e) => e.stopPropagation());
+      overlay.appendChild(popup);
+      document.body.appendChild(overlay);
 
-        document.getElementById('close-workflow-popup').addEventListener('click', () => this.closeWorkflowPopup());
-        document.getElementById('start-automation').addEventListener('click', () => this.startFullAutomation());
-        document.getElementById('pause-automation').addEventListener('click', () => this.pauseAutomation());
-        document.getElementById('resume-automation').addEventListener('click', () => this.resumeAutomation());
-        document.getElementById('set-prompt-btn').addEventListener('click', () => this.setCustomPrompt());
-        document.getElementById('change-prompt-btn').addEventListener('click', () => this.changePrompt());
+      document
+        .getElementById("close-workflow-popup")
+        .addEventListener("click", () => this.closeWorkflowPopup());
+      document
+        .getElementById("start-automation")
+        .addEventListener("click", () => this.startFullAutomation());
+      document
+        .getElementById("pause-automation")
+        .addEventListener("click", () => this.pauseAutomation());
+      document
+        .getElementById("resume-automation")
+        .addEventListener("click", () => this.resumeAutomation());
+      document
+        .getElementById("set-prompt-btn")
+        .addEventListener("click", () => this.setCustomPrompt());
+      document
+        .getElementById("change-prompt-btn")
+        .addEventListener("click", () => this.changePrompt());
 
-        this.workflowPopup = overlay;
-        if (this.ui) this.ui.style.display = 'none';
-        this.updateWorkflowUI();
+      this.workflowPopup = overlay;
+      if (this.ui) this.ui.style.display = "none";
+      this.updateWorkflowUI();
     }
 
     updateWorkflowUI() {
-        if (!this.workflowPopup) return;
-        const progressElement = document.getElementById('workflow-progress');
-        const statusElement = document.getElementById('workflow-current-status');
-        const messageElement = document.getElementById('workflow-message');
-        const profileUrlElement = document.getElementById('workflow-profile-url');
-        const linkedinUrlElement = document.getElementById('workflow-linkedin-url');
+      if (!this.workflowPopup) return;
+      const progressElement = document.getElementById("workflow-progress");
+      const statusElement = document.getElementById("workflow-current-status");
+      const messageElement = document.getElementById("workflow-message");
+      const profileUrlElement = document.getElementById("workflow-profile-url");
+      const linkedinUrlElement = document.getElementById(
+        "workflow-linkedin-url"
+      );
 
-        if (progressElement) progressElement.textContent = `${this.currentProfileIndex} / ${this.profiles.length}`;
-        if (this.currentWorkflowStep === 'processing' && this.currentProfileIndex < this.profiles.length) {
-            const currentProfile = this.profiles[this.currentProfileIndex];
-            if (statusElement) statusElement.textContent = `Processing: ${currentProfile.name}`;
-        }
+      if (progressElement)
+        progressElement.textContent = `${this.currentProfileIndex} / ${this.profiles.length}`;
+      if (
+        this.currentWorkflowStep === "processing" &&
+        this.currentProfileIndex < this.profiles.length
+      ) {
+        const currentProfile = this.profiles[this.currentProfileIndex];
+        if (statusElement)
+          statusElement.textContent = `Processing: ${currentProfile.name}`;
+      }
 
-        if (this.currentProfileIndex < this.profiles.length && this.automationRunning) {
-            this.setCurrentProfileProcessing();
-        }
-        if (messageElement) {
-            messageElement.textContent = this.generatedMessage || 'Will be generated from custom prompt';
-        }
+      if (
+        this.currentProfileIndex < this.profiles.length &&
+        this.automationRunning
+      ) {
+        this.setCurrentProfileProcessing();
+      }
+      if (messageElement) {
+        messageElement.textContent =
+          this.generatedMessage || "Will be generated from custom prompt";
+      }
 
-        const promptSection = document.getElementById('prompt-section');
-        const promptDisplay = document.getElementById('prompt-display');
-        const currentPromptText = document.getElementById('current-prompt-text');
-        const customPromptInput = document.getElementById('custom-prompt-input');
+      const promptSection = document.getElementById("prompt-section");
+      const promptDisplay = document.getElementById("prompt-display");
+      const currentPromptText = document.getElementById("current-prompt-text");
+      const customPromptInput = document.getElementById("custom-prompt-input");
 
-        if (promptSection && promptDisplay) {
-            if (this.promptSet) {
-                promptSection.style.display = 'none';
-                promptDisplay.style.display = 'block';
-                if (currentPromptText) currentPromptText.textContent = this.customPrompt;
-            } else {
-                promptSection.style.display = 'block';
-                promptDisplay.style.display = 'none';
-                if (customPromptInput) customPromptInput.value = this.customPrompt;
-            }
+      if (promptSection && promptDisplay) {
+        if (this.promptSet) {
+          promptSection.style.display = "none";
+          promptDisplay.style.display = "block";
+          if (currentPromptText)
+            currentPromptText.textContent = this.customPrompt;
+        } else {
+          promptSection.style.display = "block";
+          promptDisplay.style.display = "none";
+          if (customPromptInput) customPromptInput.value = this.customPrompt;
         }
-        if (profileUrlElement) profileUrlElement.textContent = this.getCurrentProfileUrl();
-        if (linkedinUrlElement) linkedinUrlElement.textContent = this.currentLinkedInProfileUrl || 'Will be captured from profile';
-        this.restoreProfileStatuses();
-        this.updateButtonStates();
+      }
+      if (profileUrlElement)
+        profileUrlElement.textContent = this.getCurrentProfileUrl();
+      if (linkedinUrlElement)
+        linkedinUrlElement.textContent =
+          this.currentLinkedInProfileUrl || "Will be captured from profile";
+      this.restoreProfileStatuses();
+      this.updateButtonStates();
     }
 
     restoreProfileStatuses() {
-        Object.keys(this.profileStatuses).forEach(index => {
-            const savedStatus = this.profileStatuses[index];
-            if (savedStatus) {
-                const statusIcon = document.getElementById(`status-icon-${index}`);
-                const profileStatus = document.getElementById(`profile-status-${index}`);
-                if (statusIcon) {
-                    statusIcon.textContent = savedStatus.icon;
-                    statusIcon.style.background = savedStatus.color;
-                    statusIcon.style.color = 'white';
-                }
-                if (profileStatus) {
-                    profileStatus.textContent = savedStatus.text || savedStatus.status;
-                }
-            }
-        });
-
-        if (this.currentProfileIndex < this.profiles.length && this.automationRunning && !this.workflowPaused) {
-            this.setCurrentProfileProcessing();
+      Object.keys(this.profileStatuses).forEach((index) => {
+        const savedStatus = this.profileStatuses[index];
+        if (savedStatus) {
+          const statusIcon = document.getElementById(`status-icon-${index}`);
+          const profileStatus = document.getElementById(
+            `profile-status-${index}`
+          );
+          if (statusIcon) {
+            statusIcon.textContent = savedStatus.icon;
+            statusIcon.style.background = savedStatus.color;
+            statusIcon.style.color = "white";
+          }
+          if (profileStatus) {
+            profileStatus.textContent = savedStatus.text || savedStatus.status;
+          }
         }
+      });
+
+      if (
+        this.currentProfileIndex < this.profiles.length &&
+        this.automationRunning &&
+        !this.workflowPaused
+      ) {
+        this.setCurrentProfileProcessing();
+      }
     }
 
     closeWorkflowPopup() {
-        if (this.autoProcessingTimeout) {
-            clearTimeout(this.autoProcessingTimeout);
-            this.autoProcessingTimeout = null;
-        }
+      if (this.autoProcessingTimeout) {
+        clearTimeout(this.autoProcessingTimeout);
+        this.autoProcessingTimeout = null;
+      }
 
-        if (this.workflowPopup) {
-            document.body.removeChild(this.workflowPopup);
-            this.workflowPopup = null;
-        }
-        this.currentWorkflowStep = null;
-        this.currentProfileIndex = 0;
-        this.showUI();
+      if (this.workflowPopup) {
+        document.body.removeChild(this.workflowPopup);
+        this.workflowPopup = null;
+      }
+      this.currentWorkflowStep = null;
+      this.currentProfileIndex = 0;
+      this.showUI();
     }
 
     pauseAutomation() {
-        this.workflowPaused = true;
-        this.automationRunning = false;
-        if (this.autoProcessingTimeout) {
-            clearTimeout(this.autoProcessingTimeout);
-            this.autoProcessingTimeout = null;
-        }
+      this.workflowPaused = true;
+      this.automationRunning = false;
+      if (this.autoProcessingTimeout) {
+        clearTimeout(this.autoProcessingTimeout);
+        this.autoProcessingTimeout = null;
+      }
 
-        document.getElementById('pause-automation').style.display = 'none';
-        document.getElementById('resume-automation').style.display = 'inline-block';
-        this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
-        this.updateCurrentStatus('⏸️ Automation paused. Click "Resume Automation" to continue.');
-        this.saveState();
+      document.getElementById("pause-automation").style.display = "none";
+      document.getElementById("resume-automation").style.display =
+        "inline-block";
+      this.updateProfileStatus(
+        this.currentProfileIndex,
+        "Paused",
+        "⏸️",
+        "#ff9800"
+      );
+      this.updateCurrentStatus(
+        '⏸️ Automation paused. Click "Resume Automation" to continue.'
+      );
+      this.saveState();
     }
 
     resumeAutomation() {
-        this.workflowPaused = false;
-        this.automationRunning = true;
-        document.getElementById('pause-automation').style.display = 'inline-block';
-        document.getElementById('resume-automation').style.display = 'none';
-        this.updateCurrentStatus(`▶️ Automation resumed... Next profile in ${this.profileDelay / 1000} seconds.`);
+      this.workflowPaused = false;
+      this.automationRunning = true;
+      document.getElementById("pause-automation").style.display =
+        "inline-block";
+      document.getElementById("resume-automation").style.display = "none";
+      this.updateCurrentStatus(
+        `▶️ Automation resumed... Next profile in ${
+          this.profileDelay / 1000
+        } seconds.`
+      );
 
-        // Update current profile status to show it's being processed
-        this.setCurrentProfileProcessing();
+      // Update current profile status to show it's being processed
+      this.setCurrentProfileProcessing();
 
-        this.saveState();
-        this.scheduleNextProfile();
+      this.saveState();
+      this.scheduleNextProfile();
     }
 
     startFullAutomation() {
-        if (!this.promptSet || !this.customPrompt.trim()) {
-            alert('Please set a custom prompt before starting automation');
-            return;
-        }
-        const startBtn = document.getElementById('start-automation');
-        const pauseBtn = document.getElementById('pause-automation');
+      if (!this.promptSet || !this.customPrompt.trim()) {
+        alert("Please set a custom prompt before starting automation");
+        return;
+      }
+      const startBtn = document.getElementById("start-automation");
+      const pauseBtn = document.getElementById("pause-automation");
 
-        if (startBtn) startBtn.style.display = 'none';
-        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+      if (startBtn) startBtn.style.display = "none";
+      if (pauseBtn) pauseBtn.style.display = "inline-block";
 
-        this.workflowPaused = false;
-        this.automationRunning = true;
-        this.saveState();
+      this.workflowPaused = false;
+      this.automationRunning = true;
+      this.saveState();
 
-        this.updateCurrentStatus('🚀 Starting full automation process...');
-        this.updateWorkflowUI();
-        this.setCurrentProfileProcessing();
-        setTimeout(() => {
-            this.goToNextProfile();
-        }, 2000);
+      this.updateCurrentStatus("🚀 Starting full automation process...");
+      this.updateWorkflowUI();
+      this.setCurrentProfileProcessing();
+      setTimeout(() => {
+        this.goToNextProfile();
+      }, 2000);
     }
 
     updateCurrentStatus(message) {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = message;
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement) statusElement.textContent = message;
     }
 
     setCustomPrompt() {
-        const promptInput = document.getElementById('custom-prompt-input');
-        const promptValue = promptInput.value.trim();
+      const promptInput = document.getElementById("custom-prompt-input");
+      const promptValue = promptInput.value.trim();
 
-        if (!promptValue) {
-            alert('Please enter a custom prompt');
-            return;
-        }
+      if (!promptValue) {
+        alert("Please enter a custom prompt");
+        return;
+      }
 
-        this.customPrompt = promptValue;
-        this.promptSet = true;
-        this.saveState();
+      this.customPrompt = promptValue;
+      this.promptSet = true;
+      this.saveState();
 
-        // Hide prompt input section and show display section
-        document.getElementById('prompt-section').style.display = 'none';
-        document.getElementById('prompt-display').style.display = 'block';
-        document.getElementById('current-prompt-text').textContent = this.customPrompt;
+      // Hide prompt input section and show display section
+      document.getElementById("prompt-section").style.display = "none";
+      document.getElementById("prompt-display").style.display = "block";
+      document.getElementById("current-prompt-text").textContent =
+        this.customPrompt;
 
-        // Update message display
-        const messageElement = document.getElementById('workflow-message');
-        if (messageElement) {
-            messageElement.textContent = 'Will be generated from custom prompt';
-        }
+      // Update message display
+      const messageElement = document.getElementById("workflow-message");
+      if (messageElement) {
+        messageElement.textContent = "Will be generated from custom prompt";
+      }
     }
 
     changePrompt() {
-        this.promptSet = false;
-        this.customPrompt = '';
-        this.saveState();
+      this.promptSet = false;
+      this.customPrompt = "";
+      this.saveState();
 
-        // Show prompt input section and hide display section
-        document.getElementById('prompt-section').style.display = 'block';
-        document.getElementById('prompt-display').style.display = 'none';
-        document.getElementById('custom-prompt-input').value = '';
+      // Show prompt input section and hide display section
+      document.getElementById("prompt-section").style.display = "block";
+      document.getElementById("prompt-display").style.display = "none";
+      document.getElementById("custom-prompt-input").value = "";
 
-        // Update message display
-        const messageElement = document.getElementById('workflow-message');
-        if (messageElement) {
-            messageElement.textContent = 'Will be generated from custom prompt';
-        }
+      // Update message display
+      const messageElement = document.getElementById("workflow-message");
+      if (messageElement) {
+        messageElement.textContent = "Will be generated from custom prompt";
+      }
     }
 
     scheduleNextProfile() {
-        if (this.autoProcessingTimeout) {
-            clearTimeout(this.autoProcessingTimeout);
+      if (this.autoProcessingTimeout) {
+        clearTimeout(this.autoProcessingTimeout);
+      }
+      this.startCountdownTimer();
+      this.autoProcessingTimeout = setTimeout(() => {
+        if (!this.workflowPaused) {
+          this.goToNextProfile();
         }
-        this.startCountdownTimer();
-        this.autoProcessingTimeout = setTimeout(() => {
-            if (!this.workflowPaused) {
-                this.goToNextProfile();
-            }
-        }, this.profileDelay);
+      }, this.profileDelay);
     }
 
     startCountdownTimer() {
-        let remainingTime = this.profileDelay / 1000;
-        const countdownInterval = setInterval(() => {
-            if (this.workflowPaused) {
-                clearInterval(countdownInterval);
-                return;
-            }
+      let remainingTime = this.profileDelay / 1000;
+      const countdownInterval = setInterval(() => {
+        if (this.workflowPaused) {
+          clearInterval(countdownInterval);
+          return;
+        }
 
-            remainingTime--;
-            if (remainingTime > 0) {
-                const statusElement = document.getElementById('workflow-current-status');
-                if (statusElement) {
-                    const baseMessage = statusElement.textContent.split(' in ')[0];
-                    statusElement.textContent = `${baseMessage} in ${remainingTime} seconds...`;
-                }
-            } else {
-                clearInterval(countdownInterval);
-            }
-        }, 1000);
+        remainingTime--;
+        if (remainingTime > 0) {
+          const statusElement = document.getElementById(
+            "workflow-current-status"
+          );
+          if (statusElement) {
+            const baseMessage = statusElement.textContent.split(" in ")[0];
+            statusElement.textContent = `${baseMessage} in ${remainingTime} seconds...`;
+          }
+        } else {
+          clearInterval(countdownInterval);
+        }
+      }, 1000);
     }
 
     async goToNextProfile() {
-        console.log(`goToNextProfile called. Current index: ${this.currentProfileIndex}, Total profiles: ${this.profiles.length}`);
-        const pauseBtn = document.getElementById('pause-workflow');
-        if (pauseBtn) pauseBtn.style.display = 'inline-block';
+      console.log(
+        `goToNextProfile called. Current index: ${this.currentProfileIndex}, Total profiles: ${this.profiles.length}`
+      );
+      const pauseBtn = document.getElementById("pause-workflow");
+      if (pauseBtn) pauseBtn.style.display = "inline-block";
 
-        if (this.currentProfileIndex < this.profiles.length) {
-            const profile = this.profiles[this.currentProfileIndex];
-            console.log(`Next profile to process: ${profile.name} - ${profile.url}`);
-            await this.navigateToProfile(profile.url);
-        } else {
-            console.log('All profiles completed, finishing workflow');
-            this.completeWorkflow();
-        }
+      if (this.currentProfileIndex < this.profiles.length) {
+        const profile = this.profiles[this.currentProfileIndex];
+        console.log(
+          `Next profile to process: ${profile.name} - ${profile.url}`
+        );
+        await this.navigateToProfile(profile.url);
+      } else {
+        console.log("All profiles completed, finishing workflow");
+        this.completeWorkflow();
+      }
     }
 
     async navigateToProfile(profileUrl) {
-        console.log(`Navigating to profile ${this.currentProfileIndex + 1}/${this.profiles.length}: ${profileUrl}`);
-        this.updateCurrentStatus(`Opening profile ${this.currentProfileIndex + 1}/${this.profiles.length}...`);
+      console.log(
+        `Navigating to profile ${this.currentProfileIndex + 1}/${
+          this.profiles.length
+        }: ${profileUrl}`
+      );
+      this.updateCurrentStatus(
+        `Opening profile ${this.currentProfileIndex + 1}/${
+          this.profiles.length
+        }...`
+      );
 
-        this.saveState();
-        window.location.href = profileUrl;
+      this.saveState();
+      window.location.href = profileUrl;
     }
 
     processCurrentProfile() {
-        const pauseBtn = document.getElementById('pause-workflow');
-        if (pauseBtn) pauseBtn.style.display = 'inline-block';
-        this.processNextProfile();
+      const pauseBtn = document.getElementById("pause-workflow");
+      if (pauseBtn) pauseBtn.style.display = "inline-block";
+      this.processNextProfile();
     }
 
     forceContinueWorkflow() {
-        this.workflowPaused = false;
-        this.updateProfileStatus(this.currentProfileIndex, 'Force continuing...', '⚡', '#ff9800');
-        setTimeout(() => this.showThreeDotMenu(), 1000);
+      this.workflowPaused = false;
+      this.updateProfileStatus(
+        this.currentProfileIndex,
+        "Force continuing...",
+        "⚡",
+        "#ff9800"
+      );
+      setTimeout(() => this.showThreeDotMenu(), 1000);
     }
 
     updateProfileStatus(index, status, icon, color) {
-        const statusIcon = document.getElementById(`status-icon-${index}`);
-        const profileStatus = document.getElementById(`profile-status-${index}`);
-        if (statusIcon) {
-            statusIcon.textContent = icon;
-            statusIcon.style.background = color;
-            statusIcon.style.color = 'white';
-        }
-        if (profileStatus) profileStatus.textContent = status;
+      const statusIcon = document.getElementById(`status-icon-${index}`);
+      const profileStatus = document.getElementById(`profile-status-${index}`);
+      if (statusIcon) {
+        statusIcon.textContent = icon;
+        statusIcon.style.background = color;
+        statusIcon.style.color = "white";
+      }
+      if (profileStatus) profileStatus.textContent = status;
 
-        this.profileStatuses[index] = {
-            status: status,
-            icon: icon,
-            color: color,
-            timestamp: Date.now()
-        };
-        this.saveState();
+      this.profileStatuses[index] = {
+        status: status,
+        icon: icon,
+        color: color,
+        timestamp: Date.now(),
+      };
+      this.saveState();
     }
 
     setCurrentProfileProcessing() {
-        if (this.currentProfileIndex < this.profiles.length) {
-            this.updateProfileStatus(this.currentProfileIndex, 'Processing...', '🔄', '#2196f3');
-        }
+      if (this.currentProfileIndex < this.profiles.length) {
+        this.updateProfileStatus(
+          this.currentProfileIndex,
+          "Processing...",
+          "🔄",
+          "#2196f3"
+        );
+      }
     }
 
     async processNextProfile() {
-        if (this.workflowPaused) return;
-        if (this.currentProfileIndex >= this.profiles.length) {
-            this.completeWorkflow();
+      if (this.workflowPaused) return;
+      if (this.currentProfileIndex >= this.profiles.length) {
+        this.completeWorkflow();
+        return;
+      }
+
+      const profile = this.profiles[this.currentProfileIndex];
+      this.currentLinkedInProfileUrl = null;
+
+      try {
+        const currentUrl = window.location.href;
+        const isOnSalesNavPage = currentUrl.includes("/sales/search/people");
+        const isOnLinkedInProfilePage =
+          currentUrl.includes("/in/") && currentUrl.includes("linkedin.com");
+        const isOnSalesNavProfilePage =
+          currentUrl.includes("/sales/lead/") &&
+          currentUrl.includes("linkedin.com");
+
+        if (isOnSalesNavPage) {
+          if (this.workflowPopup) this.closeWorkflowPopup();
+          await this.openProfileUrl(profile.url);
+          return;
+        } else if (isOnLinkedInProfilePage || isOnSalesNavProfilePage) {
+          if (!this.workflowPopup) this.showWorkflowPopup();
+          this.updateWorkflowUI();
+          this.updateProfileStatus(
+            this.currentProfileIndex,
+            "Page loading...",
+            "🔄",
+            "#2196f3"
+          );
+
+          if (this.workflowPaused) {
+            this.updateProfileStatus(
+              this.currentProfileIndex,
+              "Paused",
+              "⏸️",
+              "#ff9800"
+            );
             return;
+          }
+
+          await this.waitForPageLoad();
+          this.updateProfileStatus(
+            this.currentProfileIndex,
+            "Finding menu...",
+            "🔍",
+            "#2196f3"
+          );
+          await this.showThreeDotMenu();
+          this.updateProfileStatus(
+            this.currentProfileIndex,
+            "Completed",
+            "✅",
+            "#4caf50"
+          );
+          this.processedProfiles.push({
+            ...profile,
+            status: "completed",
+            message: this.generatedMessage,
+          });
+
+          await this.wait(2000);
+          this.currentProfileIndex++;
+          console.log(
+            `Profile completed. Moving to index ${this.currentProfileIndex}/${this.profiles.length}`
+          );
+
+          // Update UI to reflect completion
+          this.updateWorkflowUI();
+
+          if (this.currentProfileIndex < this.profiles.length) {
+            this.updateCurrentStatus(
+              `✅ Profile completed! Auto-moving to next profile in ${
+                this.profileDelay / 1000
+              } seconds...`
+            );
+            this.scheduleNextProfile();
+          } else {
+            this.completeWorkflow();
+          }
+          return;
+        } else {
+          await this.navigateBackToSalesNav();
+          return;
         }
-
-        const profile = this.profiles[this.currentProfileIndex];
-        this.currentLinkedInProfileUrl = null;
-
-        try {
-            const currentUrl = window.location.href;
-            const isOnSalesNavPage = currentUrl.includes('/sales/search/people');
-            const isOnLinkedInProfilePage = currentUrl.includes('/in/') && currentUrl.includes('linkedin.com');
-            const isOnSalesNavProfilePage = currentUrl.includes('/sales/lead/') && currentUrl.includes('linkedin.com');
-
-            if (isOnSalesNavPage) {
-                if (this.workflowPopup) this.closeWorkflowPopup();
-                await this.openProfileUrl(profile.url);
-                return;
-            } else if (isOnLinkedInProfilePage || isOnSalesNavProfilePage) {
-                if (!this.workflowPopup) this.showWorkflowPopup();
-                this.updateWorkflowUI();
-                this.updateProfileStatus(this.currentProfileIndex, 'Page loading...', '🔄', '#2196f3');
-
-                if (this.workflowPaused) {
-                    this.updateProfileStatus(this.currentProfileIndex, 'Paused', '⏸️', '#ff9800');
-                    return;
-                }
-
-                await this.waitForPageLoad();
-                this.updateProfileStatus(this.currentProfileIndex, 'Finding menu...', '🔍', '#2196f3');
-                await this.showThreeDotMenu();
-                this.updateProfileStatus(this.currentProfileIndex, 'Completed', '✅', '#4caf50');
-                this.processedProfiles.push({...profile, status: 'completed', message: this.generatedMessage});
-
-                await this.wait(2000);
-                this.currentProfileIndex++;
-                console.log(`Profile completed. Moving to index ${this.currentProfileIndex}/${this.profiles.length}`);
-
-                // Update UI to reflect completion
-                this.updateWorkflowUI();
-
-                if (this.currentProfileIndex < this.profiles.length) {
-                    this.updateCurrentStatus(`✅ Profile completed! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
-                    this.scheduleNextProfile();
-                } else {
-                    this.completeWorkflow();
-                }
-                return;
-            } else {
-                await this.navigateBackToSalesNav();
-                return;
-            }
-        } catch (error) {
-            console.error('Error processing profile:', error);
-            if (!this.workflowPopup) this.showWorkflowPopup();
-            this.updateProfileStatus(this.currentProfileIndex, 'Error', '❌', '#f44336');
-            this.processedProfiles.push({...profile, status: 'error', error: error.message});
-            await this.wait(1000);
-            this.currentProfileIndex++;
-            if (this.currentProfileIndex < this.profiles.length) {
-                this.updateCurrentStatus(`❌ Error occurred! Auto-moving to next profile in ${this.profileDelay / 1000} seconds...`);
-                this.scheduleNextProfile();
-            } else {
-                this.completeWorkflow();
-            }
+      } catch (error) {
+        console.error("Error processing profile:", error);
+        if (!this.workflowPopup) this.showWorkflowPopup();
+        this.updateProfileStatus(
+          this.currentProfileIndex,
+          "Error",
+          "❌",
+          "#f44336"
+        );
+        this.processedProfiles.push({
+          ...profile,
+          status: "error",
+          error: error.message,
+        });
+        await this.wait(1000);
+        this.currentProfileIndex++;
+        if (this.currentProfileIndex < this.profiles.length) {
+          this.updateCurrentStatus(
+            `❌ Error occurred! Auto-moving to next profile in ${
+              this.profileDelay / 1000
+            } seconds...`
+          );
+          this.scheduleNextProfile();
+        } else {
+          this.completeWorkflow();
         }
+      }
     }
 
     async navigateBackToSalesNav() {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Returning to search page...';
-        this.saveState();
-        if (document.referrer && document.referrer.includes('/sales/search/people')) {
-            window.history.back();
-        } else {
-            const salesNavUrl = 'https://www.linkedin.com/sales/search/people';
-            window.location.href = salesNavUrl;
-        }
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement)
+        statusElement.textContent = "Returning to search page...";
+      this.saveState();
+      if (
+        document.referrer &&
+        document.referrer.includes("/sales/search/people")
+      ) {
+        window.history.back();
+      } else {
+        const salesNavUrl = "https://www.linkedin.com/sales/search/people";
+        window.location.href = salesNavUrl;
+      }
     }
 
     async openProfileUrl(url) {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Opening profile URL...';
-        this.saveState();
-        window.location.href = url;
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement) statusElement.textContent = "Opening profile URL...";
+      this.saveState();
+      window.location.href = url;
     }
 
     async waitForPageLoad() {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Waiting for page to load...';
-        return new Promise(resolve => {
-            const maxTimeout = setTimeout(() => resolve(), 10000);
-            if (document.readyState === 'complete') {
-                clearTimeout(maxTimeout);
-                setTimeout(resolve, 1000);
-                return;
-            }
-            const checkLoaded = () => {
-                if (document.readyState === 'complete') {
-                    clearTimeout(maxTimeout);
-                    setTimeout(resolve, 1000);
-                } else {
-                    setTimeout(checkLoaded, 500);
-                }
-            };
-            checkLoaded();
-        });
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement)
+        statusElement.textContent = "Waiting for page to load...";
+      return new Promise((resolve) => {
+        const maxTimeout = setTimeout(() => resolve(), 10000);
+        if (document.readyState === "complete") {
+          clearTimeout(maxTimeout);
+          setTimeout(resolve, 1000);
+          return;
+        }
+        const checkLoaded = () => {
+          if (document.readyState === "complete") {
+            clearTimeout(maxTimeout);
+            setTimeout(resolve, 1000);
+          } else {
+            setTimeout(checkLoaded, 500);
+          }
+        };
+        checkLoaded();
+      });
     }
 
     // Helper: reliably resolve the overflow menu opened by a trigger button
     getOverflowMenuForButton(button) {
-        if (!button) return null;
-        const menuId = button.getAttribute('aria-controls');
-        let menu = menuId ? document.getElementById(menuId) : null;
-        if (!menu || !this.isElementVisible(menu)) {
-            const candidates = Array.from(document.querySelectorAll('div[role="menu"], [id^="hue-menu-"]'));
-            const visibleMenus = candidates.filter(el => this.isElementVisible(el));
-            const preferred = visibleMenus.find(el => {
-                const text = (el.textContent || '').toLowerCase();
-                return text.includes('copy') || text.includes('connect') || text.includes('linkedin');
-            });
-            menu = preferred || visibleMenus.pop() || menu;
-        }
-        return menu || null;
+      if (!button) return null;
+      const menuId = button.getAttribute("aria-controls");
+      let menu = menuId ? document.getElementById(menuId) : null;
+      if (!menu || !this.isElementVisible(menu)) {
+        const candidates = Array.from(
+          document.querySelectorAll('div[role="menu"], [id^="hue-menu-"]')
+        );
+        const visibleMenus = candidates.filter((el) =>
+          this.isElementVisible(el)
+        );
+        const preferred = visibleMenus.find((el) => {
+          const text = (el.textContent || "").toLowerCase();
+          return (
+            text.includes("copy") ||
+            text.includes("connect") ||
+            text.includes("linkedin")
+          );
+        });
+        menu = preferred || visibleMenus.pop() || menu;
+      }
+      return menu || null;
     }
 
     // Helper: visibility check for menus rendered in portals
     isElementVisible(element) {
-        if (!element) return false;
-        const style = window.getComputedStyle(element);
-        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-        if (element.offsetParent !== null) return true;
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
+      if (!element) return false;
+      const style = window.getComputedStyle(element);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0"
+      )
+        return false;
+      if (element.offsetParent !== null) return true;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
     }
 
     // Helper: find a menu item by text patterns
     findMenuItemByText(menu, patterns) {
-        if (!menu) return null;
-        const items = Array.from(menu.querySelectorAll('a, button, div, span'));
-        return items.find(el => {
-            const text = (el.textContent || '').toLowerCase().trim();
-            return patterns.some(p => {
-                if (typeof p === 'string') return text.includes(p);
-                try { return p.test(text); } catch { return false; }
-            });
-        }) || null;
+      if (!menu) return null;
+      const items = Array.from(menu.querySelectorAll("a, button, div, span"));
+      return (
+        items.find((el) => {
+          const text = (el.textContent || "").toLowerCase().trim();
+          return patterns.some((p) => {
+            if (typeof p === "string") return text.includes(p);
+            try {
+              return p.test(text);
+            } catch {
+              return false;
+            }
+          });
+        }) || null
+      );
     }
 
     async showThreeDotMenu() {
-        if (this.isProcessingThreeDotMenu) return;
-        this.isProcessingThreeDotMenu = true;
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Looking for three-dot menu...';
+      if (this.isProcessingThreeDotMenu) return;
+      this.isProcessingThreeDotMenu = true;
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement)
+        statusElement.textContent = "Looking for three-dot menu...";
 
-        const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
-                      document.querySelector('button[id^="hue-menu-trigger-"]') ||
-                      document.querySelector('button._overflow-menu--trigger_1xow7n');
+      const button =
+        document.querySelector(
+          'button[aria-label="Open actions overflow menu"]'
+        ) ||
+        document.querySelector('button[id^="hue-menu-trigger-"]') ||
+        document.querySelector("button._overflow-menu--trigger_1xow7n");
 
-        if (button) {
-            if (statusElement) statusElement.textContent = 'Clicking three-dot menu...';
-            button.click();
-            if (statusElement) statusElement.textContent = 'Three-dot menu clicked!';
-            await this.wait(1000);
-            let menu = this.getOverflowMenuForButton(button);
-            if (menu) {
-                if (statusElement) statusElement.textContent = 'Menu opened! Looking for LinkedIn profile option...';
-                await this.wait(500);
-                const copyUrlOption = this.findMenuItemByText(menu, ['copy linkedin.com url','copy linkedin url','copy url',/copy\s+linkedin/i]);
-                console.log('Copy URL Option:', copyUrlOption);
-                if (copyUrlOption) {
-                    if (statusElement) statusElement.textContent = 'Extracting LinkedIn URL...';
-                    let linkedinUrl = this.extractLinkedInUrlFromPage();
-                    if (!linkedinUrl) {
-                        if (statusElement) statusElement.textContent = 'Clicking "Copy LinkedIn.com URL"...';
-                        copyUrlOption.click();
-                        if (statusElement) statusElement.textContent = 'Waiting for URL to be copied...';
-                        await this.wait(2000);
-                        try {
-                            const clipboardText = await navigator.clipboard.readText();
-                            if (clipboardText && clipboardText.includes('linkedin.com')) {
-                                const urlMatch = clipboardText.match(/https:\/\/[^\s]*linkedin\.com\/in\/[^\s\n\r]*/);
-                                if (urlMatch) {
-                                    linkedinUrl = urlMatch[0].trim();
-                                }
-                            }
-                        } catch (e) {
-                            console.log('Clipboard read failed:', e.message);
-                        }
-                    }
-                    const copiedUrl = linkedinUrl;
-                    console.log('Copied URL:', copiedUrl);
-                    if (copiedUrl) {
-                        this.currentLinkedInProfileUrl = copiedUrl;
-                        
-                        this.updateWorkflowUI();
-                        if (statusElement) statusElement.textContent = 'LinkedIn URL captured! Generating message...';
-
-                        const profile = this.profiles[this.currentProfileIndex];
-                        const staticMessage = `Hi ${profile.name || 'there'}, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
-                        try {
-                            const messageData = await APIService.generateMessage(this.customPrompt, copiedUrl);
-                            if (messageData && messageData.message) {
-                                this.generatedMessage = messageData.message.slice(0, 300); // Enforce 300-char limit
-                                console.log("Recived Message", messageData)
-                                if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
-                            } else {
-                                this.generatedMessage = staticMessage;
-                                 console.log("Test Message", staticMessage)
-                                if (statusElement) statusElement.textContent = 'API response invalid - using static message';
-                            }
-                        } catch (error) {
-                            console.error('API call failed:', error);
-                            this.generatedMessage = staticMessage;
-                            if (statusElement) statusElement.textContent = 'API error - using static message';
-                        }
-
-                        this.updateWorkflowUI();
-                        this.saveState();
-                        await this.wait(10000);
-                        await this.clickConnectButton(true);
-                    } else {
-                        if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from clipboard';
-                        this.FailedConnectCount++;
-                        this.updateConnectCounts();
-                        this.currentProfileIndex++;
-                        this.scheduleNextProfile();
-                    }
-                } else {
-                    const viewProfile = this.findMenuItemByText(menu, [
-                        'view linkedin profile',
-                        /view\s+profile/i
-                    ]);
-                    if (viewProfile) {
-                        if (statusElement) statusElement.textContent = 'Copy option not found. Opening LinkedIn profile...';
-                        viewProfile.click();
-                        await this.wait(2000);
-                        const urlFromPage = this.extractLinkedInUrlFromPage();
-                        if (urlFromPage) {
-                            this.currentLinkedInProfileUrl = urlFromPage;
-                            this.updateWorkflowUI();
-                            if (statusElement) statusElement.textContent = 'LinkedIn URL captured from profile!';
-                            
-                            const profile = this.profiles[this.currentProfileIndex];
-                            const staticMessage = `Hi ${profile.name || 'there'}, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
-                            try {
-                                const messageData = await APIService.generateMessage(this.customPrompt, urlFromPage);
-                                if (messageData && messageData.message) {
-                                    this.generatedMessage = messageData.message.slice(0, 300);
-                                    if (statusElement) statusElement.textContent = 'Message generated from custom prompt!';
-                                } else {
-                                    this.generatedMessage = staticMessage;
-                                    if (statusElement) statusElement.textContent = 'API response invalid - using static message';
-                                }
-                            } catch (error) {
-                                console.error('API call failed:', error);
-                                this.generatedMessage = staticMessage;
-                                if (statusElement) statusElement.textContent = 'API error - using static message';
-                            }
-
-                            this.saveState();
-                            await this.wait(10000);
-                            await this.clickConnectButton(true);
-                        } else {
-                            if (statusElement) statusElement.textContent = 'Failed to capture LinkedIn URL from profile';
-                            this.FailedConnectCount++;
-                            this.updateConnectCounts();
-                            this.currentProfileIndex++;
-                            this.scheduleNextProfile();
-                        }
-                    } else {
-                        if (statusElement) statusElement.textContent = 'Copy LinkedIn URL option not found';
-                        this.FailedConnectCount++;
-                        this.updateConnectCounts();
-                        this.currentProfileIndex++;
-                        this.scheduleNextProfile();
-                    }
+      if (button) {
+        if (statusElement)
+          statusElement.textContent = "Clicking three-dot menu...";
+        button.click();
+        if (statusElement)
+          statusElement.textContent = "Three-dot menu clicked!";
+        await this.wait(1000);
+        let menu = this.getOverflowMenuForButton(button);
+        if (menu) {
+          if (statusElement)
+            statusElement.textContent =
+              "Menu opened! Looking for LinkedIn profile option...";
+          await this.wait(500);
+          const copyUrlOption = this.findMenuItemByText(menu, [
+            "copy linkedin.com url",
+            "copy linkedin url",
+            "copy url",
+            /copy\s+linkedin/i,
+          ]);
+          console.log("Copy URL Option:", copyUrlOption);
+          if (copyUrlOption) {
+            if (statusElement)
+              statusElement.textContent = "Extracting LinkedIn URL...";
+            let linkedinUrl = this.extractLinkedInUrlFromPage();
+            if (!linkedinUrl) {
+              if (statusElement)
+                statusElement.textContent =
+                  'Clicking "Copy LinkedIn.com URL"...';
+              copyUrlOption.click();
+              if (statusElement)
+                statusElement.textContent = "Waiting for URL to be copied...";
+              await this.wait(2000);
+              try {
+                const clipboardText = await navigator.clipboard.readText();
+                if (clipboardText && clipboardText.includes("linkedin.com")) {
+                  const urlMatch = clipboardText.match(
+                    /https:\/\/[^\s]*linkedin\.com\/in\/[^\s\n\r]*/
+                  );
+                  if (urlMatch) {
+                    linkedinUrl = urlMatch[0].trim();
+                  }
                 }
+              } catch (e) {
+                console.log("Clipboard read failed:", e.message);
+              }
+            }
+            const copiedUrl = linkedinUrl;
+            console.log("Copied URL:", copiedUrl);
+            if (copiedUrl) {
+              this.currentLinkedInProfileUrl = copiedUrl;
+
+              this.updateWorkflowUI();
+              if (statusElement)
+                statusElement.textContent =
+                  "LinkedIn URL captured! Generating message...";
+
+              const profile = this.profiles[this.currentProfileIndex];
+              const staticMessage = `Hi ${
+                profile.name || "there"
+              }, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
+              try {
+                const messageData = await APIService.generateMessage(
+                  this.customPrompt,
+                  copiedUrl
+                );
+                if (messageData && messageData.message) {
+                  this.generatedMessage = messageData.message.slice(0, 300); // Enforce 300-char limit
+                  console.log("Recived Message", messageData);
+                  if (statusElement)
+                    statusElement.textContent =
+                      "Message generated from custom prompt!";
+                } else {
+                  this.generatedMessage = staticMessage;
+                  console.log("Test Message", staticMessage);
+                  if (statusElement)
+                    statusElement.textContent =
+                      "API response invalid - using static message";
+                }
+              } catch (error) {
+                console.error("API call failed:", error);
+                this.generatedMessage = staticMessage;
+                if (statusElement)
+                  statusElement.textContent =
+                    "API error - using static message";
+              }
+
+              this.updateWorkflowUI();
+              this.saveState();
+              await this.wait(10000);
+              await this.clickConnectButton(true);
             } else {
-                if (statusElement) statusElement.textContent = 'Menu not visible after click';
+              if (statusElement)
+                statusElement.textContent =
+                  "Failed to capture LinkedIn URL from clipboard";
+              this.FailedConnectCount++;
+              this.updateConnectCounts();
+              try {
+                const apiResponse = await APIService.addProfile(
+                  profile,
+                  this.promptSet ? this.customPrompt : null,
+                  this.generatedMessage,
+                  this.currentLinkedInProfileUrl,
+                  statusElement.textContent
+                );
+                if (apiResponse) {
+                  profile.profileId = apiResponse.profileId;
+                  profile.connectionRequestId = apiResponse.connectionRequestId;
+                  profile.messageId = apiResponse.messageId;
+                  profile.promptId = apiResponse.promptId;
+                  console.log(
+                    `Profile stored after invitation: ProfileId=${
+                      apiResponse.profileId
+                    }, ConnectionRequestId=${
+                      apiResponse.connectionRequestId
+                    }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                      apiResponse.promptId || "none"
+                    }`
+                  );
+                  this.saveState();
+                } else {
+                  console.error("API call to addProfile returned null");
+                }
+              } catch (error) {
+                console.error("Failed to store profile in API:", error);
+              }
+
+              this.currentProfileIndex++;
+              this.scheduleNextProfile();
+            }
+          } else {
+            const viewProfile = this.findMenuItemByText(menu, [
+              "view linkedin profile",
+              /view\s+profile/i,
+            ]);
+            if (viewProfile) {
+              if (statusElement)
+                statusElement.textContent =
+                  "Copy option not found. Opening LinkedIn profile...";
+              viewProfile.click();
+              await this.wait(2000);
+              const urlFromPage = this.extractLinkedInUrlFromPage();
+              if (urlFromPage) {
+                this.currentLinkedInProfileUrl = urlFromPage;
+                this.updateWorkflowUI();
+                if (statusElement)
+                  statusElement.textContent =
+                    "LinkedIn URL captured from profile!";
+
+                const profile = this.profiles[this.currentProfileIndex];
+                const staticMessage = `Hi ${
+                  profile.name || "there"
+                }, I'm a full-stack developer with expertise in .NET, Angular, and React. I'd love to connect and explore how I can add value to your team.`;
+                try {
+                  const messageData = await APIService.generateMessage(
+                    this.customPrompt,
+                    urlFromPage
+                  );
+                  if (messageData && messageData.message) {
+                    this.generatedMessage = messageData.message.slice(0, 300);
+                    if (statusElement)
+                      statusElement.textContent =
+                        "Message generated from custom prompt!";
+                  } else {
+                    this.generatedMessage = staticMessage;
+                    if (statusElement)
+                      statusElement.textContent =
+                        "API response invalid - using static message";
+                  }
+                } catch (error) {
+                  console.error("API call failed:", error);
+                  this.generatedMessage = staticMessage;
+                  if (statusElement)
+                    statusElement.textContent =
+                      "API error - using static message";
+                }
+
+                this.saveState();
+                await this.wait(10000);
+                await this.clickConnectButton(true);
+              } else {
+                if (statusElement)
+                  statusElement.textContent =
+                    "Failed to capture LinkedIn URL from profile";
                 this.FailedConnectCount++;
                 this.updateConnectCounts();
-                this.currentProfileIndex++;
-                this.scheduleNextProfile();
-            }
-        } else {
-            if (statusElement) statusElement.textContent = 'Three-dot button not found';
-            this.FailedConnectCount++;
-            this.updateConnectCounts();
-            this.currentProfileIndex++;
-            this.scheduleNextProfile();
-        }
-        this.isProcessingThreeDotMenu = false;
-    }
-
-    async clickSendInvitationButton() {
-        const statusElement = document.getElementById('workflow-current-status');
-        let sendButton = document.querySelector('button[aria-label="Send invitation"]') ||
-                        document.querySelector('button[data-control-name="send_invitation"]') ||
-                        Array.from(document.querySelectorAll('button')).find(btn => {
-                            const text = btn.textContent && btn.textContent.trim().toLowerCase();
-                            return text === 'send invitation' || text === 'send' || text.includes('send invitation');
-                        });
-
-        if (!sendButton) {
-            const modal = document.querySelector('[data-test-modal]') ||
-                         document.querySelector('.send-invite') ||
-                         document.querySelector('[aria-labelledby*="send-invite"]');
-
-            if (modal) {
-                sendButton = modal.querySelector('button[type="submit"]') ||
-                            Array.from(modal.querySelectorAll('button')).find(btn => {
-                                const text = btn.textContent && btn.textContent.trim().toLowerCase();
-                                return text.includes('send') || text.includes('invitation');
-                            });
-            }
-        }
-
-        const profile = this.profiles[this.currentProfileIndex];
-
-        if (sendButton && !sendButton.disabled) {
-            if (statusElement) statusElement.textContent = 'Clicking Send Invitation...';
-            sendButton.click();
-            await this.wait(3000);
-
-            const successMessage = document.querySelector('[data-test-toast-message]') ||
-                                  Array.from(document.querySelectorAll('div, span')).find(el => {
-                                      const text = el.textContent && el.textContent.toLowerCase();
-                                      return text && (text.includes('invitation sent') || text.includes('request sent'));
-                                  });
-
-            if (successMessage) {
-                if (statusElement) statusElement.textContent = 'Invitation sent successfully!';
-                this.sendConnectCount++;
-                this.updateConnectCounts();
-
-                // Call API to store profile, connection request, message, and prompt
                 try {
-                console.log("Test 1")
-                 const apiResponse = await APIService.addProfile(
+                  const apiResponse = await APIService.addProfile(
                     profile,
                     this.promptSet ? this.customPrompt : null,
                     this.generatedMessage,
-                    this.currentLinkedInProfileUrl
-                );
-                    if (apiResponse) {
-                        profile.profileId = apiResponse.profileId;
-                        profile.connectionRequestId = apiResponse.connectionRequestId;
-                        profile.messageId = apiResponse.messageId;
-                        profile.promptId = apiResponse.promptId;
-                        console.log(`Profile stored after invitation: ProfileId=${apiResponse.profileId}, ConnectionRequestId=${apiResponse.connectionRequestId}, MessageId=${apiResponse.messageId || 'none'}, PromptId=${apiResponse.promptId || 'none'}`);
-                        this.saveState();
-                    } else {
-                        console.error('API call to addProfile returned null');
-                    }
-                } catch (error) {
-                    console.error('Failed to store profile in API:', error);
-                }
-
-                return { sent: true };
-            } else {
-                if (statusElement) statusElement.textContent = 'Invitation sent';
-                this.sendConnectCount++;
-                this.updateConnectCounts();
-
-                // Call API even if success message not found, assuming send succeeded
-                try {
-                    console.log("Test 2")
-                    const apiResponse = await APIService.addProfile(
-                        profile,
-                        this.promptSet ? this.customPrompt : null,
-                        this.generatedMessage,
-                        this.currentLinkedInProfileUrl,
-                        statusElement.textContent
-
+                    this.currentLinkedInProfileUrl,
+                    statusElement.textContent
+                  );
+                  if (apiResponse) {
+                    profile.profileId = apiResponse.profileId;
+                    profile.connectionRequestId =
+                      apiResponse.connectionRequestId;
+                    profile.messageId = apiResponse.messageId;
+                    profile.promptId = apiResponse.promptId;
+                    console.log(
+                      `Profile stored after invitation: ProfileId=${
+                        apiResponse.profileId
+                      }, ConnectionRequestId=${
+                        apiResponse.connectionRequestId
+                      }, MessageId=${
+                        apiResponse.messageId || "none"
+                      }, PromptId=${apiResponse.promptId || "none"}`
                     );
-                    if (apiResponse) {
-                        profile.profileId = apiResponse.profileId;
-                        profile.connectionRequestId = apiResponse.connectionRequestId;
-                        profile.messageId = apiResponse.messageId;
-                        profile.promptId = apiResponse.promptId;
-                        console.log(`Profile stored after invitation: ProfileId=${apiResponse.profileId}, ConnectionRequestId=${apiResponse.connectionRequestId}, MessageId=${apiResponse.messageId || 'none'}, PromptId=${apiResponse.promptId || 'none'}`);
-                        this.saveState();
-                    } else {
-                        console.error('API call to addProfile returned null');
-                    }
+                    this.saveState();
+                  } else {
+                    console.error("API call to addProfile returned null");
+                  }
                 } catch (error) {
-                    console.error('Failed to store profile in API:', error);
+                  console.error("Failed to store profile in API:", error);
                 }
-
-                return { sent: true };
+                this.currentProfileIndex++;
+                this.scheduleNextProfile();
+              }
+            } else {
+              if (statusElement)
+                statusElement.textContent =
+                  "Copy LinkedIn URL option not found";
+              this.FailedConnectCount++;
+              this.updateConnectCounts();
+              try {
+                const apiResponse = await APIService.addProfile(
+                  profile,
+                  this.promptSet ? this.customPrompt : null,
+                  this.generatedMessage,
+                  this.currentLinkedInProfileUrl,
+                  statusElement.textContent
+                );
+                if (apiResponse) {
+                  profile.profileId = apiResponse.profileId;
+                  profile.connectionRequestId = apiResponse.connectionRequestId;
+                  profile.messageId = apiResponse.messageId;
+                  profile.promptId = apiResponse.promptId;
+                  console.log(
+                    `Profile stored after invitation: ProfileId=${
+                      apiResponse.profileId
+                    }, ConnectionRequestId=${
+                      apiResponse.connectionRequestId
+                    }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                      apiResponse.promptId || "none"
+                    }`
+                  );
+                  this.saveState();
+                } else {
+                  console.error("API call to addProfile returned null");
+                }
+              } catch (error) {
+                console.error("Failed to store profile in API:", error);
+              }
+              this.currentProfileIndex++;
+              this.scheduleNextProfile();
             }
-        } else if (sendButton && sendButton.disabled) {
-            if (statusElement) statusElement.textContent = 'Send button found but disabled - skipping';
-            this.FailedConnectCount++;
-            this.updateConnectCounts();
-            this.closeConnectionModal();
-            return { skipped: true, reason: 'send_button_disabled' };
+          }
         } else {
-            if (statusElement) statusElement.textContent = 'Send Invitation button not found - skipping';
-            this.FailedConnectCount++;
-            this.updateConnectCounts();
-            this.closeConnectionModal();
-            return { skipped: true, reason: 'send_button_not_found' };
+          if (statusElement)
+            statusElement.textContent = "Menu not visible after click";
+          this.FailedConnectCount++;
+          this.updateConnectCounts();
+          try {
+            const apiResponse = await APIService.addProfile(
+              profile,
+              this.promptSet ? this.customPrompt : null,
+              this.generatedMessage,
+              this.currentLinkedInProfileUrl,
+              statusElement.textContent
+            );
+            if (apiResponse) {
+              profile.profileId = apiResponse.profileId;
+              profile.connectionRequestId = apiResponse.connectionRequestId;
+              profile.messageId = apiResponse.messageId;
+              profile.promptId = apiResponse.promptId;
+              console.log(
+                `Profile stored after invitation: ProfileId=${
+                  apiResponse.profileId
+                }, ConnectionRequestId=${
+                  apiResponse.connectionRequestId
+                }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                  apiResponse.promptId || "none"
+                }`
+              );
+              this.saveState();
+            } else {
+              console.error("API call to addProfile returned null");
+            }
+          } catch (error) {
+            console.error("Failed to store profile in API:", error);
+          }
+          this.currentProfileIndex++;
+          this.scheduleNextProfile();
         }
+      } else {
+        if (statusElement)
+          statusElement.textContent = "Three-dot button not found";
+        this.FailedConnectCount++;
+        this.updateConnectCounts();
+
+        try {
+          const apiResponse = await APIService.addProfile(
+            profile,
+            this.promptSet ? this.customPrompt : null,
+            this.generatedMessage,
+            this.currentLinkedInProfileUrl,
+            statusElement.textContent
+          );
+          if (apiResponse) {
+            profile.profileId = apiResponse.profileId;
+            profile.connectionRequestId = apiResponse.connectionRequestId;
+            profile.messageId = apiResponse.messageId;
+            profile.promptId = apiResponse.promptId;
+            console.log(
+              `Profile stored after invitation: ProfileId=${
+                apiResponse.profileId
+              }, ConnectionRequestId=${
+                apiResponse.connectionRequestId
+              }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                apiResponse.promptId || "none"
+              }`
+            );
+            this.saveState();
+          } else {
+            console.error("API call to addProfile returned null");
+          }
+        } catch (error) {
+          console.error("Failed to store profile in API:", error);
+        }
+
+        this.currentProfileIndex++;
+        this.scheduleNextProfile();
+      }
+      this.isProcessingThreeDotMenu = false;
+    }
+
+    async clickSendInvitationButton() {
+      const statusElement = document.getElementById("workflow-current-status");
+      let sendButton =
+        document.querySelector('button[aria-label="Send invitation"]') ||
+        document.querySelector('button[data-control-name="send_invitation"]') ||
+        Array.from(document.querySelectorAll("button")).find((btn) => {
+          const text = btn.textContent && btn.textContent.trim().toLowerCase();
+          return (
+            text === "send invitation" ||
+            text === "send" ||
+            text.includes("send invitation")
+          );
+        });
+
+      if (!sendButton) {
+        const modal =
+          document.querySelector("[data-test-modal]") ||
+          document.querySelector(".send-invite") ||
+          document.querySelector('[aria-labelledby*="send-invite"]');
+
+        if (modal) {
+          sendButton =
+            modal.querySelector('button[type="submit"]') ||
+            Array.from(modal.querySelectorAll("button")).find((btn) => {
+              const text =
+                btn.textContent && btn.textContent.trim().toLowerCase();
+              return text.includes("send") || text.includes("invitation");
+            });
+        }
+      }
+
+      const profile = this.profiles[this.currentProfileIndex];
+
+      if (sendButton && !sendButton.disabled) {
+        if (statusElement)
+          statusElement.textContent = "Clicking Send Invitation...";
+        sendButton.click();
+        await this.wait(3000);
+
+        const successMessage =
+          document.querySelector("[data-test-toast-message]") ||
+          Array.from(document.querySelectorAll("div, span")).find((el) => {
+            const text = el.textContent && el.textContent.toLowerCase();
+            return (
+              text &&
+              (text.includes("invitation sent") ||
+                text.includes("request sent"))
+            );
+          });
+
+        if (successMessage) {
+          if (statusElement)
+            statusElement.textContent = "Invitation sent successfully!";
+          this.sendConnectCount++;
+          this.updateConnectCounts();
+
+          // Call API to store profile, connection request, message, and prompt
+          try {
+            console.log("Test 1");
+            const apiResponse = await APIService.addProfile(
+              profile,
+              this.promptSet ? this.customPrompt : null,
+              this.generatedMessage,
+              this.currentLinkedInProfileUrl
+            );
+            if (apiResponse) {
+              profile.profileId = apiResponse.profileId;
+              profile.connectionRequestId = apiResponse.connectionRequestId;
+              profile.messageId = apiResponse.messageId;
+              profile.promptId = apiResponse.promptId;
+              console.log(
+                `Profile stored after invitation: ProfileId=${
+                  apiResponse.profileId
+                }, ConnectionRequestId=${
+                  apiResponse.connectionRequestId
+                }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                  apiResponse.promptId || "none"
+                }`
+              );
+              this.saveState();
+            } else {
+              console.error("API call to addProfile returned null");
+            }
+          } catch (error) {
+            console.error("Failed to store profile in API:", error);
+          }
+
+          return { sent: true };
+        } else {
+          if (statusElement) statusElement.textContent = "Invitation sent";
+          this.sendConnectCount++;
+          this.updateConnectCounts();
+
+          // Call API even if success message not found, assuming send succeeded
+          try {
+            console.log("Test 2");
+            const apiResponse = await APIService.addProfile(
+              profile,
+              this.promptSet ? this.customPrompt : null,
+              this.generatedMessage,
+              this.currentLinkedInProfileUrl,
+              statusElement.textContent
+            );
+            if (apiResponse) {
+              profile.profileId = apiResponse.profileId;
+              profile.connectionRequestId = apiResponse.connectionRequestId;
+              profile.messageId = apiResponse.messageId;
+              profile.promptId = apiResponse.promptId;
+              console.log(
+                `Profile stored after invitation: ProfileId=${
+                  apiResponse.profileId
+                }, ConnectionRequestId=${
+                  apiResponse.connectionRequestId
+                }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                  apiResponse.promptId || "none"
+                }`
+              );
+              this.saveState();
+            } else {
+              console.error("API call to addProfile returned null");
+            }
+          } catch (error) {
+            console.error("Failed to store profile in API:", error);
+          }
+
+          return { sent: true };
+        }
+      } else if (sendButton && sendButton.disabled) {
+        if (statusElement)
+          statusElement.textContent =
+            "Send button found but disabled - skipping";
+        this.FailedConnectCount++;
+        this.updateConnectCounts();
+        try {
+          const apiResponse = await APIService.addProfile(
+            profile,
+            this.promptSet ? this.customPrompt : null,
+            this.generatedMessage,
+            this.currentLinkedInProfileUrl,
+            "Send button found but disabled - skipping"
+          );
+          if (apiResponse) {
+            profile.profileId = apiResponse.profileId;
+            profile.connectionRequestId = apiResponse.connectionRequestId;
+            profile.messageId = apiResponse.messageId;
+            profile.promptId = apiResponse.promptId;
+            console.log(
+              `Profile stored after invitation: ProfileId=${
+                apiResponse.profileId
+              }, ConnectionRequestId=${
+                apiResponse.connectionRequestId
+              }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                apiResponse.promptId || "none"
+              }`
+            );
+            this.saveState();
+          } else {
+            console.error("API call to addProfile returned null");
+          }
+        } catch (error) {
+          console.error("Failed to store profile in API:", error);
+        }
+
+        this.closeConnectionModal();
+        return { skipped: true, reason: "send_button_disabled" };
+      } else {
+        if (statusElement)
+          statusElement.textContent =
+            "Send Invitation button not found - skipping";
+        this.FailedConnectCount++;
+        this.updateConnectCounts();
+        try {
+          console.log("Test 4");
+          const apiResponse = await APIService.addProfile(
+            profile,
+            this.promptSet ? this.customPrompt : null,
+            this.generatedMessage,
+            this.currentLinkedInProfileUrl,
+            "Send Invitation button not found - skipping"
+          );
+          if (apiResponse) {
+            profile.profileId = apiResponse.profileId;
+            profile.connectionRequestId = apiResponse.connectionRequestId;
+            profile.messageId = apiResponse.messageId;
+            profile.promptId = apiResponse.promptId;
+            console.log(
+              `Profile stored after invitation: ProfileId=${
+                apiResponse.profileId
+              }, ConnectionRequestId=${
+                apiResponse.connectionRequestId
+              }, MessageId=${apiResponse.messageId || "none"}, PromptId=${
+                apiResponse.promptId || "none"
+              }`
+            );
+            this.saveState();
+          } else {
+            console.error("API call to addProfile returned null");
+          }
+        } catch (error) {
+          console.error("Failed to store profile in API:", error);
+        }
+        this.closeConnectionModal();
+        return { skipped: true, reason: "send_button_not_found" };
+      }
     }
 
     async clickConnectButton(menuAlreadyOpen = false) {
-        const statusElement = document.getElementById('workflow-current-status');
-        if (statusElement) statusElement.textContent = 'Looking for Connect button...';
+      const statusElement = document.getElementById("workflow-current-status");
+      if (statusElement)
+        statusElement.textContent = "Looking for Connect button...";
 
-        const alreadyConnected = document.querySelector('[aria-label*="Connected"]') ||
-                                document.querySelector('[data-control-name*="connected"]') ||
-                                Array.from(document.querySelectorAll('span, div')).find(el =>
-                                    el.textContent && el.textContent.toLowerCase().includes('connected')
-                                );
+      const alreadyConnected =
+        document.querySelector('[aria-label*="Connected"]') ||
+        document.querySelector('[data-control-name*="connected"]') ||
+        Array.from(document.querySelectorAll("span, div")).find(
+          (el) =>
+            el.textContent && el.textContent.toLowerCase().includes("connected")
+        );
 
-        if (alreadyConnected) {
-            if (statusElement) statusElement.textContent = 'Already connected to this profile';
-            return;
-        }
+      if (alreadyConnected) {
+        if (statusElement)
+          statusElement.textContent = "Already connected to this profile";
+        return;
+      }
 
-        let menu = null;
+      let menu = null;
 
-        if (menuAlreadyOpen) {
-            const trigger = document.querySelector('button[aria-label="Open actions overflow menu"], button[id^="hue-menu-trigger-"], button._overflow-menu--trigger_1xow7n');
-            menu = this.getOverflowMenuForButton(trigger);
+      if (menuAlreadyOpen) {
+        const trigger = document.querySelector(
+          'button[aria-label="Open actions overflow menu"], button[id^="hue-menu-trigger-"], button._overflow-menu--trigger_1xow7n'
+        );
+        menu = this.getOverflowMenuForButton(trigger);
+      } else {
+        document.body.click();
+        await this.wait(500);
+
+        const button =
+          document.querySelector(
+            'button[aria-label="Open actions overflow menu"]'
+          ) ||
+          document.querySelector('button[id^="hue-menu-trigger-"]') ||
+          document.querySelector("button._overflow-menu--trigger_1xow7n");
+
+        if (button) {
+          if (statusElement)
+            statusElement.textContent = "Opening three-dot menu for Connect...";
+          button.click();
+          await this.wait(1000);
+          menu = this.getOverflowMenuForButton(button);
         } else {
-            document.body.click();
-            await this.wait(500);
-
-            const button = document.querySelector('button[aria-label="Open actions overflow menu"]') ||
-                          document.querySelector('button[id^="hue-menu-trigger-"]') ||
-                          document.querySelector('button._overflow-menu--trigger_1xow7n');
-
-            if (button) {
-                if (statusElement) statusElement.textContent = 'Opening three-dot menu for Connect...';
-                button.click();
-                await this.wait(1000);
-                menu = this.getOverflowMenuForButton(button);
-            } else {
-                if (statusElement) statusElement.textContent = 'Three-dot button not found for Connect';
-                this.isProcessingThreeDotMenu = false;
-                return;
-            }
+          if (statusElement)
+            statusElement.textContent =
+              "Three-dot button not found for Connect";
+          this.isProcessingThreeDotMenu = false;
+          return;
         }
+      }
 
-        if (menu) {
-            if (statusElement) statusElement.textContent = 'Looking for Connect option...';
-            await this.wait(500);
+      if (menu) {
+        if (statusElement)
+          statusElement.textContent = "Looking for Connect option...";
+        await this.wait(500);
 
-            const connectOption = Array.from(menu.querySelectorAll('a, button, div, span')).find(el => {
-                const text = (el.textContent || '').toLowerCase().trim();
-                return text.includes('connect') && !text.includes('copy') && !text.includes('disconnect');
-            });
+        const connectOption = Array.from(
+          menu.querySelectorAll("a, button, div, span")
+        ).find((el) => {
+          const text = (el.textContent || "").toLowerCase().trim();
+          return (
+            text.includes("connect") &&
+            !text.includes("copy") &&
+            !text.includes("disconnect")
+          );
+        });
 
-            if (connectOption) {
-                if (statusElement) statusElement.textContent = 'Clicking Connect...';
-                connectOption.click();
-                await this.wait(2000);
+        if (connectOption) {
+          if (statusElement) statusElement.textContent = "Clicking Connect...";
+          connectOption.click();
+          await this.wait(2000);
 
-                const result = await this.fillInvitationMessage();
-                if (result && result.skipped) {
-                    if (statusElement) statusElement.textContent = `Skipped - ${result.reason}`;
-                }
-            } else {
-                if (statusElement) statusElement.textContent = 'Connect option not found in menu (may already be connected)';
-            }
+          const result = await this.fillInvitationMessage();
+          if (result && result.skipped) {
+            if (statusElement)
+              statusElement.textContent = `Skipped - ${result.reason}`;
+          }
         } else {
-            if (statusElement) statusElement.textContent = 'Menu not visible after click';
+          if (statusElement)
+            statusElement.textContent =
+              "Connect option not found in menu (may already be connected)";
         }
+      } else {
+        if (statusElement)
+          statusElement.textContent = "Menu not visible after click";
+      }
 
-        this.isProcessingThreeDotMenu = false;
+      this.isProcessingThreeDotMenu = false;
     }
 
     async fillInvitationMessage() {
-        try {
-            const statusElement = document.getElementById('workflow-current-status');
-            if (statusElement) statusElement.textContent = 'Looking for invitation textarea...';
+      try {
+        const statusElement = document.getElementById(
+          "workflow-current-status"
+        );
+        if (statusElement)
+          statusElement.textContent = "Looking for invitation textarea...";
 
-            await this.wait(8000);
+        await this.wait(8000);
 
-            // Check if email is required first
-            const emailInput = document.querySelector('input[type="email"]') ||
-                             document.querySelector('input[name="email"]') ||
-                             document.querySelector('#connect-cta-form__email');
+        // Check if email is required first
+        const emailInput =
+          document.querySelector('input[type="email"]') ||
+          document.querySelector('input[name="email"]') ||
+          document.querySelector("#connect-cta-form__email");
 
-            if (emailInput) {
-                if (statusElement) statusElement.textContent = 'Email required - skipping this profile';
-                this.closeConnectionModal();
-                return { skipped: true, reason: 'email_required' };
-            }
+        if (emailInput) {
+          if (statusElement)
+            statusElement.textContent =
+              "Email required - skipping this profile";
+          this.closeConnectionModal();
+          return { skipped: true, reason: "email_required" };
+        }
 
-        let textarea = document.querySelector('textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx') ||
-                      document.querySelector('textarea[id="connect-cta-form__invitation"]') ||
-                      document.querySelector('textarea[maxlength="300"]') ||
-                      document.querySelector('textarea[placeholder*="accepts your invitation"]') ||
-                      document.querySelector('textarea[placeholder*="Bruno accepts"]') ||
-                      document.querySelector('div[data-test-modal] textarea') ||
-                      document.querySelector('.send-invite textarea');
+        let textarea =
+          document.querySelector(
+            "textarea.mt3.pv3.elevation-0dp._textarea_1jm0zx"
+          ) ||
+          document.querySelector(
+            'textarea[id="connect-cta-form__invitation"]'
+          ) ||
+          document.querySelector('textarea[maxlength="300"]') ||
+          document.querySelector(
+            'textarea[placeholder*="accepts your invitation"]'
+          ) ||
+          document.querySelector('textarea[placeholder*="Bruno accepts"]') ||
+          document.querySelector("div[data-test-modal] textarea") ||
+          document.querySelector(".send-invite textarea");
 
         if (!textarea) {
-            await this.wait(7000);
-            textarea = document.querySelector('textarea') ||
-                      document.querySelector('input[type="text"][maxlength="300"]');
+          await this.wait(7000);
+          textarea =
+            document.querySelector("textarea") ||
+            document.querySelector('input[type="text"][maxlength="300"]');
         }
 
         if (textarea) {
-            if (statusElement) statusElement.textContent = 'Found textarea, typing message word-by-word...';
+          if (statusElement)
+            statusElement.textContent =
+              "Found textarea, typing message word-by-word...";
 
-            textarea.value = '';
-            textarea.focus();
+          textarea.value = "";
+          textarea.focus();
 
-            const message = this.generatedMessage;
-            await this.typeMessageWordByWord(textarea, message);
+          const message = this.generatedMessage;
+          await this.typeMessageWordByWord(textarea, message);
 
-            textarea.dispatchEvent(new Event('change', { bubbles: true }));
-            textarea.dispatchEvent(new Event('blur', { bubbles: true }));
+          textarea.dispatchEvent(new Event("change", { bubbles: true }));
+          textarea.dispatchEvent(new Event("blur", { bubbles: true }));
 
-            if (statusElement) statusElement.textContent = `Message typed. Waiting ${Math.round(this.sendDelayAfterTypingMs/1000)}s before sending...`;
-            await this.wait(this.sendDelayAfterTypingMs);
+          if (statusElement)
+            statusElement.textContent = `Message typed. Waiting ${Math.round(
+              this.sendDelayAfterTypingMs / 1000
+            )}s before sending...`;
+          await this.wait(this.sendDelayAfterTypingMs);
 
-            return await this.clickSendInvitationButton();
+          return await this.clickSendInvitationButton();
         } else {
-            if (statusElement) statusElement.textContent = 'Invitation textarea not found - checking for popup...';
+          if (statusElement)
+            statusElement.textContent =
+              "Invitation textarea not found - checking for popup...";
 
-            const popup = document.querySelector('[data-test-modal]') ||
-                         document.querySelector('.send-invite') ||
-                         document.querySelector('[aria-labelledby*="send-invite"]');
+          const popup =
+            document.querySelector("[data-test-modal]") ||
+            document.querySelector(".send-invite") ||
+            document.querySelector('[aria-labelledby*="send-invite"]');
 
-            if (popup) {
-                if (statusElement) statusElement.textContent = `Popup found but textarea missing - sending in ${Math.round(this.sendDelayAfterTypingMs/1000)}s...`;
-                await this.wait(this.sendDelayAfterTypingMs);
-                return await this.clickSendInvitationButton();
-            } else {
-                if (statusElement) statusElement.textContent = 'Send invitation popup not found - skipping';
-                this.closeConnectionModal();
-                return { skipped: true, reason: 'popup_not_found' };
-            }
+          if (popup) {
+            if (statusElement)
+              statusElement.textContent = `Popup found but textarea missing - sending in ${Math.round(
+                this.sendDelayAfterTypingMs / 1000
+              )}s...`;
+            await this.wait(this.sendDelayAfterTypingMs);
+            return await this.clickSendInvitationButton();
+          } else {
+            if (statusElement)
+              statusElement.textContent =
+                "Send invitation popup not found - skipping";
+            this.closeConnectionModal();
+            return { skipped: true, reason: "popup_not_found" };
+          }
         }
-        } catch (error) {
-            console.error('Error in fillInvitationMessage:', error);
-            const statusElement = document.getElementById('workflow-current-status');
-            if (statusElement) statusElement.textContent = 'Error filling invitation message';
-        }
+      } catch (error) {
+        console.error("Error in fillInvitationMessage:", error);
+        const statusElement = document.getElementById(
+          "workflow-current-status"
+        );
+        if (statusElement)
+          statusElement.textContent = "Error filling invitation message";
+      }
     }
 
     extractLinkedInUrlFromPage() {
-        try {
-            const linkedinLinks = document.querySelectorAll('a[href*="linkedin.com/in/"]');
-            for (const link of linkedinLinks) {
-                if (link.href && link.href.includes('linkedin.com/in/')) {
-                    return link.href;
-                }
-            }
-            const elementsWithData = document.querySelectorAll('[data-linkedin-url], [data-profile-url], [data-url]');
-            for (const element of elementsWithData) {
-                const url = element.getAttribute('data-linkedin-url') || element.getAttribute('data-profile-url') || element.getAttribute('data-url');
-                if (url && url.includes('linkedin.com/in/')) {
-                    return url;
-                }
-            }
-            return null;
-        } catch (e) {
-            return null;
+      try {
+        const linkedinLinks = document.querySelectorAll(
+          'a[href*="linkedin.com/in/"]'
+        );
+        for (const link of linkedinLinks) {
+          if (link.href && link.href.includes("linkedin.com/in/")) {
+            return link.href;
+          }
         }
+        const elementsWithData = document.querySelectorAll(
+          "[data-linkedin-url], [data-profile-url], [data-url]"
+        );
+        for (const element of elementsWithData) {
+          const url =
+            element.getAttribute("data-linkedin-url") ||
+            element.getAttribute("data-profile-url") ||
+            element.getAttribute("data-url");
+          if (url && url.includes("linkedin.com/in/")) {
+            return url;
+          }
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
     }
 
     async wait(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+      return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     async typeMessageWordByWord(textarea, message) {
-        try {
-            const maxlengthAttr = textarea.getAttribute('maxlength');
-            const maxCharacters = maxlengthAttr ? parseInt(maxlengthAttr, 10) : 300;
-            const rawWords = (message || '').split(/\s+/).filter(w => w && w.length > 0);
-            if (rawWords.length === 0) return;
+      try {
+        const maxlengthAttr = textarea.getAttribute("maxlength");
+        const maxCharacters = maxlengthAttr ? parseInt(maxlengthAttr, 10) : 300;
+        const rawWords = (message || "")
+          .split(/\s+/)
+          .filter((w) => w && w.length > 0);
+        if (rawWords.length === 0) return;
 
-            const wordsWithinLimit = [];
-            let runningLength = 0;
-            for (let i = 0; i < rawWords.length; i++) {
-                const word = rawWords[i];
-                const separator = i === 0 ? '' : ' ';
-                if (runningLength + separator.length + word.length <= maxCharacters) {
-                    wordsWithinLimit.push(word);
-                    runningLength += separator.length + word.length;
-                } else {
-                    break;
-                }
-            }
-
-            const totalWords = Math.max(1, wordsWithinLimit.length);
-            const delayPerWordMs = Math.max(50, Math.floor(this.typingTotalDurationMs / totalWords));
-
-            textarea.value = '';
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-
-            for (let i = 0; i < wordsWithinLimit.length; i++) {
-                const word = wordsWithinLimit[i];
-                textarea.value = i === 0 ? word : `${textarea.value} ${word}`;
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
-                await this.wait(delayPerWordMs);
-            }
-        } catch (e) {
-            const fallback = (message || '').slice(0, 300);
-            textarea.value = fallback;
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        const wordsWithinLimit = [];
+        let runningLength = 0;
+        for (let i = 0; i < rawWords.length; i++) {
+          const word = rawWords[i];
+          const separator = i === 0 ? "" : " ";
+          if (runningLength + separator.length + word.length <= maxCharacters) {
+            wordsWithinLimit.push(word);
+            runningLength += separator.length + word.length;
+          } else {
+            break;
+          }
         }
+
+        const totalWords = Math.max(1, wordsWithinLimit.length);
+        const delayPerWordMs = Math.max(
+          50,
+          Math.floor(this.typingTotalDurationMs / totalWords)
+        );
+
+        textarea.value = "";
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+        for (let i = 0; i < wordsWithinLimit.length; i++) {
+          const word = wordsWithinLimit[i];
+          textarea.value = i === 0 ? word : `${textarea.value} ${word}`;
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.dispatchEvent(new Event("keyup", { bubbles: true }));
+          await this.wait(delayPerWordMs);
+        }
+      } catch (e) {
+        const fallback = (message || "").slice(0, 300);
+        textarea.value = fallback;
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
 
     completeWorkflow() {
-        const statusElement = document.getElementById('workflow-current-status');
-        const progressElement = document.getElementById('workflow-progress');
+      const statusElement = document.getElementById("workflow-current-status");
+      const progressElement = document.getElementById("workflow-progress");
 
-        if (statusElement) {
-            statusElement.textContent = `Workflow completed! Processed ${this.profiles.length} profiles`;
-            statusElement.parentElement.style.background = '#d4edda';
-            statusElement.parentElement.style.color = '#155724';
-        }
-        if (progressElement) progressElement.textContent = `${this.profiles.length} / ${this.profiles.length} (Complete)`;
-        this.automationRunning = false;
-        this.updateButtonStates();
+      if (statusElement) {
+        statusElement.textContent = `Workflow completed! Processed ${this.profiles.length} profiles`;
+        statusElement.parentElement.style.background = "#d4edda";
+        statusElement.parentElement.style.color = "#155724";
+      }
+      if (progressElement)
+        progressElement.textContent = `${this.profiles.length} / ${this.profiles.length} (Complete)`;
+      this.automationRunning = false;
+      this.updateButtonStates();
 
-        const pauseBtn = document.getElementById('pause-workflow');
-        const resumeBtn = document.getElementById('resume-workflow');
-        if (pauseBtn) pauseBtn.style.display = 'none';
-        if (resumeBtn) resumeBtn.style.display = 'none';
+      const pauseBtn = document.getElementById("pause-workflow");
+      const resumeBtn = document.getElementById("resume-workflow");
+      if (pauseBtn) pauseBtn.style.display = "none";
+      if (resumeBtn) resumeBtn.style.display = "none";
 
-        const popup = document.getElementById('workflow-popup');
-        if (popup) {
-            const summaryDiv = document.createElement('div');
-            summaryDiv.style.cssText = `margin-top: 20px; padding: 16px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;`;
-            const completedCount = this.processedProfiles.filter(p => p.status === 'completed').length;
-            const errorCount = this.processedProfiles.filter(p => p.status === 'error').length;
-            summaryDiv.innerHTML = `
+      const popup = document.getElementById("workflow-popup");
+      if (popup) {
+        const summaryDiv = document.createElement("div");
+        summaryDiv.style.cssText = `margin-top: 20px; padding: 16px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;`;
+        const completedCount = this.processedProfiles.filter(
+          (p) => p.status === "completed"
+        ).length;
+        const errorCount = this.processedProfiles.filter(
+          (p) => p.status === "error"
+        ).length;
+        summaryDiv.innerHTML = `
                 <h3 style="margin: 0 0 12px 0; color: #155724;">Workflow Summary</h3>
                 <div style="color: #155724;">
                     <div>✅ Successfully processed: ${completedCount} profiles</div>
-                    ${errorCount > 0 ? `<div>❌ Errors: ${errorCount} profiles</div>` : ''}
+                    ${
+                      errorCount > 0
+                        ? `<div>❌ Errors: ${errorCount} profiles</div>`
+                        : ""
+                    }
                     <div style="margin-top: 12px; padding: 8px; background: #fff3cd; border-radius: 4px; color: #856404;">
                         🔄 Returning to Sales Navigator search in 5 seconds to start new collection...
                     </div>
                 </div>
             `;
-            popup.appendChild(summaryDiv);
+        popup.appendChild(summaryDiv);
+      }
+
+      // Save counters before clearing state
+      const savedSendConnectCount = this.sendConnectCount;
+      const savedFailedConnectCount = this.FailedConnectCount;
+
+      localStorage.removeItem("salesNavWorkflow");
+      this.currentWorkflowStep = "collecting";
+      this.currentProfileIndex = 0;
+      this.generatedMessage = null;
+      this.processedProfiles = [];
+      this.workflowPaused = false;
+      this.automationRunning = false;
+      this.currentLinkedInProfileUrl = null;
+      this.profileStatuses = {};
+      this.customPrompt = "";
+      this.promptSet = false;
+
+      // Restore counters after clearing state
+      this.sendConnectCount = savedSendConnectCount;
+      this.FailedConnectCount = savedFailedConnectCount;
+
+      setTimeout(() => {
+        if (statusElement) {
+          statusElement.textContent =
+            "Returning to Sales Navigator search page...";
         }
-
-        // Save counters before clearing state
-        const savedSendConnectCount = this.sendConnectCount;
-        const savedFailedConnectCount = this.FailedConnectCount;
-
-        localStorage.removeItem('salesNavWorkflow');
-        this.currentWorkflowStep = 'collecting';
-        this.currentProfileIndex = 0;
-        this.generatedMessage = null;
-        this.processedProfiles = [];
-        this.workflowPaused = false;
-        this.automationRunning = false;
-        this.currentLinkedInProfileUrl = null;
-        this.profileStatuses = {};
-        this.customPrompt = '';
-        this.promptSet = false;
-
-        // Restore counters after clearing state
-        this.sendConnectCount = savedSendConnectCount;
-        this.FailedConnectCount = savedFailedConnectCount;
-
-        setTimeout(() => {
-            if (statusElement) {
-                statusElement.textContent = 'Returning to Sales Navigator search page...';
-            }
-            // Save counters to localStorage for persistence across page navigation
-            localStorage.setItem('salesNavCounters', JSON.stringify({
-                sendConnectCount: this.sendConnectCount,
-                FailedConnectCount: this.FailedConnectCount
-            }));
-            const salesNavUrl = 'https://www.linkedin.com/sales/search/people?viewAllFilters=true';
-            window.location.href = salesNavUrl;
-        }, 5000);
+        // Save counters to localStorage for persistence across page navigation
+        localStorage.setItem(
+          "salesNavCounters",
+          JSON.stringify({
+            sendConnectCount: this.sendConnectCount,
+            FailedConnectCount: this.FailedConnectCount,
+          })
+        );
+        const salesNavUrl =
+          "https://www.linkedin.com/sales/search/people?viewAllFilters=true";
+        window.location.href = salesNavUrl;
+      }, 5000);
     }
     loadSavedCounters() {
-        try {
-            const savedCounters = localStorage.getItem('salesNavCounters');
-            if (savedCounters) {
-                const counters = JSON.parse(savedCounters);
-                this.sendConnectCount = counters.sendConnectCount || 0;
-                this.FailedConnectCount = counters.FailedConnectCount || 0;
-            }
-        } catch (error) {
-            console.error('Error loading saved counters:', error);
-            this.sendConnectCount = 0;
-            this.FailedConnectCount = 0;
+      try {
+        const savedCounters = localStorage.getItem("salesNavCounters");
+        if (savedCounters) {
+          const counters = JSON.parse(savedCounters);
+          this.sendConnectCount = counters.sendConnectCount || 0;
+          this.FailedConnectCount = counters.FailedConnectCount || 0;
         }
+      } catch (error) {
+        console.error("Error loading saved counters:", error);
+        this.sendConnectCount = 0;
+        this.FailedConnectCount = 0;
+      }
     }
 
     loadBatchSettings() {
-        this.profileDelay = 8000;
+      this.profileDelay = 8000;
     }
 
     closeConnectionModal() {
-        // Try to close any open connection modal/dialog
-        const closeButtons = [
-            document.querySelector('button[aria-label*="Dismiss"]'),
-            document.querySelector('button[aria-label*="Cancel"]'),
-            document.querySelector('button[data-control-name="cancel"]'),
-            document.querySelector('.artdeco-modal__dismiss'),
-            document.querySelector('[data-test-modal-close-btn]')
-        ];
+      // Try to close any open connection modal/dialog
+      const closeButtons = [
+        document.querySelector('button[aria-label*="Dismiss"]'),
+        document.querySelector('button[aria-label*="Cancel"]'),
+        document.querySelector('button[data-control-name="cancel"]'),
+        document.querySelector(".artdeco-modal__dismiss"),
+        document.querySelector("[data-test-modal-close-btn]"),
+      ];
 
-        for (const closeBtn of closeButtons) {
-            if (closeBtn && closeBtn.offsetParent !== null) {
-                closeBtn.click();
-                break;
-            }
+      for (const closeBtn of closeButtons) {
+        if (closeBtn && closeBtn.offsetParent !== null) {
+          closeBtn.click();
+          break;
         }
-        // Also try pressing Escape key
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }));
+      }
+      // Also try pressing Escape key
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", keyCode: 27 })
+      );
     }
-}
+  }
 
-window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
+  window.SalesNavigatorFloatingUI = SalesNavigatorFloatingUI;
 
-if (typeof window.salesNavUI === 'undefined' &&
-    typeof window.salesNavigatorFloatingUI === 'undefined' &&
-    window.location.href.includes('linkedin.com') &&
-    !document.querySelector('.sales-navigator-floating-ui')) {
+  if (
+    typeof window.salesNavUI === "undefined" &&
+    typeof window.salesNavigatorFloatingUI === "undefined" &&
+    window.location.href.includes("linkedin.com") &&
+    !document.querySelector(".sales-navigator-floating-ui")
+  ) {
     try {
-        window.salesNavUI = new SalesNavigatorFloatingUI();
+      window.salesNavUI = new SalesNavigatorFloatingUI();
     } catch (error) {
-        console.error('Error creating SalesNavigatorFloatingUI instance:', error);
+      console.error("Error creating SalesNavigatorFloatingUI instance:", error);
     }
-}}
+  }
+}
