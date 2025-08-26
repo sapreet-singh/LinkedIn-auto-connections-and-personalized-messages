@@ -39,15 +39,20 @@ if (window.salesNavigatorUILoaded) {
         const apiData = await response.json();
         console.log("api Message", apiData);
         const messageTest = apiData?.messages?.message;
-        console.log("Message", messageTest);
-        return { message: messageTest };
+        const interestMessage = apiData?.messages?.interests;
+        console.log("Message:", messageTest);
+        console.log("Interests:", interestMessage);
+        return { 
+          message: messageTest, 
+          interests: interestMessage 
+        };
       } catch (error) {
         console.log("API Service Error:", error);
         console.error("API Service Error:", error);
         throw error;
       }
     },
-    async addProfile(profile, customPrompt, message, profileUrl, reason) {
+    async addProfile(profile, customPrompt, message, profileUrl, reason, interests) {
       try {
         console.log("Request Data", profile, customPrompt, message, profileUrl);
         const response = await fetch(
@@ -67,6 +72,7 @@ if (window.salesNavigatorUILoaded) {
               prompt: customPrompt || null,
               message: message || null,
               reason: reason || null,
+              interests: interests || null,
               status: "pending" || null,
               createdAt: new Date(profile.timestamp).toISOString(),
             }),
@@ -111,7 +117,7 @@ if (window.salesNavigatorUILoaded) {
         const apiData = await response.json();
         return {
           sendConnectCount: apiData.sendConnect || 0,
-          FailedConnectCount: apiData.failedConnect ||0,
+          FailedConnectCount: apiData.failedConnect || 0,
         };
       } catch (error) {
         console.error("API Service Error (GetStatus):", error);
@@ -128,6 +134,7 @@ if (window.salesNavigatorUILoaded) {
       this.currentWorkflowStep = "collecting";
       this.currentProfileIndex = 0;
       this.generatedMessage = null;
+      this.generatedInterests = null;
       this.processedProfiles = [];
       this.workflowPaused = false;
       this.automationRunning = false;
@@ -188,6 +195,7 @@ if (window.salesNavigatorUILoaded) {
           this.currentProfileIndex = state.currentProfileIndex || 0;
           this.profiles = state.profiles || [];
           this.generatedMessage = state.generatedMessage;
+          this.generatedInterests = state.generatedInterests;
           this.processedProfiles = state.processedProfiles || [];
           this.automationRunning = state.automationRunning || false;
           this.workflowPaused = state.workflowPaused || false;
@@ -214,8 +222,16 @@ if (window.salesNavigatorUILoaded) {
         setTimeout(() => this.showUI(), 1000);
       }
       this.updateStatusFromAPI();
-      // Update status every 5 minutes
-      setInterval(() => this.updateStatusFromAPI(), 3000);
+      // Clear any existing interval to prevent duplicates
+      if (this.statusUpdateInterval) {
+        clearInterval(this.statusUpdateInterval);
+      }
+
+      // Set up new interval for every 5 minutes (300,000ms)
+      this.statusUpdateInterval = setInterval(
+        () => this.updateStatusFromAPI(),
+        300000
+      );
     }
 
     async updateStatusFromAPI() {
@@ -537,6 +553,7 @@ if (window.salesNavigatorUILoaded) {
           this.currentProfileIndex = state.currentProfileIndex;
           this.profiles = state.profiles || [];
           this.generatedMessage = state.generatedMessage;
+          this.generatedInterests = state.generatedInterests;
           this.processedProfiles = state.processedProfiles || [];
           this.profileStatuses = state.profileStatuses || {};
           this.automationRunning = state.automationRunning || false;
@@ -966,6 +983,7 @@ if (window.salesNavigatorUILoaded) {
           promptId: p.promptId,
         })),
         generatedMessage: this.generatedMessage,
+        generatedInterests: this.generatedInterests,
         processedProfiles: this.processedProfiles || [],
         automationRunning: this.automationRunning,
         workflowPaused: this.workflowPaused,
@@ -1746,12 +1764,15 @@ if (window.salesNavigatorUILoaded) {
                 );
                 if (messageData && messageData.message) {
                   this.generatedMessage = messageData.message.slice(0, 300); // Enforce 300-char limit
-                  console.log("Recived Message", messageData);
+                  this.generatedInterests = messageData.interests; // Store interests
+                  console.log("Received Message:", messageData.message);
+                  console.log("Received Interests:", messageData.interests);
                   if (statusElement)
                     statusElement.textContent =
                       "Message generated from custom prompt!";
                 } else {
                   this.generatedMessage = staticMessage;
+                  this.generatedInterests = null;
                   console.log("Test Message", staticMessage);
                   if (statusElement)
                     statusElement.textContent =
@@ -1760,6 +1781,7 @@ if (window.salesNavigatorUILoaded) {
               } catch (error) {
                 console.error("API call failed:", error);
                 this.generatedMessage = staticMessage;
+                this.generatedInterests = null;
                 if (statusElement)
                   statusElement.textContent =
                     "API error - using static message";
@@ -1781,7 +1803,8 @@ if (window.salesNavigatorUILoaded) {
                   this.promptSet ? this.customPrompt : null,
                   this.generatedMessage,
                   this.currentLinkedInProfileUrl,
-                  statusElement.textContent
+                  statusElement.textContent,
+                  this.generatedInterests
                 );
                 if (apiResponse) {
                   profile.profileId = apiResponse.profileId;
@@ -1838,11 +1861,13 @@ if (window.salesNavigatorUILoaded) {
                   );
                   if (messageData && messageData.message) {
                     this.generatedMessage = messageData.message.slice(0, 300);
+                    this.generatedInterests = messageData.interests
                     if (statusElement)
                       statusElement.textContent =
                         "Message generated from custom prompt!";
                   } else {
                     this.generatedMessage = staticMessage;
+                    this.generatedInterests = null;
                     if (statusElement)
                       statusElement.textContent =
                         "API response invalid - using static message";
@@ -1850,6 +1875,7 @@ if (window.salesNavigatorUILoaded) {
                 } catch (error) {
                   console.error("API call failed:", error);
                   this.generatedMessage = staticMessage;
+                  this.generatedInterests = null;
                   if (statusElement)
                     statusElement.textContent =
                       "API error - using static message";
@@ -1870,7 +1896,8 @@ if (window.salesNavigatorUILoaded) {
                     this.promptSet ? this.customPrompt : null,
                     this.generatedMessage,
                     this.currentLinkedInProfileUrl,
-                    statusElement.textContent
+                    statusElement.textContent,
+                    this.generatedInterests
                   );
                   if (apiResponse) {
                     profile.profileId = apiResponse.profileId;
@@ -1909,7 +1936,8 @@ if (window.salesNavigatorUILoaded) {
                   this.promptSet ? this.customPrompt : null,
                   this.generatedMessage,
                   this.currentLinkedInProfileUrl,
-                  statusElement.textContent
+                  statusElement.textContent,
+                  this.generatedInterests
                 );
                 if (apiResponse) {
                   profile.profileId = apiResponse.profileId;
@@ -1947,7 +1975,8 @@ if (window.salesNavigatorUILoaded) {
               this.promptSet ? this.customPrompt : null,
               this.generatedMessage,
               this.currentLinkedInProfileUrl,
-              statusElement.textContent
+              statusElement.textContent,
+              this.generatedInterests
             );
             if (apiResponse) {
               profile.profileId = apiResponse.profileId;
@@ -1985,7 +2014,8 @@ if (window.salesNavigatorUILoaded) {
             this.promptSet ? this.customPrompt : null,
             this.generatedMessage,
             this.currentLinkedInProfileUrl,
-            statusElement.textContent
+            statusElement.textContent,
+            this.generatedInterests
           );
           if (apiResponse) {
             profile.profileId = apiResponse.profileId;
@@ -2116,7 +2146,8 @@ if (window.salesNavigatorUILoaded) {
               this.promptSet ? this.customPrompt : null,
               this.generatedMessage,
               this.currentLinkedInProfileUrl,
-              statusElement.textContent
+              statusElement.textContent,
+              this.generatedInterests
             );
             if (apiResponse) {
               profile.profileId = apiResponse.profileId;
@@ -2154,7 +2185,8 @@ if (window.salesNavigatorUILoaded) {
             this.promptSet ? this.customPrompt : null,
             this.generatedMessage,
             this.currentLinkedInProfileUrl,
-            "Send button found but disabled - skipping"
+            "Send button found but disabled - skipping",
+            this.generatedInterests
           );
           if (apiResponse) {
             profile.profileId = apiResponse.profileId;
@@ -2193,7 +2225,8 @@ if (window.salesNavigatorUILoaded) {
             this.promptSet ? this.customPrompt : null,
             this.generatedMessage,
             this.currentLinkedInProfileUrl,
-            "Send Invitation button not found - skipping"
+            "Send Invitation button not found - skipping",
+            this.generatedInterests
           );
           if (apiResponse) {
             profile.profileId = apiResponse.profileId;
