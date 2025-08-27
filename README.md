@@ -1,6 +1,8 @@
 # LinkedIn Auto Connect & Message Extension
 
-A comprehensive Chrome extension for automating LinkedIn connections, profile collection, and personalized messaging with AI-powered message generation and advanced Sales Navigator integration.
+The LinkedIn Auto Connect & Message Extension is a powerful Chrome tool that automates networking, lead generation, and outreach on LinkedIn. It helps professionals, recruiters, and sales teams save time by collecting profiles, sending connection requests, and delivering personalized AI-powered messages.
+
+With advanced Sales Navigator integration, you can easily apply filters to find the right prospects, then either start profile collection manually or click the Process button from the floating UI. Set your own custom prompt, and the extension will automatically generate and send personalized connection messages—making your outreach faster, smarter, and more effective.
 
 ## 🚀 Key Features Overview
 
