@@ -10,6 +10,7 @@ if (window.salesNavigatorUILoaded) {
         MESSAGES: "/api/linkedin/message",
         PROFILES: "/api/linkedin/profiles",
         STATUS: "/api/linkedin/GetStatus",
+        FILTER_PROMPT: "/api/linkedin/filter-prompt",
       },
     },
   };
@@ -42,9 +43,9 @@ if (window.salesNavigatorUILoaded) {
         const interestMessage = apiData?.messages?.interests;
         console.log("Message:", messageTest);
         console.log("Interests:", interestMessage);
-        return { 
-          message: messageTest, 
-          interests: interestMessage 
+        return {
+          message: messageTest,
+          interests: interestMessage,
         };
       } catch (error) {
         console.log("API Service Error:", error);
@@ -121,6 +122,38 @@ if (window.salesNavigatorUILoaded) {
         };
       } catch (error) {
         console.error("API Service Error (GetStatus):", error);
+        throw error;
+      }
+    },
+    async generateFilterPrompt(prompt) {
+      try {
+        const response = await fetch(
+          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.FILTER_PROMPT}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              accept: "*/*",
+            },
+            body: JSON.stringify({ prompt }), // Send string prompt
+          }
+        );
+        if (!response.ok) {
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText}`
+          );
+        }
+        const apiData = await response.json();
+        console.log("API Data:", apiData);
+        return {
+          industry: apiData.industry || "any",
+          jobTitle: apiData.job_title || "any", // Map snake_case to camelCase
+          seniorityLevel: apiData.seniority_level || "any",
+          companyHeadquarters: apiData.company_headquarters || "any",
+          companyHeadCount: apiData.company_head_count || "any",
+        };
+      } catch (error) {
+        console.error("Filter Prompt API Error:", error);
         throw error;
       }
     },
@@ -266,125 +299,145 @@ if (window.salesNavigatorUILoaded) {
       const style = document.createElement("style");
       style.id = "sales-navigator-ui-inline-styles";
       style.textContent = `
-            .sales-navigator-floating-ui {
-                position: fixed !important;
-                top: 20px !important;
-                right: 20px !important;
-                width: 420px !important;
-                max-height: 80vh !important;
-                background: white !important;
-                border-radius: 12px !important;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
-                z-index: 10000 !important;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-                border: 1px solid #e1e5e9 !important;
-                overflow: hidden !important;
-                display: flex !important;
-                flex-direction: column !important;
-            }
-            .sales-nav-header {
-                background: linear-gradient(135deg, #0a66c2, #004182) !important;
-                color: white !important;
-                padding: 16px 20px !important;
-                display: flex !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-            }
-            .sales-nav-content {
-                padding: 20px !important;
-                flex: 1 !important;
-                overflow-y: auto !important;
-            }
-            .sales-nav-btn {
-                flex: 1 !important;
-                padding: 12px 16px !important;
-                border: none !important;
-                border-radius: 8px !important;
-                font-size: 14px !important;
-                font-weight: 600 !important;
-                cursor: pointer !important;
-                margin: 0 6px !important;
-            }
-            .sales-nav-btn.start {
-                background: #28a745 !important;
-                color: white !important;
-            }
-            .sales-nav-btn.pause {
-                background: #ffc107 !important;
-                color: #212529 !important;
-            }
-            .sales-nav-btn.next {
-                background: #007bff !important;
-                color: white !important;
-                margin-top: 12px !important;
-            }
-            .sales-nav-btn.next:hover {
-                background: #0056b3 !important;
-            }
-            .workflow-status {
-                background: #e3f2fd !important;
-                border: 1px solid #bbdefb !important;
-                border-radius: 8px !important;
-                padding: 12px 16px !important;
-                margin: 12px 0 !important;
-                text-align: center !important;
-                font-size: 14px !important;
-                color: #1976d2 !important;
-            }
-            .three-dot-menu {
-                position: relative !important;
-                display: inline-block !important;
-            }
-            .three-dot-btn {
-                background: #f8f9fa !important;
-                border: 1px solid #dee2e6 !important;
-                border-radius: 4px !important;
-                padding: 4px 8px !important;
-                cursor: pointer !important;
-                font-size: 12px !important;
-            }
-            .three-dot-menu-content {
-                display: none !important;
-                position: absolute !important;
-                right: 0 !important;
-                background-color: white !important;
-                min-width: 160px !important;
-                box-shadow: 0 8px 16px rgba(0,0,0,0.2) !important;
-                z-index: 10001 !important;
-                border-radius: 4px !important;
-                border: 1px solid #dee2e6 !important;
-            }
-            .three-dot-menu-content.show {
-                display: block !important;
-            }
-            .three-dot-menu-content a {
-                color: #333 !important;
-                padding: 8px 12px !important;
-                text-decoration: none !important;
-                display: block !important;
-                font-size: 12px !important;
-            }
-            .three-dot-menu-content a:hover {
-                background-color: #f8f9fa !important;
-            }
-            .connect-btn {
-                background: #28a745 !important;
-                color: white !important;
-                border: none !important;
-                border-radius: 4px !important;
-                padding: 6px 12px !important;
-                cursor: pointer !important;
-                font-size: 12px !important;
-                margin-top: 8px !important;
-            }
-            .connect-btn:hover {
-                background: #218838 !important;
-            }
-            .connect-btn:disabled {
-                background: #6c757d !important;
-                cursor: not-allowed !important;
-            }
-        `;
+        .sales-navigator-floating-ui {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            width: 420px !important;
+            max-height: 80vh !important;
+            background: white !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+            z-index: 10000 !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            border: 1px solid #e1e5e9 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        .sales-nav-header {
+            background: linear-gradient(135deg, #0a66c2, #004182) !important;
+            color: white !important;
+            padding: 16px 20px !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+        }
+        .sales-nav-content {
+            padding: 20px !important;
+            flex: 1 !important;
+            overflow-y: auto !important;
+        }
+        .sales-nav-btn {
+            flex: 1 !important;
+            padding: 12px 16px !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            margin: 0 6px !important;
+        }
+        .sales-nav-btn.start {
+            background: #28a745 !important;
+            color: white !important;
+        }
+        .sales-nav-btn.pause {
+            background: #ffc107 !important;
+            color: #212529 !important;
+        }
+        .sales-nav-btn.next {
+            background: #007bff !important;
+            color: white !important;
+            margin-top: 12px !important;
+        }
+        .sales-nav-btn.next:hover {
+            background: #0056b3 !important;
+        }
+        .workflow-status {
+            background: #e3f2fd !important;
+            border: 1px solid #bbdefb !important;
+            border-radius: 8px !important;
+            padding: 12px 16px !important;
+            margin: 12px 0 !important;
+            text-align: center !important;
+            font-size: 14px !important;
+            color: #1976d2 !important;
+        }
+        .three-dot-menu {
+            position: relative !important;
+            display: inline-block !important;
+        }
+        .three-dot-btn {
+            background: #f8f9fa !important;
+            border: 1px solid #dee2e6 !important;
+            border-radius: 4px !important;
+            padding: 4px 8px !important;
+            cursor: pointer !important;
+            font-size: 12px !important;
+        }
+        .three-dot-menu-content {
+            display: none !important;
+            position: absolute !important;
+            right: 0 !important;
+            background-color: white !important;
+            min-width: 160px !important;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2) !important;
+            z-index: 10001 !important;
+            border-radius: 4px !important;
+            border: 1px solid #dee2e6 !important;
+        }
+        .three-dot-menu-content.show {
+            display: block !important;
+        }
+        .three-dot-menu-content a {
+            color: #333 !important;
+            padding: 8px 12px !important;
+            text-decoration: none !important;
+            display: block !important;
+            font-size: 12px !important;
+        }
+        .three-dot-menu-content a:hover {
+            background-color: #f8f9fa !important;
+        }
+        .connect-btn {
+            background: #28a745 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 6px 12px !important;
+            cursor: pointer !important;
+            font-size: 12px !important;
+            margin-top: 8px !important;
+        }
+        .connect-btn:hover {
+            background: #218838 !important;
+        }
+        .connect-btn:disabled {
+            background: #6c757d !important;
+            cursor: not-allowed !important;
+        }
+        .filter-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #profile-filter-input {
+            box-sizing: border-box;
+        }
+        #profile-filter-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+        }
+        #generate-filter-btn {
+            background: #007bff !important;
+            color: white !important;
+        }
+        #generate-filter-btn:hover {
+            background: #0056b3 !important;
+        }
+    `;
       document.head.appendChild(style);
     }
 
@@ -402,43 +455,47 @@ if (window.salesNavigatorUILoaded) {
       this.ui = document.createElement("div");
       this.ui.className = "sales-navigator-floating-ui";
       this.ui.innerHTML = `
-            <div class="sales-nav-header">
-                <h3 class="sales-nav-title">Sales Navigator</h3>
-                <div class="sales-nav-controls">
-                    <button class="sales-nav-minimize" title="Minimize">−</button>
-                    <button class="sales-nav-close" title="Close">&times;</button>
+        <div class="sales-nav-header">
+            <h3 class="sales-nav-title">Sales Navigator</h3>
+            <div class="sales-nav-controls">
+                <button class="sales-nav-minimize" title="Minimize">−</button>
+                <button class="sales-nav-close" title="Close">&times;</button>
+            </div>
+        </div>
+        <div class="sales-nav-content">
+            <div class="sales-nav-controls">
+                <button class="sales-nav-btn start" id="start-collecting">Start Collecting</button>
+                <button class="sales-nav-btn pause" id="pause-collecting" disabled>Pause Collecting</button>
+            </div>
+            <div class="sales-nav-status">
+                <div class="status-indicator">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="status-text">Ready to collect profiles</span>
                 </div>
             </div>
-            <div class="sales-nav-content">
-                <div class="sales-nav-controls">
-                    <button class="sales-nav-btn start" id="start-collecting">Start Collecting</button>
-                    <button class="sales-nav-btn pause" id="pause-collecting" disabled>Pause Collecting</button>
+            <div class="send-connect-section">
+                <div class="connect-count">Send Connect: <span id="send-connect-count">0</span></div>
+                <div class="connect-count">Failed Connect: <span id="Failed-connect-count">0</span></div>
+            </div>
+            <div class="profiles-section">
+                <div class="profiles-header">
+                    <span class="profiles-count">Profiles: <span id="profiles-count">0</span></span>
+                    <button class="clear-profiles" id="clear-profiles">Clear All</button>
                 </div>
-                <div class="sales-nav-status">
-                    <div class="status-indicator">
-                        <span class="status-dot" id="status-dot"></span>
-                        <span id="status-text">Ready to collect profiles</span>
-                    </div>
+                <div class="filter-section" style="margin: 10px 0;">
+                    <input type="text" id="profile-filter-input" placeholder="Filter profiles by name, title, or company..." style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+                    <button id="generate-filter-btn" style="background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-size: 14px;">Generate Filter</button>
                 </div>
-                <div class="send-connect-section">
-                    <div class="connect-count">Send Connect: <span id="send-connect-count">0</span></div>
-                    <div class="connect-count">Failed Connect: <span id="Failed-connect-count">0</span></div>
-                </div>
-                <div class="profiles-section">
-                    <div class="profiles-header">
-                        <span class="profiles-count">Profiles: <span id="profiles-count">0</span></span>
-                        <button class="clear-profiles" id="clear-profiles">Clear All</button>
-                    </div>
-                    <div class="profiles-list" id="profiles-list">
-                        <div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>
-                    </div>
-                </div>
-                <button class="sales-nav-btn next" id="next-button" style="display: none;">Process Profiles (0)</button>
-                <div class="workflow-status" id="workflow-status" style="display: none;">
-                    <div id="workflow-text">Ready to process profiles</div>
+                <div class="profiles-list" id="profiles-list">
+                    <div class="empty-profiles">No profiles collected yet. Click "Start Collecting" to begin.</div>
                 </div>
             </div>
-        `;
+            <button class="sales-nav-btn next" id="next-button" style="display: none;">Process Profiles (0)</button>
+            <div class="workflow-status" id="workflow-status" style="display: none;">
+                <div id="workflow-text">Ready to process profiles</div>
+            </div>
+        </div>
+    `;
       document.body.appendChild(this.ui);
     }
 
@@ -449,14 +506,327 @@ if (window.salesNavigatorUILoaded) {
       const closeBtn = this.ui.querySelector(".sales-nav-close");
       const minimizeBtn = this.ui.querySelector(".sales-nav-minimize");
       const clearBtn = this.ui.querySelector("#clear-profiles");
-      const header = this.ui.querySelector(".sales-nav-header");
+      const generateFilterBtn = this.ui.querySelector("#generate-filter-btn");
       startBtn.addEventListener("click", () => this.startCollecting());
       pauseBtn.addEventListener("click", () => this.pauseCollecting());
       nextBtn.addEventListener("click", () => this.startWorkflow());
       closeBtn.addEventListener("click", () => this.closeUI());
       minimizeBtn.addEventListener("click", () => this.toggleMinimize());
       clearBtn.addEventListener("click", () => this.clearProfiles());
-      this.makeDraggable(header);
+      generateFilterBtn.addEventListener("click", () =>
+        this.generateFilterPrompt()
+      );
+      this.makeDraggable(this.ui.querySelector(".sales-nav-header"));
+    }
+
+    async generateFilterPrompt() {
+      if (!this.ui) {
+        console.error("UI not initialized in generateFilterPrompt");
+        return;
+      }
+      const statusText = this.ui.querySelector("#status-text");
+      const filterInput = this.ui.querySelector("#profile-filter-input"); // Updated to match createUI
+      const generateFilterBtn = this.ui.querySelector("#generate-filter-btn");
+
+      if (!filterInput) {
+        console.error("Filter input element not found");
+        statusText.textContent = "Error: Filter input not available";
+        return;
+      }
+
+      try {
+        statusText.textContent = "Generating filter prompt...";
+        generateFilterBtn.disabled = true;
+        const userPrompt = filterInput.value.trim();
+        if (!userPrompt) {
+          statusText.textContent = "Please enter a filter prompt";
+          return;
+        }
+
+        const filterData = await APIService.generateFilterPrompt(userPrompt);
+        console.log("Generated filter prompt:", filterData);
+        await this.applySalesNavigatorFilters(filterData);
+        statusText.textContent = "Filter applied to Sales Navigator!";
+      } catch (error) {
+        console.error("Error generating or applying filter prompt:", error);
+        statusText.textContent = `Failed to apply filter: ${error.message}`;
+      } finally {
+        generateFilterBtn.disabled = false;
+      }
+    }
+
+    async applySalesNavigatorFilters(filterData) {
+      await this.waitForPageLoad();
+      const waitForInput = async (timeout = 10000, retryInterval = 500) => {
+        return new Promise((resolve, reject) => {
+          const maxRetries = timeout / retryInterval;
+          let retries = 0;
+          const check = () => {
+            const el = document.querySelector(
+              "input.artdeco-typeahead__input.search-filter__focus-target--input"
+            );
+            if (el) {
+              resolve(el);
+            } else if (retries >= maxRetries) {
+              console.error("❌ Timeout: Job Title input not found");
+              reject("Timeout: Job Title input not found");
+            } else {
+              retries++;
+              setTimeout(check, retryInterval);
+            }
+          };
+          check();
+        });
+      };
+
+      // Enhanced typing function that triggers all necessary events
+      const typeWithDelay = async (input, text, delay = 300) => {
+        input.focus();
+        input.value = "";
+
+        // Clear any existing content
+        input.dispatchEvent(new Event("focus", { bubbles: true }));
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Backspace", bubbles: true })
+        );
+
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          input.value += char;
+
+          // Dispatch multiple events to ensure autocomplete triggers
+          input.dispatchEvent(
+            new KeyboardEvent("keydown", { key: char, bubbles: true })
+          );
+          input.dispatchEvent(
+            new InputEvent("input", {
+              bubbles: true,
+              inputType: "insertText",
+              data: char,
+            })
+          );
+          input.dispatchEvent(
+            new KeyboardEvent("keyup", { key: char, bubbles: true })
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+
+        // Final events to ensure processing
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.dispatchEvent(new Event("blur", { bubbles: true }));
+        input.dispatchEvent(new Event("focus", { bubbles: true }));
+      };
+
+      // Wait for suggestions to appear
+      const waitForSuggestions = async (maxWaitTime = 15000) => {
+        console.log("⏳ Waiting for suggestions to appear...");
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWaitTime) {
+          const resultsList = document.querySelector(
+            "ul.artdeco-typeahead__results-list"
+          );
+          const suggestions = document.querySelectorAll(
+            "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
+          );
+
+          if (resultsList && suggestions.length > 0) {
+            const countAttr = resultsList.getAttribute("data-count");
+            console.log("🔎 Suggestion list count:", countAttr);
+            console.log("✅ Suggestions appeared:", suggestions.length);
+            return true;
+          }
+
+          await this.wait(500);
+        }
+
+        console.log("⚠️ No suggestions appeared within timeout");
+        return false;
+      };
+
+      try {
+        const jobTitleValue = filterData.jobTitle;
+        console.log("ℹ️ Job Title filter value:", jobTitleValue);
+
+        if (!jobTitleValue || jobTitleValue.toLowerCase() === "any") {
+          console.log("⏩ Skipping job title filter");
+          return;
+        }
+
+        // Close tooltip if present
+        const tooltip = document.querySelector(
+          'div[role="dialog"][id*="hue-web-contextual-dialog-content"]'
+        );
+        if (tooltip) {
+          console.log("ℹ️ Tooltip detected, attempting to close");
+          const closeBtn =
+            tooltip.querySelector('button[aria-label="Dismiss"]') ||
+            tooltip.querySelector("button");
+          if (closeBtn) {
+            closeBtn.click();
+            console.log("✅ Tooltip closed via UI button");
+            let retries = 0;
+            while (document.contains(tooltip) && retries < 20) {
+              await this.wait(200);
+              retries++;
+            }
+            console.log("✅ Tooltip removed from DOM");
+          }
+        }
+
+        // Locate Job Title section
+        console.log("🔍 Searching for Job Title filter section");
+        const jobTitleLegend = Array.from(
+          document.querySelectorAll("legend span")
+        ).find((el) => el.textContent.trim() === "Current job title");
+        if (!jobTitleLegend)
+          throw new Error("Job title filter legend not found");
+        console.log("✅ Found Job Title filter legend");
+
+        // Expand if collapsed
+        const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
+        const toggleBtn = sectionContainer?.querySelector(
+          "button[aria-expanded]"
+        );
+        if (toggleBtn && toggleBtn.getAttribute("aria-expanded") === "false") {
+          console.log("ℹ️ Expanding collapsed section");
+          toggleBtn.click();
+          await this.wait(800);
+          console.log("✅ Section expanded");
+        }
+
+        // Wait for input
+        const input = await waitForInput(10000);
+
+        // Clear any existing filters first
+        const existingChips = sectionContainer?.querySelectorAll(
+          'button[aria-label*="Remove"], .search-s-facet__selected-filter'
+        );
+        if (existingChips && existingChips.length > 0) {
+          console.log("🧹 Clearing existing job title filters");
+          for (const chip of existingChips) {
+            chip.click();
+            await this.wait(300);
+          }
+        }
+
+        // Type job title slowly with enhanced event triggering
+        console.log(
+          `✏️ Typing job title with enhanced events (300ms delay): ${jobTitleValue}`
+        );
+        await typeWithDelay(input, jobTitleValue, 300);
+
+        // Wait for suggestions to appear
+        const suggestionsAppeared = await waitForSuggestions(15000);
+
+        if (suggestionsAppeared) {
+          // Look for matching suggestion
+          let suggestion = null;
+          const suggestions = Array.from(
+            document.querySelectorAll(
+              "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
+            )
+          );
+
+          // First try exact match
+          suggestion = suggestions.find((el) => {
+            const text = el.innerText || "";
+            return (
+              text.toLowerCase().trim() === jobTitleValue.toLowerCase().trim()
+            );
+          });
+
+          // If no exact match, try partial match
+          if (!suggestion) {
+            suggestion = suggestions.find((el) => {
+              const text = el.innerText || "";
+              return text.toLowerCase().includes(jobTitleValue.toLowerCase());
+            });
+          }
+
+          if (suggestion) {
+            console.log("✅ Suggestion found:", suggestion.innerText.trim());
+
+            // Wait a bit for UI to stabilize
+            await this.wait(500);
+
+            // Try Include button first (most reliable)
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button[aria-label*='Include']"
+            );
+            if (includeBtn) {
+              includeBtn.click();
+              console.log("✅ Clicked Include button");
+            } else {
+              // Try clicking the suggestion item directly
+              suggestion.click();
+              console.log("✅ Clicked suggestion directly");
+            }
+
+            // Wait for filter to be applied
+            await this.wait(1000);
+
+            // Verify filter was applied
+            const appliedFilter = sectionContainer?.querySelector(
+              '.search-s-facet__selected-filter, [aria-label*="Remove"]'
+            );
+            if (appliedFilter) {
+              console.log("✅ Filter successfully applied and visible in UI");
+            } else {
+              console.log(
+                "⚠️ Filter may not have been applied - no visual confirmation found"
+              );
+            }
+          } else {
+            console.log("⚠️ No matching suggestions found, trying Enter key");
+            input.dispatchEvent(
+              new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+            );
+            await this.wait(1000);
+          }
+        } else {
+          console.log("⚠️ No suggestions appeared, trying Enter key fallback");
+          input.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+          );
+          await this.wait(1000);
+
+          // Alternative approach: try to trigger search directly
+          console.log("🔄 Attempting alternative search trigger");
+          const searchButton = document.querySelector(
+            'button[aria-label*="Search"], .search-s-filter__search-submit'
+          );
+          if (searchButton) {
+            searchButton.click();
+            console.log("✅ Clicked search button");
+          }
+        }
+
+        console.log(`✅ Applied Job Title filter: ${jobTitleValue}`);
+      } catch (err) {
+        console.error("❌ Failed to apply Job Title filter:", err);
+
+        // Fallback: try to manually trigger search if input has value
+        try {
+          const input = document.querySelector(
+            "input.artdeco-typeahead__input.search-filter__focus-target--input"
+          );
+          if (input && input.value) {
+            console.log("🔄 Attempting fallback search trigger");
+            const searchButton = document.querySelector(
+              'button[aria-label*="Search"], .search-s-filter__search-submit'
+            );
+            if (searchButton) {
+              searchButton.click();
+              console.log("✅ Fallback search triggered");
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("❌ Fallback also failed:", fallbackErr);
+        }
+      }
+      console.log("🏁 Finished applySalesNavigatorFilters");
     }
 
     makeDraggable(handle) {
