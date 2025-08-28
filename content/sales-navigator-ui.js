@@ -53,7 +53,14 @@ if (window.salesNavigatorUILoaded) {
         throw error;
       }
     },
-    async addProfile(profile, customPrompt, message, profileUrl, reason, interests) {
+    async addProfile(
+      profile,
+      customPrompt,
+      message,
+      profileUrl,
+      reason,
+      interests
+    ) {
       try {
         console.log("Request Data", profile, customPrompt, message, profileUrl);
         const response = await fetch(
@@ -555,144 +562,220 @@ if (window.salesNavigatorUILoaded) {
       }
     }
 
-async applySalesNavigatorFilters(filterData) {
-  await this.waitForPageLoad();
+    async applySalesNavigatorFilters(filterData) {
+      await this.waitForPageLoad();
 
-  const waitForInput = async (timeout = 10000, retryInterval = 500) => {
-    return new Promise((resolve, reject) => {
-      const maxRetries = timeout / retryInterval;
-      let retries = 0;
-      const check = () => {
-        const el = document.querySelector(
-          "input.artdeco-typeahead__input.search-filter__focus-target--input"
-        );
-        if (el) {
-          resolve(el);
-        } else if (retries >= maxRetries) {
-          reject("Timeout: Job Title input not found");
-        } else {
-          retries++;
-          setTimeout(check, retryInterval);
-        }
+      const waitForInput = async (timeout = 10000, retryInterval = 500) => {
+        return new Promise((resolve, reject) => {
+          const maxRetries = timeout / retryInterval;
+          let retries = 0;
+          const check = () => {
+            const el = document.querySelector(
+              "input.artdeco-typeahead__input.search-filter__focus-target--input"
+            );
+            if (el) {
+              resolve(el);
+            } else if (retries >= maxRetries) {
+              reject("Timeout: Input not found");
+            } else {
+              retries++;
+              setTimeout(check, retryInterval);
+            }
+          };
+          check();
+        });
       };
-      check();
-    });
-  };
 
-  const typeWithDelay = async (input, text, delay = 300) => {
-    input.focus();
-    input.value = "";
+      const typeWithDelay = async (input, text, delay = 300) => {
+        input.focus();
+        input.value = "";
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      input.value += char;
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          input.value += char;
 
-      // Trigger full set of events
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: char, bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent("keypress", { key: char, bubbles: true }));
-      input.dispatchEvent(
-        new InputEvent("input", { bubbles: true, inputType: "insertText", data: char })
-      );
-      input.dispatchEvent(new KeyboardEvent("keyup", { key: char, bubbles: true }));
+          input.dispatchEvent(
+            new KeyboardEvent("keydown", { key: char, bubbles: true })
+          );
+          input.dispatchEvent(
+            new KeyboardEvent("keypress", { key: char, bubbles: true })
+          );
+          input.dispatchEvent(
+            new InputEvent("input", {
+              bubbles: true,
+              inputType: "insertText",
+              data: char,
+            })
+          );
+          input.dispatchEvent(
+            new KeyboardEvent("keyup", { key: char, bubbles: true })
+          );
 
-      await new Promise(r => setTimeout(r, delay));
-    }
+          await new Promise((r) => setTimeout(r, delay));
+        }
 
-    // Ensure LinkedIn processes the text
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  };
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      };
 
-  const waitForSuggestions = async (maxWaitTime = 15000) => {
-    console.log("⏳ Waiting for suggestions to appear...");
-    const startTime = Date.now();
-    while (Date.now() - startTime < maxWaitTime) {
-      const suggestions = document.querySelectorAll(
-        "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
-      );
-      if (suggestions.length > 0) {
-        console.log("✅ Suggestions appeared:", suggestions.length);
-        return Array.from(suggestions);
+      const waitForSuggestions = async (maxWaitTime = 15000) => {
+        console.log("⏳ Waiting for suggestions to appear...");
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxWaitTime) {
+          const suggestions = document.querySelectorAll(
+            "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
+          );
+          if (suggestions.length > 0) {
+            console.log("✅ Suggestions appeared:", suggestions.length);
+            return Array.from(suggestions);
+          }
+          await this.wait(500);
+        }
+        console.log("⚠️ No suggestions appeared within timeout");
+        return null;
+      };
+
+      // ---------- JOB TITLE FILTER ----------
+      try {
+        const jobTitleValue = filterData.jobTitle;
+        if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
+          console.log("ℹ️ Applying Job Title filter:", jobTitleValue);
+
+          const jobTitleLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Current job title");
+          if (!jobTitleLegend)
+            throw new Error("Job title filter legend not found");
+
+          const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+
+          const input = await waitForInput(10000);
+
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+
+          await typeWithDelay(input, jobTitleValue, 300);
+
+          const suggestions = await waitForSuggestions(15000);
+          let suggestion = null;
+
+          if (suggestions) {
+            suggestion = suggestions.find((el) =>
+              (el.innerText || "")
+                .toLowerCase()
+                .includes(jobTitleValue.toLowerCase())
+            );
+          }
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "button, ._include-button_1cz98z"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+            console.log("✅ Applied Job Title filter:", jobTitleValue);
+          } else {
+            console.log("⚠️ No suggestion found, pressing Enter");
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Job Title filter:", err);
       }
-      await this.wait(500);
-    }
-    console.log("⚠️ No suggestions appeared within timeout");
-    return null;
-  };
 
-  try {
-    const jobTitleValue = filterData.jobTitle;
-    if (!jobTitleValue || jobTitleValue.toLowerCase() === "any") {
-      console.log("⏩ Skipping job title filter");
-      return;
-    }
+      // ---------- INDUSTRY FILTER ----------
+      try {
+        const industryValue = filterData.industry;
+        if (industryValue && industryValue.toLowerCase() !== "any") {
+          console.log("ℹ️ Applying Industry filter:", industryValue);
 
-    // Close tooltip if exists
-    const tooltip = document.querySelector('div[role="dialog"][id*="hue-web-contextual-dialog-content"]');
-    if (tooltip) {
-      const closeBtn = tooltip.querySelector('button[aria-label="Dismiss"], button');
-      if (closeBtn) {
-        closeBtn.click();
-        await this.wait(500);
-        console.log("✅ Tooltip closed");
+          const industryLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Industry");
+          if (!industryLegend)
+            throw new Error("Industry filter legend not found");
+
+          const sectionContainer = industryLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+
+          // ✅ FIX: wait for the dynamic input (not tied to placeholder)
+          const input = await waitForInput(10000);
+          if (!input) throw new Error("Industry input not found");
+
+          // Clear any existing chips
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+
+          // Type into Industry input
+          await typeWithDelay(input, industryValue, 250);
+
+          // Wait for suggestions
+          const suggestions = await waitForSuggestions(10000);
+          let suggestion = null;
+
+          if (suggestions) {
+            suggestion = suggestions.find((el) =>
+              (el.innerText || "")
+                .toLowerCase()
+                .includes(industryValue.toLowerCase())
+            );
+          }
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button"
+            );
+            if (includeBtn) {
+              includeBtn.click();
+              console.log("✅ Applied Industry filter:", industryValue);
+            } else {
+              suggestion.click();
+              console.log(
+                "✅ Applied Industry filter by clicking suggestion:",
+                industryValue
+              );
+            }
+          } else {
+            console.log("⚠️ No suggestion found for Industry:", industryValue);
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Industry filter:", err);
       }
+
+      console.log("🏁 Finished applySalesNavigatorFilters");
     }
-
-    // Expand job title filter section
-    const jobTitleLegend = Array.from(document.querySelectorAll("legend span"))
-      .find(el => el.textContent.trim() === "Current job title");
-    if (!jobTitleLegend) throw new Error("Job title filter legend not found");
-
-    const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
-    const toggleBtn = sectionContainer?.querySelector("button[aria-expanded]");
-    if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-      toggleBtn.click();
-      await this.wait(800);
-    }
-
-    // Wait for input
-    const input = await waitForInput(10000);
-
-    // Clear old filters
-    const chips = sectionContainer?.querySelectorAll('button[aria-label*="Remove"]');
-    for (const chip of chips || []) {
-      chip.click();
-      await this.wait(300);
-    }
-
-    // Type job title
-    await typeWithDelay(input, jobTitleValue, 300);
-
-    // Wait for suggestions
-    const suggestions = await waitForSuggestions(15000);
-    let suggestion = null;
-
-    if (suggestions) {
-      suggestion = suggestions.find(el =>
-        (el.innerText || "").toLowerCase().includes(jobTitleValue.toLowerCase())
-      );
-    }
-
-    if (suggestion) {
-      const includeBtn = suggestion.querySelector("button, ._include-button_1cz98z");
-      if (includeBtn) {
-        includeBtn.click();
-      } else {
-        suggestion.click();
-      }
-      console.log("✅ Applied Job Title filter:", jobTitleValue);
-    } else {
-      console.log("⚠️ No suggestion found, pressing Enter");
-      ["keydown", "keypress", "keyup"].forEach(evt =>
-        input.dispatchEvent(new KeyboardEvent(evt, { key: "Enter", bubbles: true }))
-      );
-    }
-  } catch (err) {
-    console.error("❌ Failed to apply Job Title filter:", err);
-  }
-
-  console.log("🏁 Finished applySalesNavigatorFilters");
-}
-
 
     makeDraggable(handle) {
       let isDragging = false;
@@ -2096,7 +2179,7 @@ async applySalesNavigatorFilters(filterData) {
                   );
                   if (messageData && messageData.message) {
                     this.generatedMessage = messageData.message.slice(0, 300);
-                    this.generatedInterests = messageData.interests
+                    this.generatedInterests = messageData.interests;
                     if (statusElement)
                       statusElement.textContent =
                         "Message generated from custom prompt!";
