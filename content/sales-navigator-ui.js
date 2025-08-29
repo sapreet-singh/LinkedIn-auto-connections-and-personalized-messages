@@ -562,228 +562,277 @@ if (window.salesNavigatorUILoaded) {
       }
     }
 
-async applySalesNavigatorFilters(filterData) {
-  await this.waitForPageLoad();
+    async applySalesNavigatorFilters(filterData) {
+      await this.waitForPageLoad();
 
-  const waitForInput = async (timeout = 10000, retryInterval = 500) => {
-    return new Promise((resolve, reject) => {
-      const maxRetries = timeout / retryInterval;
-      let retries = 0;
-      const check = () => {
-        const el = document.querySelector(
-          "input.artdeco-typeahead__input.search-filter__focus-target--input"
-        );
-        if (el) {
-          resolve(el);
-        } else if (retries >= maxRetries) {
-          reject("Timeout: Input not found");
-        } else {
-          retries++;
-          setTimeout(check, retryInterval);
-        }
+      const waitForInput = async (timeout = 10000, retryInterval = 500) => {
+        return new Promise((resolve, reject) => {
+          const maxRetries = timeout / retryInterval;
+          let retries = 0;
+          const check = () => {
+            const el = document.querySelector(
+              "input.artdeco-typeahead__input.search-filter__focus-target--input"
+            );
+            if (el) {
+              resolve(el);
+            } else if (retries >= maxRetries) {
+              reject("Timeout: Input not found");
+            } else {
+              retries++;
+              setTimeout(check, retryInterval);
+            }
+          };
+          check();
+        });
       };
-      check();
-    });
-  };
 
-  const typeWithDelay = async (input, text, delay = 300) => {
-    input.focus();
-    input.value = "";
+      const typeWithDelay = async (input, text, delay = 300) => {
+        input.focus();
+        input.value = "";
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      input.value += char;
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          input.value += char;
 
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: char, bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent("keypress", { key: char, bubbles: true }));
-      input.dispatchEvent(
-        new InputEvent("input", { bubbles: true, inputType: "insertText", data: char })
-      );
-      input.dispatchEvent(new KeyboardEvent("keyup", { key: char, bubbles: true }));
-
-      await new Promise((r) => setTimeout(r, delay));
-    }
-
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  };
-
-  const waitForSuggestions = async (maxWaitTime = 15000) => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < maxWaitTime) {
-      const suggestions = document.querySelectorAll(
-        "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
-      );
-      if (suggestions.length > 0) {
-        return Array.from(suggestions);
-      }
-      await this.wait(500);
-    }
-    return null;
-  };
-
-  // ---------- JOB TITLE FILTER ----------
-  try {
-    const jobTitleValue = filterData.jobTitle;
-    if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
-      const jobTitleLegend = Array.from(document.querySelectorAll("legend span")).find(
-        (el) => el.textContent.trim() === "Current job title"
-      );
-      if (!jobTitleLegend) throw new Error("Job title filter legend not found");
-
-      const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
-      const toggleBtn = sectionContainer?.querySelector("button[aria-expanded]");
-      if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-        toggleBtn.click();
-        await this.wait(800);
-      }
-
-      const input = await waitForInput(10000);
-      const chips = sectionContainer?.querySelectorAll('button[aria-label*="Remove"]');
-      for (const chip of chips || []) {
-        chip.click();
-        await this.wait(300);
-      }
-
-      await typeWithDelay(input, jobTitleValue, 300);
-
-      const suggestions = await waitForSuggestions(15000);
-      let suggestion = suggestions?.find((el) =>
-        (el.innerText || "").toLowerCase().includes(jobTitleValue.toLowerCase())
-      );
-
-      if (suggestion) {
-        const includeBtn = suggestion.querySelector("button, ._include-button_1cz98z");
-        if (includeBtn) includeBtn.click();
-        else suggestion.click();
-      } else {
-        ["keydown", "keypress", "keyup"].forEach((evt) =>
-          input.dispatchEvent(new KeyboardEvent(evt, { key: "Enter", bubbles: true }))
-        );
-      }
-    }
-  } catch (err) {
-    console.error("❌ Failed to apply Job Title filter:", err);
-  }
-
-  // ---------- INDUSTRY FILTER ----------
-  try {
-    const industryValue = filterData.industry;
-    if (industryValue && industryValue.toLowerCase() !== "any") {
-      const industryLegend = Array.from(document.querySelectorAll("legend span")).find(
-        (el) => el.textContent.trim() === "Industry"
-      );
-      if (!industryLegend) throw new Error("Industry filter legend not found");
-
-      const sectionContainer = industryLegend.closest("div, fieldset, li");
-      const toggleBtn = sectionContainer?.querySelector("button[aria-expanded]");
-      if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-        toggleBtn.click();
-        await this.wait(800);
-      }
-
-      const input = await waitForInput(10000);
-      if (!input) throw new Error("Industry input not found");
-
-      const chips = sectionContainer?.querySelectorAll('button[aria-label*="Remove"]');
-      for (const chip of chips || []) {
-        chip.click();
-        await this.wait(300);
-      }
-
-      await typeWithDelay(input, industryValue, 250);
-
-      const suggestions = await waitForSuggestions(10000);
-      let suggestion = suggestions?.find((el) =>
-        (el.innerText || "").toLowerCase().includes(industryValue.toLowerCase())
-      );
-
-      if (suggestion) {
-        const includeBtn = suggestion.querySelector("._include-button_1cz98z, button");
-        if (includeBtn) includeBtn.click();
-        else suggestion.click();
-      } else {
-        ["keydown", "keypress", "keyup"].forEach((evt) =>
-          input.dispatchEvent(new KeyboardEvent(evt, { key: "Enter", bubbles: true }))
-        );
-      }
-    }
-  } catch (err) {
-    console.error("❌ Failed to apply Industry filter:", err);
-  }
-
-  // ---------- SENIORITY LEVEL FILTER ----------
-  try {
-    const seniorityValue = filterData.seniorityLevel;
-    if (seniorityValue && seniorityValue.toLowerCase() !== "any") {
-      const seniorityLegend = Array.from(document.querySelectorAll("legend span")).find(
-        (el) => el.textContent.trim() === "Seniority level"
-      );
-      if (!seniorityLegend) throw new Error("Seniority legend not found");
-
-      const sectionContainer = seniorityLegend.closest("fieldset");
-      if (!sectionContainer) throw new Error("Fieldset container not found");
-
-      const toggleBtn = sectionContainer.querySelector("button[aria-expanded]");
-      if (toggleBtn && toggleBtn.getAttribute("aria-expanded") === "false") {
-        toggleBtn.click();
-        await this.wait(1000);
-      }
-
-      const listContainer = await new Promise((resolve, reject) => {
-        const timeout = 15000,
-          interval = 500;
-        let elapsed = 0;
-        const check = () => {
-          const el = sectionContainer.querySelector(
-            'ul[aria-label="Seniority level filter suggestions"]'
+          input.dispatchEvent(
+            new KeyboardEvent("keydown", { key: char, bubbles: true })
           );
-          if (el) resolve(el);
-          else if (elapsed >= timeout)
-            reject(new Error("Seniority filter list not found within timeout"));
-          else {
-            elapsed += interval;
-            setTimeout(check, interval);
+          input.dispatchEvent(
+            new KeyboardEvent("keypress", { key: char, bubbles: true })
+          );
+          input.dispatchEvent(
+            new InputEvent("input", {
+              bubbles: true,
+              inputType: "insertText",
+              data: char,
+            })
+          );
+          input.dispatchEvent(
+            new KeyboardEvent("keyup", { key: char, bubbles: true })
+          );
+
+          await new Promise((r) => setTimeout(r, delay));
+        }
+
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const waitForSuggestions = async (maxWaitTime = 15000) => {
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxWaitTime) {
+          const suggestions = document.querySelectorAll(
+            "li.artdeco-typeahead__result, li.search-typeahead-result, li[role='option']"
+          );
+          if (suggestions.length > 0) {
+            return Array.from(suggestions);
           }
-        };
-        check();
-      });
+          await this.wait(500);
+        }
+        return null;
+      };
 
-      const listItems = await new Promise((resolve, reject) => {
-        const timeout = 15000,
-          interval = 500;
-        let elapsed = 0;
-        const check = () => {
-          const options = listContainer.querySelectorAll("li[role='option']");
-          if (options.length > 0) resolve(Array.from(options));
-          else if (elapsed >= timeout)
-            reject(new Error("Seniority options not found within timeout"));
-          else {
-            elapsed += interval;
-            setTimeout(check, interval);
+      // ---------- JOB TITLE FILTER ----------
+      try {
+        const jobTitleValue = filterData.jobTitle;
+        if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
+          const jobTitleLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Current job title");
+          if (!jobTitleLegend)
+            throw new Error("Job title filter legend not found");
+
+          const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
           }
-        };
-        check();
-      });
 
-      const match = listItems.find((el) => {
-        const text = el.querySelector("span")?.textContent.trim().toLowerCase();
-        return text === seniorityValue.toLowerCase() || text?.includes(seniorityValue.toLowerCase());
-      });
+          const input = await waitForInput(10000);
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
 
-      if (match) {
-        const includeBtn = match.querySelector("._include-button_1cz98z");
-        if (includeBtn) includeBtn.click();
-        else match.click();
-        await this.wait(500);
+          await typeWithDelay(input, jobTitleValue, 300);
+
+          const suggestions = await waitForSuggestions(15000);
+          let suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(jobTitleValue.toLowerCase())
+          );
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "button, ._include-button_1cz98z"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Job Title filter:", err);
       }
+
+      // ---------- INDUSTRY FILTER ----------
+      try {
+        const industryValue = filterData.industry;
+        if (industryValue && industryValue.toLowerCase() !== "any") {
+          const industryLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Industry");
+          if (!industryLegend)
+            throw new Error("Industry filter legend not found");
+
+          const sectionContainer = industryLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+
+          const input = await waitForInput(10000);
+          if (!input) throw new Error("Industry input not found");
+
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+
+          await typeWithDelay(input, industryValue, 250);
+
+          const suggestions = await waitForSuggestions(10000);
+          let suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(industryValue.toLowerCase())
+          );
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Industry filter:", err);
+      }
+
+      // ---------- SENIORITY LEVEL FILTER ----------
+      try {
+        const seniorityValue = filterData.seniorityLevel;
+        if (seniorityValue && seniorityValue.toLowerCase() !== "any") {
+          const seniorityLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Seniority level");
+          if (!seniorityLegend) throw new Error("Seniority legend not found");
+
+          const sectionContainer = seniorityLegend.closest("fieldset");
+          if (!sectionContainer)
+            throw new Error("Fieldset container not found");
+
+          const toggleBtn = sectionContainer.querySelector(
+            "button[aria-expanded]"
+          );
+          if (
+            toggleBtn &&
+            toggleBtn.getAttribute("aria-expanded") === "false"
+          ) {
+            toggleBtn.click();
+            await this.wait(1000);
+          }
+
+          const listContainer = await new Promise((resolve, reject) => {
+            const timeout = 15000,
+              interval = 500;
+            let elapsed = 0;
+            const check = () => {
+              const el = sectionContainer.querySelector(
+                'ul[aria-label="Seniority level filter suggestions"]'
+              );
+              if (el) resolve(el);
+              else if (elapsed >= timeout)
+                reject(
+                  new Error("Seniority filter list not found within timeout")
+                );
+              else {
+                elapsed += interval;
+                setTimeout(check, interval);
+              }
+            };
+            check();
+          });
+
+          const listItems = await new Promise((resolve, reject) => {
+            const timeout = 15000,
+              interval = 500;
+            let elapsed = 0;
+            const check = () => {
+              const options =
+                listContainer.querySelectorAll("li[role='option']");
+              if (options.length > 0) resolve(Array.from(options));
+              else if (elapsed >= timeout)
+                reject(new Error("Seniority options not found within timeout"));
+              else {
+                elapsed += interval;
+                setTimeout(check, interval);
+              }
+            };
+            check();
+          });
+
+          const match = listItems.find((el) => {
+            const text = el
+              .querySelector("span")
+              ?.textContent.trim()
+              .toLowerCase();
+            return (
+              text === seniorityValue.toLowerCase() ||
+              text?.includes(seniorityValue.toLowerCase())
+            );
+          });
+
+          if (match) {
+            const includeBtn = match.querySelector("._include-button_1cz98z");
+            if (includeBtn) includeBtn.click();
+            else match.click();
+            await this.wait(500);
+          }
+        }
+      } catch (err) {
+        console.error(
+          "❌ Failed to apply Seniority Level filter:",
+          err.message
+        );
+      }
+
+      console.log("🏁 Finished applySalesNavigatorFilters");
     }
-  } catch (err) {
-    console.error("❌ Failed to apply Seniority Level filter:", err.message);
-  }
-
-  console.log("🏁 Finished applySalesNavigatorFilters");
-}
-
 
     makeDraggable(handle) {
       let isDragging = false;
