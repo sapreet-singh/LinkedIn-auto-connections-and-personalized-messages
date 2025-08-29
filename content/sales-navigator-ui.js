@@ -631,6 +631,31 @@ if (window.salesNavigatorUILoaded) {
         return null;
       };
 
+      // ---------- POSTED ON LINKEDIN FILTER ----------
+      try {
+        const postedLegend = Array.from(
+          document.querySelectorAll("legend span")
+        ).find((el) => el.textContent.trim() === "Posted on LinkedIn");
+
+        if (!postedLegend)
+          throw new Error("Posted on LinkedIn legend not found");
+
+        const sectionContainer = postedLegend.closest("fieldset");
+        const checkbox = sectionContainer?.querySelector(
+          "input[type='checkbox']#search-filter-toggle-st122"
+        );
+
+        if (checkbox && !checkbox.checked) {
+          checkbox.click();
+          await this.wait(500);
+        }
+      } catch (err) {
+        console.error(
+          "❌ Failed to apply Posted on LinkedIn filter:",
+          err.message
+        );
+      }
+
       // ---------- JOB TITLE FILTER ----------
       try {
         const jobTitleValue = filterData.jobTitle;
@@ -684,63 +709,6 @@ if (window.salesNavigatorUILoaded) {
         }
       } catch (err) {
         console.error("❌ Failed to apply Job Title filter:", err);
-      }
-
-      // ---------- INDUSTRY FILTER ----------
-      try {
-        const industryValue = filterData.industry;
-        if (industryValue && industryValue.toLowerCase() !== "any") {
-          const industryLegend = Array.from(
-            document.querySelectorAll("legend span")
-          ).find((el) => el.textContent.trim() === "Industry");
-          if (!industryLegend)
-            throw new Error("Industry filter legend not found");
-
-          const sectionContainer = industryLegend.closest("div, fieldset, li");
-          const toggleBtn = sectionContainer?.querySelector(
-            "button[aria-expanded]"
-          );
-          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-            toggleBtn.click();
-            await this.wait(800);
-          }
-
-          const input = await waitForInput(10000);
-          if (!input) throw new Error("Industry input not found");
-
-          const chips = sectionContainer?.querySelectorAll(
-            'button[aria-label*="Remove"]'
-          );
-          for (const chip of chips || []) {
-            chip.click();
-            await this.wait(300);
-          }
-
-          await typeWithDelay(input, industryValue, 250);
-
-          const suggestions = await waitForSuggestions(10000);
-          let suggestion = suggestions?.find((el) =>
-            (el.innerText || "")
-              .toLowerCase()
-              .includes(industryValue.toLowerCase())
-          );
-
-          if (suggestion) {
-            const includeBtn = suggestion.querySelector(
-              "._include-button_1cz98z, button"
-            );
-            if (includeBtn) includeBtn.click();
-            else suggestion.click();
-          } else {
-            ["keydown", "keypress", "keyup"].forEach((evt) =>
-              input.dispatchEvent(
-                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
-              )
-            );
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to apply Industry filter:", err);
       }
 
       // ---------- SENIORITY LEVEL FILTER ----------
@@ -831,32 +799,133 @@ if (window.salesNavigatorUILoaded) {
         );
       }
 
-      // ---------- POSTED ON LINKEDIN FILTER ----------
+      // ---------- INDUSTRY FILTER ----------
       try {
-        const postedLegend = Array.from(
-          document.querySelectorAll("legend span")
-        ).find((el) => el.textContent.trim() === "Posted on LinkedIn");
+        const industryValue = filterData.industry;
+        if (industryValue && industryValue.toLowerCase() !== "any") {
+          const industryLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Industry");
+          if (!industryLegend)
+            throw new Error("Industry filter legend not found");
 
-        if (!postedLegend)
-          throw new Error("Posted on LinkedIn legend not found");
+          const sectionContainer = industryLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
 
-        const sectionContainer = postedLegend.closest("fieldset");
-        const checkbox = sectionContainer?.querySelector(
-          "input[type='checkbox']#search-filter-toggle-st122"
-        );
+          const input = await waitForInput(10000);
+          if (!input) throw new Error("Industry input not found");
 
-        if (checkbox && !checkbox.checked) {
-          checkbox.click();
-          await this.wait(500);
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+
+          await typeWithDelay(input, industryValue, 250);
+
+          const suggestions = await waitForSuggestions(10000);
+          let suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(industryValue.toLowerCase())
+          );
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
         }
       } catch (err) {
-        console.error(
-          "❌ Failed to apply Posted on LinkedIn filter:",
-          err.message
-        );
+        console.error("❌ Failed to apply Industry filter:", err);
       }
-      
-      alert("🏁 Finished Sales Navigator Filters");
+
+      // ---------- COMPANY HEADQUARTERS FILTER ----------
+      try {
+        const headquartersValue = filterData.companyHeadquarters;
+
+        if (headquartersValue && headquartersValue.toLowerCase() !== "any") {
+          const hqLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find(
+            (el) => el.textContent.trim() === "Company headquarters location"
+          );
+          if (!hqLegend)
+            throw new Error("Company Headquarters filter legend not found");
+
+          const sectionContainer = hqLegend.closest("fieldset, div");
+          if (!sectionContainer)
+            throw new Error("Company Headquarters container not found");
+
+          // Expand if collapsed
+          const toggleBtn = sectionContainer.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+
+          // ✅ wait for input properly
+          const input = await waitForInput(10000);
+          if (!input) throw new Error("Company Headquarters input not found");
+
+          // Clear existing chips
+          const chips = sectionContainer.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips) {
+            chip.click();
+            await this.wait(300);
+          }
+
+          // Type with keystroke simulation
+          await typeWithDelay(input, headquartersValue, 200);
+
+          // Wait for suggestions inside this filter
+          const suggestions = await waitForSuggestions(10000);
+          const suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(headquartersValue.toLowerCase())
+          );
+
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            // Fallback: press Enter
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Company Headquarters filter:", err);
+      }
+
+      console.log("🏁 Finished Sales Navigator Filters");
     }
 
     makeDraggable(handle) {
