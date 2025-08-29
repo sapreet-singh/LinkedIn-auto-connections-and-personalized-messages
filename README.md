@@ -5,6 +5,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ## 🚀 Key Features Overview
 
 ### 🎯 Automated Profile Collection
+
 - **Real-Time Collection**: Automatically detects and collects profiles as you browse LinkedIn
 - **Multi-Page Collection**: Collect profiles from multiple search result pages (up to 4 pages)
 - **Smart Profile Detection**: Works on search results, network pages, and connection pages
@@ -14,6 +15,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Data Validation**: Filters out invalid profiles and duplicate entries
 
 ### 🧭 Sales Navigator Floating UI (PREMIUM FEATURE)
+
 - **Modern Floating Interface**: Non-intrusive, draggable UI for LinkedIn Sales Navigator
 - **Automatic Launch**: Opens Sales Navigator and displays floating UI automatically
 - **Real-Time Profile Collection**: Instantly collects and manages profiles as you browse
@@ -26,6 +28,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Progress Tracking**: Real-time status updates and completion counters
 
 ### 🤖 AI-Powered Messaging System
+
 - **Intelligent Message Generation**: AI analyzes LinkedIn profiles for personalized messaging
 - **Custom Prompt Support**: Use your own prompts for message generation
 - **Multiple Message Options**: Generate multiple message variations per profile
@@ -35,6 +38,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Profile Analysis**: Extracts profile data for context-aware messaging
 
 ### 🚀 Bulk Automation Features
+
 - **Bulk Message Sending**: Automatically send messages to multiple profiles sequentially
 - **Automated Workflow**: Opens profiles → Opens chat → Types messages → Sends → Closes chat
 - **Progress Tracking**: Real-time progress indicators for bulk operations
@@ -45,6 +49,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Message Typing Simulation**: Types messages character by character for natural behavior
 
 ### 📱 Two-Stage Interface System
+
 - **Launch Interface**: Simple launch button that opens LinkedIn automatically
 - **Auto-Popup**: Automatically shows automation popup when LinkedIn loads
 - **Seamless Navigation**: No manual LinkedIn navigation required
@@ -52,25 +57,26 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Modal Management**: Persistent modals that don't close accidentally
 
 ### 🎯 Advanced Campaign Management
+
 - **Campaign Wizard**: Step-by-step campaign creation process
 - **Multiple Data Sources**: LinkedIn search, network connections, CSV upload
 - **Profile Selection**: Choose specific profiles for messaging campaigns
 - **Message Strategy Configuration**: Single messages or multi-step follow-ups
 - **Campaign Tracking**: Monitor campaign progress and results
 
-
-
 ## 🚀 How to Use
 
 ### Method 1: Standard Campaign Workflow
 
 #### 1. Launch the Extension
+
 - Click the extension icon in Chrome toolbar
 - Click "Open LinkedIn & Start" button
 - Extension automatically navigates to LinkedIn and shows the main interface
 - Auto-popup appears on LinkedIn pages for quick access
 
 #### 2. Create a Campaign
+
 - Click "New Campaign" in the main interface
 - Enter a campaign name
 - Choose your profile source:
@@ -79,29 +85,36 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
   - **CSV Upload**: Import profile URLs from a file
 
 #### 3. Collect Profiles
+
 **Automatic Collection:**
+
 - Navigate to LinkedIn search results or network pages
 - Extension automatically detects and collects profiles in real-time
 - Profiles appear in the campaign wizard as they're found
 
 **Manual Collection:**
+
 - Use "Start Collecting" button for single-page collection
 - Use "Multi-Page Collection" for collecting from multiple pages (up to 4)
 - Export collected profiles to CSV for future use
 
 #### 4. Generate AI Messages (Optional)
+
 - Select up to 10 profiles for AI message generation
 - Click "🤖 Generate Messages for Selected Profiles"
 - Review generated message options for each profile
 - Select preferred messages or regenerate if needed
 
 #### 5. Bulk Message Automation
+
 **Option 1: Use Generated Messages**
+
 - After generating AI messages, click "Use Selected Messages"
 - Click "🚀 Send All Messages Automatically"
 - Extension processes profiles sequentially with proper delays
 
 **Option 2: Skip to Bulk Send**
+
 - Select profiles and click "Skip to Bulk Send"
 - Uses default "Hello dear" message for all profiles
 - Automatically processes all selected profiles
@@ -109,22 +122,26 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ### Method 2: Sales Navigator Workflow (PREMIUM)
 
 #### 1. Launch Sales Navigator
+
 - Click "SALES NAVIGATOR" button in the main interface
 - Extension automatically opens LinkedIn Sales Navigator
 - Floating UI appears automatically on the Sales Navigator search page
 
 #### 2. Set Custom Prompt (Required)
+
 - Click "Set Custom Prompt" in the floating UI
 - Enter your personalized message template
 - This prompt will be used for AI message generation
 
 #### 3. Collect Profiles
+
 - Click "Start Collecting" to begin profile collection
 - Browse through Sales Navigator search results
 - Profiles are collected automatically as you scroll/navigate
 - View collected profiles in the floating UI list
 
 #### 4. Process Profiles
+
 - Click "Next: Process Profiles" when ready
 - Extension starts automated workflow for each profile:
   - Opens profile in new tab
@@ -135,6 +152,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
   - Returns to Sales Navigator
 
 #### 5. Monitor Progress
+
 - Real-time status updates in the floating UI
 - Connection counters track sent requests
 - Automatic delays between profiles (5-30 seconds)
@@ -143,6 +161,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ## 🎯 Automation Capabilities
 
 ### Profile Collection Sources
+
 - **LinkedIn Search Results**: Standard LinkedIn people search
 - **Sales Navigator**: Advanced LinkedIn Sales Navigator search results
 - **Network Pages**: Your connections and suggested connections
@@ -152,6 +171,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **CSV Import**: Import profile URLs from external sources
 
 ### Message Types Supported
+
 - **Connection Requests**: Automated connection requests with custom messages
 - **Direct Messages**: Send messages to existing connections
 - **AI-Generated Messages**: Personalized messages based on profile analysis
@@ -163,6 +183,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ## 🛡️ Safety & Compliance Features
 
 ### Account Protection
+
 - **Daily Limits**: Configurable daily connection limits (default: 20, max: 50)
 - **Action Delays**: Realistic delays between actions (5-30 seconds, configurable)
 - **Usage Monitoring**: Tracks daily activity to prevent restrictions
@@ -173,6 +194,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Session Management**: Proper handling of LinkedIn sessions and authentication
 
 ### Compliance Features
+
 - **Respectful Automation**: Follows LinkedIn's usage patterns and timing
 - **Non-Intrusive UI**: Floating interfaces that don't interfere with LinkedIn's functionality
 - **Graceful Degradation**: Works even when LinkedIn updates their interface
@@ -182,6 +204,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ## ⚠️ Important Usage Guidelines
 
 ### LinkedIn Compliance
+
 - **Respect Terms of Service**: Always comply with LinkedIn's terms and conditions
 - **Daily Limits**: Stay within recommended limits (20 connections/day maximum, 50 absolute max)
 - **Natural Behavior**: Use realistic delays between actions (5-30 seconds, default 30)
@@ -190,6 +213,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Professional Use**: Use for legitimate networking and business purposes only
 
 ### Best Practices
+
 - **Start Small**: Begin with low daily limits to test account tolerance
 - **Monitor Activity**: Keep track of daily usage and success rates
 - **Quality Over Quantity**: Focus on relevant, high-quality connections
@@ -201,17 +225,21 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ### Troubleshooting
 
 #### Common Issues
+
 1. **Extension Not Loading**
+
    - Ensure Developer Mode is enabled in Chrome extensions
    - Refresh the LinkedIn page after installing the extension
    - Check browser console for error messages
 
 2. **Profiles Not Collecting**
+
    - Make sure you're on a LinkedIn search results page
    - Try refreshing the page and restarting collection
    - Check if LinkedIn has updated their page structure
 
 3. **Messages Not Sending**
+
    - Verify you're logged into LinkedIn
    - Check if LinkedIn has rate-limited your account
    - Ensure the AI server is running (if using AI messages)
@@ -224,6 +252,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 ## 📊 Performance & Analytics
 
 ### Metrics Tracked
+
 - **Profiles Collected**: Total number of profiles collected per session
 - **Messages Sent**: Count of successfully sent messages
 - **Connection Requests**: Number of connection requests sent
@@ -231,6 +260,7 @@ A comprehensive Chrome extension for automating LinkedIn connections, profile co
 - **Daily Usage**: Track daily activity to stay within limits
 
 ### Performance Optimization
+
 - **Efficient Selectors**: Optimized CSS selectors for fast profile detection
 - **Memory Management**: Proper cleanup of observers and event listeners
 - **Batch Processing**: Process profiles in batches to reduce memory usage

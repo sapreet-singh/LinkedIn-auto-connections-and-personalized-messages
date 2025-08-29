@@ -3,14 +3,8 @@
   "name": "LinkedIn Auto Connect & Message",
   "version": "1.0.3",
   "description": "Automate LinkedIn connections and personalized messages",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "tabs"
-  ],
-  "host_permissions": [
-    "https://www.linkedin.com/*"
-  ],
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": ["https://www.linkedin.com/*"],
   "background": {
     "service_worker": "background/service-worker.js"
   },
