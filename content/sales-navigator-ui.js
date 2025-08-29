@@ -831,7 +831,32 @@ if (window.salesNavigatorUILoaded) {
         );
       }
 
-      console.log("🏁 Finished applySalesNavigatorFilters");
+      // ---------- POSTED ON LINKEDIN FILTER ----------
+      try {
+        const postedLegend = Array.from(
+          document.querySelectorAll("legend span")
+        ).find((el) => el.textContent.trim() === "Posted on LinkedIn");
+
+        if (!postedLegend)
+          throw new Error("Posted on LinkedIn legend not found");
+
+        const sectionContainer = postedLegend.closest("fieldset");
+        const checkbox = sectionContainer?.querySelector(
+          "input[type='checkbox']#search-filter-toggle-st122"
+        );
+
+        if (checkbox && !checkbox.checked) {
+          checkbox.click();
+          await this.wait(500);
+        }
+      } catch (err) {
+        console.error(
+          "❌ Failed to apply Posted on LinkedIn filter:",
+          err.message
+        );
+      }
+      
+      alert("🏁 Finished Sales Navigator Filters");
     }
 
     makeDraggable(handle) {
