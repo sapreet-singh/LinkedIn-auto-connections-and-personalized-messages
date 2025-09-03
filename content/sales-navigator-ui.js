@@ -565,6 +565,7 @@ if (window.salesNavigatorUILoaded) {
     async applySalesNavigatorFilters(filterData) {
       await this.waitForPageLoad();
 
+      // Helper function: wait for input element
       const waitForInput = async (timeout = 10000, retryInterval = 500) => {
         return new Promise((resolve, reject) => {
           const maxRetries = timeout / retryInterval;
@@ -586,14 +587,13 @@ if (window.salesNavigatorUILoaded) {
         });
       };
 
+      // Helper function: simulate typing with delay
       const typeWithDelay = async (input, text, delay = 300) => {
         input.focus();
         input.value = "";
-
         for (let i = 0; i < text.length; i++) {
           const char = text[i];
           input.value += char;
-
           input.dispatchEvent(
             new KeyboardEvent("keydown", { key: char, bubbles: true })
           );
@@ -610,13 +610,12 @@ if (window.salesNavigatorUILoaded) {
           input.dispatchEvent(
             new KeyboardEvent("keyup", { key: char, bubbles: true })
           );
-
           await new Promise((r) => setTimeout(r, delay));
         }
-
         input.dispatchEvent(new Event("change", { bubbles: true }));
       };
 
+      // Helper function: wait for suggestions dropdown
       const waitForSuggestions = async (maxWaitTime = 15000) => {
         const startTime = Date.now();
         while (Date.now() - startTime < maxWaitTime) {
@@ -630,21 +629,18 @@ if (window.salesNavigatorUILoaded) {
         }
         return null;
       };
-
-      // ---------- POSTED ON LINKEDIN FILTER ----------
+      
+      // ---------- Posted on LinkedIn filter ----------
       try {
         const postedLegend = Array.from(
           document.querySelectorAll("legend span")
         ).find((el) => el.textContent.trim() === "Posted on LinkedIn");
-
         if (!postedLegend)
           throw new Error("Posted on LinkedIn legend not found");
-
         const sectionContainer = postedLegend.closest("fieldset");
         const checkbox = sectionContainer?.querySelector(
           "input[type='checkbox']#search-filter-toggle-st122"
         );
-
         if (checkbox && !checkbox.checked) {
           checkbox.click();
           await this.wait(500);
@@ -656,7 +652,7 @@ if (window.salesNavigatorUILoaded) {
         );
       }
 
-      // ---------- JOB TITLE FILTER ----------
+      // ---------- Job Title filter ----------
       try {
         const jobTitleValue = filterData.jobTitle;
         if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
@@ -665,7 +661,6 @@ if (window.salesNavigatorUILoaded) {
           ).find((el) => el.textContent.trim() === "Current job title");
           if (!jobTitleLegend)
             throw new Error("Job title filter legend not found");
-
           const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
           const toggleBtn = sectionContainer?.querySelector(
             "button[aria-expanded]"
@@ -674,7 +669,6 @@ if (window.salesNavigatorUILoaded) {
             toggleBtn.click();
             await this.wait(800);
           }
-
           const input = await waitForInput(10000);
           const chips = sectionContainer?.querySelectorAll(
             'button[aria-label*="Remove"]'
@@ -683,16 +677,13 @@ if (window.salesNavigatorUILoaded) {
             chip.click();
             await this.wait(300);
           }
-
           await typeWithDelay(input, jobTitleValue, 300);
-
           const suggestions = await waitForSuggestions(15000);
-          let suggestion = suggestions?.find((el) =>
+          const suggestion = suggestions?.find((el) =>
             (el.innerText || "")
               .toLowerCase()
               .includes(jobTitleValue.toLowerCase())
           );
-
           if (suggestion) {
             const includeBtn = suggestion.querySelector(
               "button, ._include-button_1cz98z"
@@ -711,7 +702,7 @@ if (window.salesNavigatorUILoaded) {
         console.error("❌ Failed to apply Job Title filter:", err);
       }
 
-      // ---------- SENIORITY LEVEL FILTER ----------
+      // ---------- Seniority Level filter ----------
       try {
         const seniorityValue = filterData.seniorityLevel;
         if (seniorityValue && seniorityValue.toLowerCase() !== "any") {
@@ -719,11 +710,9 @@ if (window.salesNavigatorUILoaded) {
             document.querySelectorAll("legend span")
           ).find((el) => el.textContent.trim() === "Seniority level");
           if (!seniorityLegend) throw new Error("Seniority legend not found");
-
           const sectionContainer = seniorityLegend.closest("fieldset");
           if (!sectionContainer)
             throw new Error("Fieldset container not found");
-
           const toggleBtn = sectionContainer.querySelector(
             "button[aria-expanded]"
           );
@@ -755,7 +744,6 @@ if (window.salesNavigatorUILoaded) {
             };
             check();
           });
-
           const listItems = await new Promise((resolve, reject) => {
             const timeout = 15000,
               interval = 500;
@@ -773,7 +761,6 @@ if (window.salesNavigatorUILoaded) {
             };
             check();
           });
-
           const match = listItems.find((el) => {
             const text = el
               .querySelector("span")
@@ -781,10 +768,9 @@ if (window.salesNavigatorUILoaded) {
               .toLowerCase();
             return (
               text === seniorityValue.toLowerCase() ||
-              text?.includes(seniorityValue.toLowerCase())
+              text.includes(seniorityValue.toLowerCase())
             );
           });
-
           if (match) {
             const includeBtn = match.querySelector("._include-button_1cz98z");
             if (includeBtn) includeBtn.click();
@@ -799,7 +785,7 @@ if (window.salesNavigatorUILoaded) {
         );
       }
 
-      // ---------- INDUSTRY FILTER ----------
+      // ---------- Industry filter ----------
       try {
         const industryValue = filterData.industry;
         if (industryValue && industryValue.toLowerCase() !== "any") {
@@ -808,7 +794,6 @@ if (window.salesNavigatorUILoaded) {
           ).find((el) => el.textContent.trim() === "Industry");
           if (!industryLegend)
             throw new Error("Industry filter legend not found");
-
           const sectionContainer = industryLegend.closest("div, fieldset, li");
           const toggleBtn = sectionContainer?.querySelector(
             "button[aria-expanded]"
@@ -817,10 +802,8 @@ if (window.salesNavigatorUILoaded) {
             toggleBtn.click();
             await this.wait(800);
           }
-
           const input = await waitForInput(10000);
           if (!input) throw new Error("Industry input not found");
-
           const chips = sectionContainer?.querySelectorAll(
             'button[aria-label*="Remove"]'
           );
@@ -828,16 +811,13 @@ if (window.salesNavigatorUILoaded) {
             chip.click();
             await this.wait(300);
           }
-
           await typeWithDelay(input, industryValue, 250);
-
           const suggestions = await waitForSuggestions(10000);
-          let suggestion = suggestions?.find((el) =>
+          const suggestion = suggestions?.find((el) =>
             (el.innerText || "")
               .toLowerCase()
               .includes(industryValue.toLowerCase())
           );
-
           if (suggestion) {
             const includeBtn = suggestion.querySelector(
               "._include-button_1cz98z, button"
@@ -856,10 +836,122 @@ if (window.salesNavigatorUILoaded) {
         console.error("❌ Failed to apply Industry filter:", err);
       }
 
-      // ---------- COMPANY HEADQUARTERS FILTER ----------
+            // Company Headcount Filter with Popup Handling and Auto-Close
+
+      try {
+        const headcountValue = filterData.companyHeadCount; // Support both naming styles
+        if (headcountValue && headcountValue.toLowerCase() !== "any") {
+          const legendSpan = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Company headcount");
+          if (!legendSpan)
+            throw new Error("Company headcount legend not found");
+          const sectionContainer = legendSpan.closest("fieldset");
+          if (!sectionContainer)
+            throw new Error("Company headcount container not found");
+
+          // Expand the filter if collapsed
+          const toggleBtn = sectionContainer.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800); // Wait for expand animation
+          }
+
+          // Find or click to open the dropdown popup
+          let dropdownBtn =
+            sectionContainer.querySelector("button[aria-expanded]") ||
+            sectionContainer.querySelector("button.artdeco-button") ||
+            sectionContainer.querySelector("button[role='combobox']") ||
+            sectionContainer.querySelector("button");
+          if (dropdownBtn) {
+            const isExpanded =
+              dropdownBtn.getAttribute("aria-expanded") === "true";
+            if (!isExpanded) {
+              dropdownBtn.click();
+              await this.wait(800); // Wait for popup to open
+            }
+          } else {
+            console.warn(
+              "Company headcount dropdown button not found, assuming options are visible"
+            );
+          }
+
+          // Wait for options list to load
+          const optionsList = await new Promise((resolve, reject) => {
+            const timeout = 15000,
+              interval = 500,
+              start = Date.now();
+            const check = () => {
+              const list =
+                sectionContainer.querySelector(
+                  'ul[aria-label="Company headcount filter suggestions"], ul[role="listbox"]'
+                ) ||
+                document.querySelector('ul[aria-label*="Company headcount"]');
+              if (list) return resolve(list);
+              if (Date.now() - start >= timeout)
+                reject(new Error("Headcount options list not loaded"));
+              setTimeout(check, interval);
+            };
+            check();
+          });
+
+          // Find the matching option
+          const optionsItems = Array.from(
+            optionsList.querySelectorAll("li[role='option']")
+          );
+          const matchOption = optionsItems.find((el) => {
+            const label = el.innerText.trim().toLowerCase();
+            const searchVal = headcountValue.toLowerCase().trim();
+            return (
+              label === searchVal ||
+              label.includes(searchVal) ||
+              label.replace(/[,\s-]/g, "") === searchVal.replace(/[,\s-]/g, "")
+            );
+          });
+
+          if (matchOption) {
+            // Scroll into view and click
+            matchOption.scrollIntoView({ behavior: "smooth", block: "center" });
+            matchOption.querySelector("div, button")?.click() ||
+              matchOption.click();
+            console.log(`✅ Selected company headcount: ${headcountValue}`);
+
+            // Set timeout to automatically close the filter after 2 seconds
+            setTimeout(async () => {
+              const currentToggle = sectionContainer.querySelector(
+                "button[aria-expanded]"
+              );
+              if (currentToggle?.getAttribute("aria-expanded") === "true") {
+                console.log("🔄 Auto-closing Company Headcount filter");
+                currentToggle.click(); // Collapse the filter
+                // Confirm closure if needed after a short delay
+                await this.wait(500);
+                if (currentToggle.getAttribute("aria-expanded") === "false") {
+                  console.log(
+                    "✅ Company Headcount filter auto-closed successfully"
+                  );
+                }
+              }
+            }, 2000); // 2 seconds delay before auto-close
+          } else {
+            console.error(
+              `❌ Company headcount option "${headcountValue}" not found among options.`
+            );
+            console.log(
+              "Available options:",
+              optionsItems.map((e) => e.innerText.trim())
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Error during company headcount filter:", err.message);
+      }
+
+      // ---------- Company Headquartered Filter ----------
       try {
         const headquartersValue = filterData.companyHeadquarters;
-
         if (headquartersValue && headquartersValue.toLowerCase() !== "any") {
           const hqLegend = Array.from(
             document.querySelectorAll("legend span")
@@ -868,12 +960,9 @@ if (window.salesNavigatorUILoaded) {
           );
           if (!hqLegend)
             throw new Error("Company Headquarters filter legend not found");
-
           const sectionContainer = hqLegend.closest("fieldset, div");
           if (!sectionContainer)
             throw new Error("Company Headquarters container not found");
-
-          // Expand if collapsed
           const toggleBtn = sectionContainer.querySelector(
             "button[aria-expanded]"
           );
@@ -881,12 +970,8 @@ if (window.salesNavigatorUILoaded) {
             toggleBtn.click();
             await this.wait(800);
           }
-
-          // ✅ wait for input properly
           const input = await waitForInput(10000);
           if (!input) throw new Error("Company Headquarters input not found");
-
-          // Clear existing chips
           const chips = sectionContainer.querySelectorAll(
             'button[aria-label*="Remove"]'
           );
@@ -894,18 +979,13 @@ if (window.salesNavigatorUILoaded) {
             chip.click();
             await this.wait(300);
           }
-
-          // Type with keystroke simulation
           await typeWithDelay(input, headquartersValue, 200);
-
-          // Wait for suggestions inside this filter
           const suggestions = await waitForSuggestions(10000);
           const suggestion = suggestions?.find((el) =>
             (el.innerText || "")
               .toLowerCase()
               .includes(headquartersValue.toLowerCase())
           );
-
           if (suggestion) {
             const includeBtn = suggestion.querySelector(
               "._include-button_1cz98z, button"
@@ -913,7 +993,6 @@ if (window.salesNavigatorUILoaded) {
             if (includeBtn) includeBtn.click();
             else suggestion.click();
           } else {
-            // Fallback: press Enter
             ["keydown", "keypress", "keyup"].forEach((evt) =>
               input.dispatchEvent(
                 new KeyboardEvent(evt, { key: "Enter", bubbles: true })
