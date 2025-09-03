@@ -1,232 +1,267 @@
-
 if (window.linkedInAutomationInjected) {
-    // Script already injected, exit early
+  // Script already injected, exit early
 } else {
-    window.linkedInAutomationInjected = true;
+  window.linkedInAutomationInjected = true;
 
-class LinkedInAutomation {
+  class LinkedInAutomation {
     constructor() {
-        this.isRunning = false;
-        this.currentCampaign = null;
-        this.actionDelay = 30000;
-        this.dailyLimit = 20;
-        this.todayCount = 0;
-        this.isRealTimeMode = false;
-        this.isAutoCollecting = false;
-        this.isAutoCollectionEnabled = true;
-        this.currentPageCollected = false;
-        this.autoProfileObserver = null;
-        this.autoCollectionTimeout = null;
-        this.processedProfiles = new Set();
+      this.isRunning = false;
+      this.currentCampaign = null;
+      this.actionDelay = 30000;
+      this.dailyLimit = 20;
+      this.todayCount = 0;
+      this.isRealTimeMode = false;
+      this.isAutoCollecting = false;
+      this.isAutoCollectionEnabled = true;
+      this.currentPageCollected = false;
+      this.autoProfileObserver = null;
+      this.autoCollectionTimeout = null;
+      this.processedProfiles = new Set();
 
-        // Consolidated selectors to avoid duplication
-        this.PROFILE_SELECTORS = [
-            'div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17', // New LinkedIn layout
-            '.reusable-search__result-container',
-            '[data-chameleon-result-urn]',
-            '.search-result',
-            '.entity-result',
-            'div[componentkey]' // Generic fallback
-        ];
+      // Consolidated selectors to avoid duplication
+      this.PROFILE_SELECTORS = [
+        "div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17", // New LinkedIn layout
+        ".reusable-search__result-container",
+        "[data-chameleon-result-urn]",
+        ".search-result",
+        ".entity-result",
+        "div[componentkey]", // Generic fallback
+      ];
 
-        this.init();
+      this.init();
     }
 
     init() {
-        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-            return this.handleMessage(message, sendResponse);
-        });
-        this.setupAutoDetection();
-        this.setupAutoPopupDetection();
-        this.initSalesNavigatorUI();
-        this.setupPageChangeDetection();
+      chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        return this.handleMessage(message, sendResponse);
+      });
+      this.setupAutoDetection();
+      this.setupAutoPopupDetection();
+      this.initSalesNavigatorUI();
+      this.setupPageChangeDetection();
     }
 
     setupPageChangeDetection() {
-        // Unified page change monitoring
-        let lastUrl = location.href;
-        const pageChangeObserver = new MutationObserver(() => {
-            const currentUrl = location.href;
-            if (currentUrl !== lastUrl) {
-                lastUrl = currentUrl;
-                this.handlePageChange(currentUrl);
-            }
-        });
+      // Unified page change monitoring
+      let lastUrl = location.href;
+      const pageChangeObserver = new MutationObserver(() => {
+        const currentUrl = location.href;
+        if (currentUrl !== lastUrl) {
+          lastUrl = currentUrl;
+          this.handlePageChange(currentUrl);
+        }
+      });
 
-        pageChangeObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+      pageChangeObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
 
-        // Also listen for popstate events
-        window.addEventListener('popstate', () => {
-            setTimeout(() => this.handlePageChange(location.href), 100);
-        });
+      // Also listen for popstate events
+      window.addEventListener("popstate", () => {
+        setTimeout(() => this.handlePageChange(location.href), 100);
+      });
     }
 
     handlePageChange(currentUrl) {
-        try {
-            // Handle real-time mode page changes
-            if (this.isRealTimeMode && currentUrl.includes('linkedin.com')) {
-                setTimeout(() => this.setupAutoDetection(), 2000);
-            }
-
-            // Handle auto collection
-            if (this.isProfilePage() && !this.isAutoCollecting && this.isAutoCollectionEnabled) {
-                this.startAutoCollection();
-            }
-
-            // Ensure message listeners are active
-            if (!window.linkedInPageChangeHandled) {
-                chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-                    return this.handleMessage(message, sendResponse);
-                });
-                window.linkedInPageChangeHandled = true;
-            }
-        } catch (error) {
-            console.error('Error handling page change:', error);
+      try {
+        // Handle real-time mode page changes
+        if (this.isRealTimeMode && currentUrl.includes("linkedin.com")) {
+          setTimeout(() => this.setupAutoDetection(), 2000);
         }
+
+        // Handle auto collection
+        if (
+          this.isProfilePage() &&
+          !this.isAutoCollecting &&
+          this.isAutoCollectionEnabled
+        ) {
+          this.startAutoCollection();
+        }
+
+        // Ensure message listeners are active
+        if (!window.linkedInPageChangeHandled) {
+          chrome.runtime.onMessage.addListener(
+            (message, _sender, sendResponse) => {
+              return this.handleMessage(message, sendResponse);
+            }
+          );
+          window.linkedInPageChangeHandled = true;
+        }
+      } catch (error) {
+        console.error("Error handling page change:", error);
+      }
     }
 
     async initSalesNavigatorUI() {
-        if (this.isSalesNavigatorSearchPage()) {
+      if (this.isSalesNavigatorSearchPage()) {
+        await this.loadSalesNavigatorUI();
+      }
+
+      // Monitor for page changes to Sales Navigator search pages
+      let lastUrl = location.href;
+      const observer = new MutationObserver(async () => {
+        const url = location.href;
+        if (url !== lastUrl) {
+          lastUrl = url;
+
+          // Only create UI on Sales Navigator search pages
+          if (
+            this.isSalesNavigatorSearchPage() &&
+            !window.salesNavigatorFloatingUI &&
+            !window.salesNavUI &&
+            !document.querySelector(".sales-navigator-floating-ui")
+          ) {
             await this.loadSalesNavigatorUI();
-        }
-
-        // Monitor for page changes to Sales Navigator search pages
-        let lastUrl = location.href;
-        const observer = new MutationObserver(async () => {
-            const url = location.href;
-            if (url !== lastUrl) {
-                lastUrl = url;
-
-                // Only create UI on Sales Navigator search pages
-                if (this.isSalesNavigatorSearchPage() &&
-                    !window.salesNavigatorFloatingUI &&
-                    !window.salesNavUI &&
-                    !document.querySelector('.sales-navigator-floating-ui')) {
-                    await this.loadSalesNavigatorUI();
-                } else if (!this.isSalesNavigatorSearchPage()) {
-                    // Remove UI when leaving Sales Navigator search pages
-                    const existingUI = document.querySelector('.sales-navigator-floating-ui');
-                    if (existingUI) {
-                        existingUI.remove();
-                    }
-                    if (window.salesNavigatorFloatingUI) {
-                        window.salesNavigatorFloatingUI = null;
-                    }
-                    if (window.salesNavUI) {
-                        window.salesNavUI = null;
-                    }
-                }
+          } else if (!this.isSalesNavigatorSearchPage()) {
+            // Remove UI when leaving Sales Navigator search pages
+            const existingUI = document.querySelector(
+              ".sales-navigator-floating-ui"
+            );
+            if (existingUI) {
+              existingUI.remove();
             }
-        });
+            if (window.salesNavigatorFloatingUI) {
+              window.salesNavigatorFloatingUI = null;
+            }
+            if (window.salesNavUI) {
+              window.salesNavUI = null;
+            }
+          }
+        }
+      });
 
-        observer.observe(document, { subtree: true, childList: true });
+      observer.observe(document, { subtree: true, childList: true });
     }
 
     async loadSalesNavigatorUI() {
-        try {
-            console.log('LinkedIn Automation: loadSalesNavigatorUI called');
-            console.log('LinkedIn Automation: SalesNavigatorFloatingUI exists?', !!window.SalesNavigatorFloatingUI);
-            console.log('LinkedIn Automation: Is Sales Nav page?', this.isSalesNavigatorSearchPage());
+      try {
+        console.log("LinkedIn Automation: loadSalesNavigatorUI called");
+        console.log(
+          "LinkedIn Automation: SalesNavigatorFloatingUI exists?",
+          !!window.SalesNavigatorFloatingUI
+        );
+        console.log(
+          "LinkedIn Automation: Is Sales Nav page?",
+          this.isSalesNavigatorSearchPage()
+        );
 
-            // Prevent duplicate UI creation - check for existing UI elements
-            if (document.querySelector('.sales-navigator-floating-ui')) {
-                console.log('LinkedIn Automation: Sales Navigator UI already exists, skipping creation');
-                return;
-            }
-
-            // Check if instances already exist
-            if (window.salesNavigatorFloatingUI || window.salesNavUI) {
-                console.log('LinkedIn Automation: Sales Navigator instance already exists, skipping creation');
-                return;
-            }
-
-            // Only load if not already loaded and we're on the right page
-            if (window.SalesNavigatorFloatingUI) {
-                console.log('LinkedIn Automation: SalesNavigatorFloatingUI class exists, but no instance found');
-                return; // Let the script's own initialization handle it
-            }
-
-            if (!this.isSalesNavigatorSearchPage()) {
-                return;
-            }
-
-            // Check if script is already loaded
-            if (document.querySelector('script[src*="sales-navigator-ui.js"]')) {
-                console.log('LinkedIn Automation: Sales Navigator script already loaded');
-                return;
-            }
-
-            // Use the simpler script loading method
-            const script = document.createElement('script');
-            script.src = chrome.runtime.getURL('content/sales-navigator-ui.js');
-
-            script.onload = () => {
-                console.log('LinkedIn Automation: Sales Navigator script loaded successfully');
-                // The script will handle its own initialization
-            };
-
-            script.onerror = (error) => {
-                console.error('LinkedIn Automation: Error loading Sales Navigator UI script:', error);
-            };
-
-            document.head.appendChild(script);
-        } catch (error) {
-            console.error('Error loading Sales Navigator UI:', error);
+        // Prevent duplicate UI creation - check for existing UI elements
+        if (document.querySelector(".sales-navigator-floating-ui")) {
+          console.log(
+            "LinkedIn Automation: Sales Navigator UI already exists, skipping creation"
+          );
+          return;
         }
+
+        // Check if instances already exist
+        if (window.salesNavigatorFloatingUI || window.salesNavUI) {
+          console.log(
+            "LinkedIn Automation: Sales Navigator instance already exists, skipping creation"
+          );
+          return;
+        }
+
+        // Only load if not already loaded and we're on the right page
+        if (window.SalesNavigatorFloatingUI) {
+          console.log(
+            "LinkedIn Automation: SalesNavigatorFloatingUI class exists, but no instance found"
+          );
+          return; // Let the script's own initialization handle it
+        }
+
+        if (!this.isSalesNavigatorSearchPage()) {
+          return;
+        }
+
+        // Check if script is already loaded
+        if (document.querySelector('script[src*="sales-navigator-ui.js"]')) {
+          console.log(
+            "LinkedIn Automation: Sales Navigator script already loaded"
+          );
+          return;
+        }
+
+        // Use the simpler script loading method
+        const script = document.createElement("script");
+        script.src = chrome.runtime.getURL("content/sales-navigator-ui.js");
+
+        script.onload = () => {
+          console.log(
+            "LinkedIn Automation: Sales Navigator script loaded successfully"
+          );
+          // The script will handle its own initialization
+        };
+
+        script.onerror = (error) => {
+          console.error(
+            "LinkedIn Automation: Error loading Sales Navigator UI script:",
+            error
+          );
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error("Error loading Sales Navigator UI:", error);
+      }
     }
 
     isSalesNavigatorSearchPage() {
-        const url = window.location.href;
-        return url.includes('/sales/search/people') && url.includes('linkedin.com');
+      const url = window.location.href;
+      return (
+        url.includes("/sales/search/people") && url.includes("linkedin.com")
+      );
     }
 
     setupAutoDetection() {
-        if (this.isProfilePage() && this.isAutoCollectionEnabled) {
-            setTimeout(() => this.startAutoCollection(), 2000);
-        }
+      if (this.isProfilePage() && this.isAutoCollectionEnabled) {
+        setTimeout(() => this.startAutoCollection(), 2000);
+      }
     }
 
     isProfilePage() {
-        const url = window.location.href;
-        if (url.includes('/in/') && !url.includes('/search/')) return false;
-        return url.includes('linkedin.com/search/results/people') ||
-               url.includes('linkedin.com/search/people') ||
-               url.includes('linkedin.com/sales/search/people') ||
-               url.includes('linkedin.com/mynetwork') ||
-               url.includes('linkedin.com/connections') ||
-               (url.includes('linkedin.com') && document.querySelector('.reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result, .artdeco-entity-lockup'));
+      const url = window.location.href;
+      if (url.includes("/in/") && !url.includes("/search/")) return false;
+      return (
+        url.includes("linkedin.com/search/results/people") ||
+        url.includes("linkedin.com/search/people") ||
+        url.includes("linkedin.com/sales/search/people") ||
+        url.includes("linkedin.com/mynetwork") ||
+        url.includes("linkedin.com/connections") ||
+        (url.includes("linkedin.com") &&
+          document.querySelector(
+            ".reusable-search__result-container, [data-chameleon-result-urn], .search-result, .entity-result, .artdeco-entity-lockup"
+          ))
+      );
     }
 
     // Removed duplicate - now handled by unified setupPageChangeDetection()
 
     setupAutoPopupDetection() {
-        if (document.readyState === 'complete') {
-            setTimeout(() => this.showAutoPopup(), 3000);
-        } else {
-            window.addEventListener('load', () => {
-                setTimeout(() => this.showAutoPopup(), 3000);
-            });
-        }
+      if (document.readyState === "complete") {
+        setTimeout(() => this.showAutoPopup(), 3000);
+      } else {
+        window.addEventListener("load", () => {
+          setTimeout(() => this.showAutoPopup(), 3000);
+        });
+      }
     }
 
     showAutoPopup() {
-        try {
-            this.createAutoPopupNotification();
-        } catch (error) {
-            console.error('Error showing auto popup:', error);
-        }
+      try {
+        this.createAutoPopupNotification();
+      } catch (error) {
+        console.error("Error showing auto popup:", error);
+      }
     }
 
     createAutoPopupNotification() {
-        const existing = document.getElementById('linkedin-auto-popup');
-        if (existing) existing.remove();
+      const existing = document.getElementById("linkedin-auto-popup");
+      if (existing) existing.remove();
 
-        const popup = document.createElement('div');
-        popup.id = 'linkedin-auto-popup';
-        popup.innerHTML = `
+      const popup = document.createElement("div");
+      popup.id = "linkedin-auto-popup";
+      popup.innerHTML = `
             <div style="position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, #0077b5 0%, #005885 100%); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 119, 181, 0.3); z-index: 10000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 350px; animation: slideIn 0.5s ease-out;">
                 <div style="display: flex; align-items: center; margin-bottom: 15px;">
                     <div style="font-size: 24px; margin-right: 10px;">🚀</div>
@@ -243,1810 +278,2143 @@ class LinkedInAutomation {
             <style>@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }</style>
         `;
 
-        document.body.appendChild(popup);
+      document.body.appendChild(popup);
 
-        popup.querySelector('#open-automation-popup').addEventListener('click', () => {
-            this.openExtensionPopup();
-            popup.remove();
+      popup
+        .querySelector("#open-automation-popup")
+        .addEventListener("click", () => {
+          this.openExtensionPopup();
+          popup.remove();
         });
 
-        popup.querySelector('#dismiss-popup').addEventListener('click', () => popup.remove());
+      popup
+        .querySelector("#dismiss-popup")
+        .addEventListener("click", () => popup.remove());
 
-        setTimeout(() => {
-            if (popup.parentNode) popup.remove();
-        }, 10000);
+      setTimeout(() => {
+        if (popup.parentNode) popup.remove();
+      }, 10000);
     }
 
     openExtensionPopup() {
-        try {
-            chrome.runtime.sendMessage({ action: 'openPopup' });
-        } catch (error) {
-            console.error('Error opening popup:', error);
-        }
+      try {
+        chrome.runtime.sendMessage({ action: "openPopup" });
+      } catch (error) {
+        console.error("Error opening popup:", error);
+      }
     }
 
     async startAutoCollection() {
-        if (this.isAutoCollecting) return;
-        this.isAutoCollecting = true;
+      if (this.isAutoCollecting) return;
+      this.isAutoCollecting = true;
 
-        try {
-            if (chrome.runtime?.id) {
-                chrome.runtime.sendMessage({
-                    action: 'autoCollectionStarted',
-                    url: window.location.href
-                });
-            }
-        } catch (error) {}
+      try {
+        if (chrome.runtime?.id) {
+          chrome.runtime.sendMessage({
+            action: "autoCollectionStarted",
+            url: window.location.href,
+          });
+        }
+      } catch (error) {}
 
-        this.collectAndSendProfiles();
-        this.setupContinuousMonitoring();
+      this.collectAndSendProfiles();
+      this.setupContinuousMonitoring();
     }
 
     async collectAndSendProfiles() {
-        if (!this.isAutoCollectionEnabled || !this.isRealTimeMode) return;
+      if (!this.isAutoCollectionEnabled || !this.isRealTimeMode) return;
 
-        // Only use collectMultiplePages for non-Sales Navigator pages
-        let profiles = [];
-        if (!window.location.href.includes('sales/search/people')) {
-            profiles = await this.collectMultiplePages(4);
-        } else {
-            profiles = await this.collectCurrentPageOnly();
-        }
-        if (profiles.length > 0 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
-            this.sendProfilesRealTime(profiles);
-        }
+      // Only use collectMultiplePages for non-Sales Navigator pages
+      let profiles = [];
+      if (!window.location.href.includes("sales/search/people")) {
+        profiles = await this.collectMultiplePages(4);
+      } else {
+        profiles = await this.collectCurrentPageOnly();
+      }
+      if (
+        profiles.length > 0 &&
+        this.isAutoCollectionEnabled &&
+        this.isRealTimeMode
+      ) {
+        this.sendProfilesRealTime(profiles);
+      }
     }
 
     setupContinuousMonitoring() {
-        const observer = new MutationObserver((mutations) => {
-            let hasNewProfiles = false;
-            mutations.forEach((mutation) => {
-                if (mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE && node.querySelectorAll) {
-                            // Check if any new profile cards were added
-                            for (const selector of this.PROFILE_SELECTORS) {
-                                if (node.querySelectorAll(selector).length > 0) {
-                                    hasNewProfiles = true;
-                                    break;
-                                }
-                            }
-                        }
-                    });
+      const observer = new MutationObserver((mutations) => {
+        let hasNewProfiles = false;
+        mutations.forEach((mutation) => {
+          if (mutation.addedNodes.length > 0) {
+            mutation.addedNodes.forEach((node) => {
+              if (
+                node.nodeType === Node.ELEMENT_NODE &&
+                node.querySelectorAll
+              ) {
+                // Check if any new profile cards were added
+                for (const selector of this.PROFILE_SELECTORS) {
+                  if (node.querySelectorAll(selector).length > 0) {
+                    hasNewProfiles = true;
+                    break;
+                  }
                 }
+              }
             });
-
-            if (hasNewProfiles && this.isAutoCollectionEnabled && this.isRealTimeMode) {
-                clearTimeout(this.autoCollectionTimeout);
-                this.autoCollectionTimeout = setTimeout(() => this.collectNewProfilesAuto(), 1500);
-            }
+          }
         });
 
-        observer.observe(document.body, { childList: true, subtree: true });
-        this.autoProfileObserver = observer;
+        if (
+          hasNewProfiles &&
+          this.isAutoCollectionEnabled &&
+          this.isRealTimeMode
+        ) {
+          clearTimeout(this.autoCollectionTimeout);
+          this.autoCollectionTimeout = setTimeout(
+            () => this.collectNewProfilesAuto(),
+            1500
+          );
+        }
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+      this.autoProfileObserver = observer;
     }
 
     async collectNewProfilesAuto() {
-        if (!this.isAutoCollecting || !this.isAutoCollectionEnabled || !this.isRealTimeMode) return;
+      if (
+        !this.isAutoCollecting ||
+        !this.isAutoCollectionEnabled ||
+        !this.isRealTimeMode
+      )
+        return;
 
-        let profileCards = [];
-        for (const selector of this.PROFILE_SELECTORS) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) break;
+      let profileCards = [];
+      for (const selector of this.PROFILE_SELECTORS) {
+        profileCards = document.querySelectorAll(selector);
+        if (profileCards.length > 0) break;
+      }
+
+      const newProfiles = [];
+      profileCards.forEach((card) => {
+        if (card.dataset.autoProcessed) return;
+        const profile = this.extractProfileFromCard(card);
+        if (profile?.name && profile?.url) {
+          newProfiles.push(profile);
+          card.dataset.autoProcessed = "true";
         }
+      });
 
-        const newProfiles = [];
-        profileCards.forEach((card) => {
-            if (card.dataset.autoProcessed) return;
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                newProfiles.push(profile);
-                card.dataset.autoProcessed = 'true';
-            }
-        });
-
-        if (newProfiles.length > 0) this.sendProfilesRealTime(newProfiles);
+      if (newProfiles.length > 0) this.sendProfilesRealTime(newProfiles);
     }
 
     stopAutoCollection() {
-        this.isAutoCollecting = false;
-        if (this.autoProfileObserver) {
-            this.autoProfileObserver.disconnect();
-            this.autoProfileObserver = null;
-        }
-        if (this.autoCollectionTimeout) {
-            clearTimeout(this.autoCollectionTimeout);
-            this.autoCollectionTimeout = null;
-        }
+      this.isAutoCollecting = false;
+      if (this.autoProfileObserver) {
+        this.autoProfileObserver.disconnect();
+        this.autoProfileObserver = null;
+      }
+      if (this.autoCollectionTimeout) {
+        clearTimeout(this.autoCollectionTimeout);
+        this.autoCollectionTimeout = null;
+      }
     }
 
     pauseCollection() {
-        this.isRealTimeMode = false;
-        this.isAutoCollecting = false;
-        this.isAutoCollectionEnabled = false;
+      this.isRealTimeMode = false;
+      this.isAutoCollecting = false;
+      this.isAutoCollectionEnabled = false;
 
-        // Stop all observers and intervals
-        if (this.autoProfileObserver) {
-            this.autoProfileObserver.disconnect();
-            this.autoProfileObserver = null;
-        }
-        if (this.continuousMonitoringInterval) {
-            clearInterval(this.continuousMonitoringInterval);
-            this.continuousMonitoringInterval = null;
-        }
-        if (this.autoCollectionTimeout) {
-            clearTimeout(this.autoCollectionTimeout);
-            this.autoCollectionTimeout = null;
-        }
+      // Stop all observers and intervals
+      if (this.autoProfileObserver) {
+        this.autoProfileObserver.disconnect();
+        this.autoProfileObserver = null;
+      }
+      if (this.continuousMonitoringInterval) {
+        clearInterval(this.continuousMonitoringInterval);
+        this.continuousMonitoringInterval = null;
+      }
+      if (this.autoCollectionTimeout) {
+        clearTimeout(this.autoCollectionTimeout);
+        this.autoCollectionTimeout = null;
+      }
 
-        // Stop any ongoing scrolling or page navigation
-        this.stopAllScrolling();
+      // Stop any ongoing scrolling or page navigation
+      this.stopAllScrolling();
 
-        this.sendCollectionStatus('Collection paused');
+      this.sendCollectionStatus("Collection paused");
     }
 
     resumeCollection() {
-        this.isRealTimeMode = true;
-        this.isAutoCollecting = true;
-        this.isAutoCollectionEnabled = true;
-        this.setupContinuousMonitoring();
-        this.collectAndSendProfiles();
-        this.sendCollectionStatus('Collection resumed');
+      this.isRealTimeMode = true;
+      this.isAutoCollecting = true;
+      this.isAutoCollectionEnabled = true;
+      this.setupContinuousMonitoring();
+      this.collectAndSendProfiles();
+      this.sendCollectionStatus("Collection resumed");
     }
 
     stopAllScrolling() {
-        // Stop any ongoing scrolling by clearing all timeouts and intervals
-        const highestTimeoutId = setTimeout(() => {}, 0);
-        for (let i = 0; i < highestTimeoutId; i++) {
-            clearTimeout(i);
-        }
+      // Stop any ongoing scrolling by clearing all timeouts and intervals
+      const highestTimeoutId = setTimeout(() => {}, 0);
+      for (let i = 0; i < highestTimeoutId; i++) {
+        clearTimeout(i);
+      }
 
-        // Stop scrolling by scrolling to current position
-        window.scrollTo(window.scrollX, window.scrollY);
+      // Stop scrolling by scrolling to current position
+      window.scrollTo(window.scrollX, window.scrollY);
     }
     handleMessage(message, sendResponse) {
-        if (!message || !message.action) {
-            sendResponse({ error: 'Invalid message format' });
-            return;
-        }
+      if (!message || !message.action) {
+        sendResponse({ error: "Invalid message format" });
+        return;
+      }
 
-        const actions = {
-            startAutomation: () => { this.startAutomation(message.campaign); sendResponse({ success: true }); },
-            stopAutomation: () => { this.stopAutomation(); sendResponse({ success: true }); },
-            getPageInfo: () => sendResponse(this.getPageInfo()),
-            collectProfiles: () => { this.collectProfiles().then(profiles => sendResponse({ profiles })); return true; },
-            sendDirectMessage: () => { this.handleDirectMessage(message.message, message.profileName, message.profileUrl); sendResponse({ success: true }); },
-            showAutoPopup: () => { this.showAutoPopup(); sendResponse({ success: true }); },
-            startRealTimeCollection: () => {
-                this.isRealTimeMode = true;
-                this.currentPageCollected = false;
-                setTimeout(() => {
-                    this.collectCurrentPageOnly().then(profiles => {
-                        if (profiles.length > 0) {
-                            this.sendProfilesRealTime(profiles);
-                            this.currentPageCollected = true;
-                        } else {
-                            const alternativeProfiles = this.extractProfilesAlternative();
-                            if (alternativeProfiles.length > 0) {
-                                this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
-                            }
-                        }
-                    }).catch(error => console.error('Error in real-time collection:', error));
-                }, 1000);
-                sendResponse({ success: true });
-                return true;
-            },
-            startMultiPageCollection: () => {
-                this.isRealTimeMode = true;
-                const maxPages = message.maxPages || 4;
-                setTimeout(() => {
-                    this.collectMultiplePages(maxPages).then(profiles => {
-                        sendResponse({ success: true, totalProfiles: profiles.length });
-                    }).catch(error => {
-                        sendResponse({ success: false, error: error.message });
-                    });
-                }, 1000);
-                return true;
-            },
-            stopRealTimeCollection: () => { this.isRealTimeMode = false; this.currentPageCollected = false; sendResponse({ success: true }); return true; },
-            stopAutoCollection: () => { this.stopAutoCollection(); sendResponse({ success: true }); return true; },
-            startAutoCollection: () => {
-                if (!this.isAutoCollecting && this.isAutoCollectionEnabled) this.startAutoCollection();
-                sendResponse({ success: true });
-                return true;
-            },
-            enableAutoCollection: () => {
-                this.isAutoCollectionEnabled = true;
-                if (this.isProfilePage() && !this.isAutoCollecting) this.startAutoCollection();
-                sendResponse({ success: true });
-                return true;
-            },
-            pauseCollection: () => {
-                this.pauseCollection();
-                sendResponse({ success: true });
-                return true;
-            },
-            resumeCollection: () => {
-                this.resumeCollection();
-                sendResponse({ success: true });
-                return true;
-            },
-            disableAutoCollection: () => { this.isAutoCollectionEnabled = false; this.stopAutoCollection(); sendResponse({ success: true }); return true; },
-            searchByCompany: () => { this.searchByCompany(message.companyName).then(result => sendResponse(result)); return true; },
-            searchNetwork: () => {
-                this.searchNetwork(message.criteria).then(profiles => {
-                    sendResponse({ profiles: profiles || [] });
-                }).catch(error => {
-                    sendResponse({ profiles: [], error: error.message });
-                });
-                return true;
-            }
-        };
+      const actions = {
+        startAutomation: () => {
+          this.startAutomation(message.campaign);
+          sendResponse({ success: true });
+        },
+        stopAutomation: () => {
+          this.stopAutomation();
+          sendResponse({ success: true });
+        },
+        getPageInfo: () => sendResponse(this.getPageInfo()),
+        collectProfiles: () => {
+          this.collectProfiles().then((profiles) => sendResponse({ profiles }));
+          return true;
+        },
+        sendDirectMessage: () => {
+          this.handleDirectMessage(
+            message.message,
+            message.profileName,
+            message.profileUrl
+          );
+          sendResponse({ success: true });
+        },
+        showAutoPopup: () => {
+          this.showAutoPopup();
+          sendResponse({ success: true });
+        },
+        startRealTimeCollection: () => {
+          this.isRealTimeMode = true;
+          this.currentPageCollected = false;
+          setTimeout(() => {
+            this.collectCurrentPageOnly()
+              .then((profiles) => {
+                if (profiles.length > 0) {
+                  this.sendProfilesRealTime(profiles);
+                  this.currentPageCollected = true;
+                } else {
+                  const alternativeProfiles = this.extractProfilesAlternative();
+                  if (alternativeProfiles.length > 0) {
+                    this.sendProfilesRealTime(alternativeProfiles.slice(0, 10));
+                  }
+                }
+              })
+              .catch((error) =>
+                console.error("Error in real-time collection:", error)
+              );
+          }, 1000);
+          sendResponse({ success: true });
+          return true;
+        },
+        startMultiPageCollection: () => {
+          this.isRealTimeMode = true;
+          const maxPages = message.maxPages || 4;
+          setTimeout(() => {
+            this.collectMultiplePages(maxPages)
+              .then((profiles) => {
+                sendResponse({ success: true, totalProfiles: profiles.length });
+              })
+              .catch((error) => {
+                sendResponse({ success: false, error: error.message });
+              });
+          }, 1000);
+          return true;
+        },
+        stopRealTimeCollection: () => {
+          this.isRealTimeMode = false;
+          this.currentPageCollected = false;
+          sendResponse({ success: true });
+          return true;
+        },
+        stopAutoCollection: () => {
+          this.stopAutoCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        startAutoCollection: () => {
+          if (!this.isAutoCollecting && this.isAutoCollectionEnabled)
+            this.startAutoCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        enableAutoCollection: () => {
+          this.isAutoCollectionEnabled = true;
+          if (this.isProfilePage() && !this.isAutoCollecting)
+            this.startAutoCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        pauseCollection: () => {
+          this.pauseCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        resumeCollection: () => {
+          this.resumeCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        disableAutoCollection: () => {
+          this.isAutoCollectionEnabled = false;
+          this.stopAutoCollection();
+          sendResponse({ success: true });
+          return true;
+        },
+        searchByCompany: () => {
+          this.searchByCompany(message.companyName).then((result) =>
+            sendResponse(result)
+          );
+          return true;
+        },
+        searchNetwork: () => {
+          this.searchNetwork(message.criteria)
+            .then((profiles) => {
+              sendResponse({ profiles: profiles || [] });
+            })
+            .catch((error) => {
+              sendResponse({ profiles: [], error: error.message });
+            });
+          return true;
+        },
+      };
 
-        return actions[message.action] ? actions[message.action]() : sendResponse({ error: 'Unknown action: ' + message.action });
+      return actions[message.action]
+        ? actions[message.action]()
+        : sendResponse({ error: "Unknown action: " + message.action });
     }
     isSearchResultsPage() {
-        return window.location.href.includes('/search/people/') ||
-               window.location.href.includes('/search/results/people/') ||
-               window.location.href.includes('/sales/search/people');
+      return (
+        window.location.href.includes("/search/people/") ||
+        window.location.href.includes("/search/results/people/") ||
+        window.location.href.includes("/sales/search/people")
+      );
     }
 
     startAutomationFromPage() {
-        if (this.todayCount >= this.dailyLimit) return;
-        this.isRunning = true;
-        this.processConnections();
+      if (this.todayCount >= this.dailyLimit) return;
+      this.isRunning = true;
+      this.processConnections();
     }
 
     async processConnections() {
-        if (!this.isRunning) return;
-        const connectButtons = this.findConnectButtons();
-        if (connectButtons.length === 0) {
-            this.stopAutomation();
-            return;
-        }
-
-        for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
-            if (this.todayCount >= this.dailyLimit) break;
-            const button = connectButtons[i];
-            const personInfo = this.extractPersonInfo(button);
-
-            try {
-                await this.sendConnectionRequest(button, personInfo);
-                this.todayCount++;
-                if (i < connectButtons.length - 1) await this.delay(this.actionDelay);
-            } catch (error) {
-                console.error('Error sending connection request:', error);
-            }
-        }
+      if (!this.isRunning) return;
+      const connectButtons = this.findConnectButtons();
+      if (connectButtons.length === 0) {
         this.stopAutomation();
+        return;
+      }
+
+      for (let i = 0; i < connectButtons.length && this.isRunning; i++) {
+        if (this.todayCount >= this.dailyLimit) break;
+        const button = connectButtons[i];
+        const personInfo = this.extractPersonInfo(button);
+
+        try {
+          await this.sendConnectionRequest(button, personInfo);
+          this.todayCount++;
+          if (i < connectButtons.length - 1) await this.delay(this.actionDelay);
+        } catch (error) {
+          console.error("Error sending connection request:", error);
+        }
+      }
+      this.stopAutomation();
     }
     findConnectButtons() {
-        const selectors = ['button[aria-label*="Connect"]', 'button[data-control-name="connect"]', '.search-result__actions button[aria-label*="Invite"]'];
-        const buttons = [];
-        selectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => {
-                if ((el.textContent.includes('Connect') || el.getAttribute('aria-label')?.includes('Connect')) && el.offsetParent !== null) {
-                    buttons.push(el);
-                }
-            });
+      const selectors = [
+        'button[aria-label*="Connect"]',
+        'button[data-control-name="connect"]',
+        '.search-result__actions button[aria-label*="Invite"]',
+      ];
+      const buttons = [];
+      selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((el) => {
+          if (
+            (el.textContent.includes("Connect") ||
+              el.getAttribute("aria-label")?.includes("Connect")) &&
+            el.offsetParent !== null
+          ) {
+            buttons.push(el);
+          }
         });
-        return buttons;
+      });
+      return buttons;
     }
 
     extractPersonInfo(connectButton) {
-        const resultCard = connectButton.closest('.search-result') || connectButton.closest('.reusable-search__result-container') || connectButton.closest('[data-chameleon-result-urn]');
-        let name = 'Unknown', company = '', title = '';
+      const resultCard =
+        connectButton.closest(".search-result") ||
+        connectButton.closest(".reusable-search__result-container") ||
+        connectButton.closest("[data-chameleon-result-urn]");
+      let name = "Unknown",
+        company = "",
+        title = "";
 
-        if (resultCard) {
-            const nameElement = resultCard.querySelector('.entity-result__title-text a') || resultCard.querySelector('.search-result__result-link') || resultCard.querySelector('[data-anonymize="person-name"]');
-            if (nameElement) name = nameElement.textContent.trim();
+      if (resultCard) {
+        const nameElement =
+          resultCard.querySelector(".entity-result__title-text a") ||
+          resultCard.querySelector(".search-result__result-link") ||
+          resultCard.querySelector('[data-anonymize="person-name"]');
+        if (nameElement) name = nameElement.textContent.trim();
 
-            const subtitleElement = resultCard.querySelector('.entity-result__primary-subtitle') || resultCard.querySelector('.search-result__truncate');
-            if (subtitleElement) title = subtitleElement.textContent.trim();
-        }
-        return { name, company, title };
+        const subtitleElement =
+          resultCard.querySelector(".entity-result__primary-subtitle") ||
+          resultCard.querySelector(".search-result__truncate");
+        if (subtitleElement) title = subtitleElement.textContent.trim();
+      }
+      return { name, company, title };
     }
     async sendConnectionRequest(button, personInfo) {
-        return new Promise((resolve, reject) => {
-            try {
-                button.click();
-                setTimeout(() => {
-                    const sendButton = document.querySelector('button[aria-label*="Send without a note"]') || document.querySelector('button[data-control-name="send_invite"]') || document.querySelector('.send-invite__actions button[aria-label*="Send"]');
+      return new Promise((resolve, reject) => {
+        try {
+          button.click();
+          setTimeout(() => {
+            const sendButton =
+              document.querySelector(
+                'button[aria-label*="Send without a note"]'
+              ) ||
+              document.querySelector(
+                'button[data-control-name="send_invite"]'
+              ) ||
+              document.querySelector(
+                '.send-invite__actions button[aria-label*="Send"]'
+              );
 
-                    if (sendButton) {
-                        sendButton.click();
-                        resolve();
-                    } else {
-                        const addNoteButton = document.querySelector('button[aria-label*="Add a note"]');
-                        if (addNoteButton) {
-                            addNoteButton.click();
-                            setTimeout(() => this.sendCustomMessage(personInfo, resolve, reject), 1000);
-                        } else {
-                            reject(new Error('Could not find send button'));
-                        }
-                    }
-                }, 1000);
-            } catch (error) {
-                reject(error);
+            if (sendButton) {
+              sendButton.click();
+              resolve();
+            } else {
+              const addNoteButton = document.querySelector(
+                'button[aria-label*="Add a note"]'
+              );
+              if (addNoteButton) {
+                addNoteButton.click();
+                setTimeout(
+                  () => this.sendCustomMessage(personInfo, resolve, reject),
+                  1000
+                );
+              } else {
+                reject(new Error("Could not find send button"));
+              }
             }
-        });
+          }, 1000);
+        } catch (error) {
+          reject(error);
+        }
+      });
     }
 
     async sendCustomMessage(personInfo, resolve, reject) {
-        try {
-            const messageTemplate = 'Hi {firstName}, I\'d love to connect with you!';
-            const personalizedMessage = this.personalizeMessage(messageTemplate, personInfo);
-            const messageTextarea = document.querySelector('#custom-message') || document.querySelector('textarea[name="message"]') || document.querySelector('.send-invite__custom-message textarea');
+      try {
+        const messageTemplate = "Hi {firstName}, I'd love to connect with you!";
+        const personalizedMessage = this.personalizeMessage(
+          messageTemplate,
+          personInfo
+        );
+        const messageTextarea =
+          document.querySelector("#custom-message") ||
+          document.querySelector('textarea[name="message"]') ||
+          document.querySelector(".send-invite__custom-message textarea");
 
-            if (messageTextarea) {
-                messageTextarea.value = personalizedMessage;
-                messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+        if (messageTextarea) {
+          messageTextarea.value = personalizedMessage;
+          messageTextarea.dispatchEvent(new Event("input", { bubbles: true }));
 
-                setTimeout(() => {
-                    const sendButton = document.querySelector('button[aria-label*="Send invitation"]') || document.querySelector('.send-invite__actions button[aria-label*="Send"]');
-                    if (sendButton) {
-                        sendButton.click();
-                        resolve();
-                    } else {
-                        reject(new Error('Could not find send button for custom message'));
-                    }
-                }, 500);
+          setTimeout(() => {
+            const sendButton =
+              document.querySelector('button[aria-label*="Send invitation"]') ||
+              document.querySelector(
+                '.send-invite__actions button[aria-label*="Send"]'
+              );
+            if (sendButton) {
+              sendButton.click();
+              resolve();
             } else {
-                reject(new Error('Could not find message textarea'));
+              reject(
+                new Error("Could not find send button for custom message")
+              );
             }
-        } catch (error) {
-            reject(error);
+          }, 500);
+        } else {
+          reject(new Error("Could not find message textarea"));
         }
+      } catch (error) {
+        reject(error);
+      }
     }
 
     personalizeMessage(template, personInfo) {
-        const firstName = personInfo.name.split(' ')[0];
-        const lastName = personInfo.name.split(' ').slice(1).join(' ');
-        return template.replace(/{firstName}/g, firstName).replace(/{lastName}/g, lastName).replace(/{fullName}/g, personInfo.name).replace(/{company}/g, personInfo.company).replace(/{title}/g, personInfo.title);
+      const firstName = personInfo.name.split(" ")[0];
+      const lastName = personInfo.name.split(" ").slice(1).join(" ");
+      return template
+        .replace(/{firstName}/g, firstName)
+        .replace(/{lastName}/g, lastName)
+        .replace(/{fullName}/g, personInfo.name)
+        .replace(/{company}/g, personInfo.company)
+        .replace(/{title}/g, personInfo.title);
     }
     startAutomation(campaign) {
-        this.currentCampaign = campaign;
-        this.startAutomationFromPage();
+      this.currentCampaign = campaign;
+      this.startAutomationFromPage();
     }
 
     stopAutomation() {
-        this.isRunning = false;
+      this.isRunning = false;
     }
 
     async closeChatWindow() {
-        try {
-            const primarySelectors = ['button svg[data-test-icon="close-small"]', 'button .artdeco-button__icon[data-test-icon="close-small"]', '[data-test-icon="close-small"]'];
-            const fallbackSelectors = ['.msg-overlay-bubble-header__control--close', '.msg-overlay-bubble-header__control[aria-label*="Close"]', '.msg-overlay-bubble-header button[aria-label*="Close"]', '.msg-overlay-bubble-header .artdeco-button--circle', 'button[aria-label="Close conversation"]', '.msg-overlay-bubble-header button:last-child'];
+      try {
+        const primarySelectors = [
+          'button svg[data-test-icon="close-small"]',
+          'button .artdeco-button__icon[data-test-icon="close-small"]',
+          '[data-test-icon="close-small"]',
+        ];
+        const fallbackSelectors = [
+          ".msg-overlay-bubble-header__control--close",
+          '.msg-overlay-bubble-header__control[aria-label*="Close"]',
+          '.msg-overlay-bubble-header button[aria-label*="Close"]',
+          ".msg-overlay-bubble-header .artdeco-button--circle",
+          'button[aria-label="Close conversation"]',
+          ".msg-overlay-bubble-header button:last-child",
+        ];
 
-            for (let attempt = 0; attempt < 5; attempt++) {
-                for (const selector of primarySelectors) {
-                    const closeIcon = document.querySelector(selector);
-                    if (closeIcon) {
-                        const closeButton = closeIcon.closest('button');
-                        if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
-                            closeButton.click();
-                            await this.delay(500);
-                            return true;
-                        }
-                    }
-                }
-
-                for (const selector of fallbackSelectors) {
-                    const closeButton = document.querySelector(selector);
-                    if (closeButton && closeButton.offsetParent !== null && !closeButton.disabled) {
-                        closeButton.click();
-                        await this.delay(500);
-                        return true;
-                    }
-                }
-                await this.delay(1000);
+        for (let attempt = 0; attempt < 5; attempt++) {
+          for (const selector of primarySelectors) {
+            const closeIcon = document.querySelector(selector);
+            if (closeIcon) {
+              const closeButton = closeIcon.closest("button");
+              if (
+                closeButton &&
+                closeButton.offsetParent !== null &&
+                !closeButton.disabled
+              ) {
+                closeButton.click();
+                await this.delay(500);
+                return true;
+              }
             }
-            return false;
-        } catch (error) {
-            console.error('Error closing chat window:', error);
-            return false;
+          }
+
+          for (const selector of fallbackSelectors) {
+            const closeButton = document.querySelector(selector);
+            if (
+              closeButton &&
+              closeButton.offsetParent !== null &&
+              !closeButton.disabled
+            ) {
+              closeButton.click();
+              await this.delay(500);
+              return true;
+            }
+          }
+          await this.delay(1000);
         }
+        return false;
+      } catch (error) {
+        console.error("Error closing chat window:", error);
+        return false;
+      }
     }
 
     delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+      return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     async handleDirectMessage(message) {
-        try {
-            await this.delay(2000);
-            const messageButton = await this.findMessageButton();
-            if (messageButton) {
-                messageButton.click();
-                await this.delay(4000);
-                const messageInput = await this.findMessageInput();
-                if (!messageInput) return;
+      try {
+        await this.delay(2000);
+        const messageButton = await this.findMessageButton();
+        if (messageButton) {
+          messageButton.click();
+          await this.delay(4000);
+          const messageInput = await this.findMessageInput();
+          if (!messageInput) return;
 
-                await this.pasteMessageDirectly(messageInput, message);
-                await this.delay(1000);
-                if (!messageInput.textContent.trim() && !messageInput.value) {
-                    await this.pasteUsingClipboard(messageInput, message);
-                }
-                await this.delay(500);
-                if (!messageInput.textContent.trim() && !messageInput.value) {
-                    messageInput.textContent = message;
-                    messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                await this.clickSendButton();
-                await this.delay(2000);
-                await this.closeChatWindow();
-                await this.delay(1000);
-            }
-        } catch (error) {}
+          await this.pasteMessageDirectly(messageInput, message);
+          await this.delay(1000);
+          if (!messageInput.textContent.trim() && !messageInput.value) {
+            await this.pasteUsingClipboard(messageInput, message);
+          }
+          await this.delay(500);
+          if (!messageInput.textContent.trim() && !messageInput.value) {
+            messageInput.textContent = message;
+            messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          await this.clickSendButton();
+          await this.delay(2000);
+          await this.closeChatWindow();
+          await this.delay(1000);
+        }
+      } catch (error) {}
     }
 
     async findMessageButton() {
-        await this.delay(2000);
-        const selectors = ['button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])', 'button[data-control-name="message"]', '.pv-s-profile-actions button[aria-label*="Message"]', '.pvs-profile-actions__action button[aria-label*="Message"]', '.message-anywhere-button', 'a[data-control-name="message"]'];
+      await this.delay(2000);
+      const selectors = [
+        'button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])',
+        'button[data-control-name="message"]',
+        '.pv-s-profile-actions button[aria-label*="Message"]',
+        '.pvs-profile-actions__action button[aria-label*="Message"]',
+        ".message-anywhere-button",
+        'a[data-control-name="message"]',
+      ];
 
-        for (const selector of selectors) {
-            const button = document.querySelector(selector);
-            if (button) {
-                const text = button.textContent.toLowerCase().trim();
-                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                if (!text.includes('send') && !text.includes('share') && !ariaLabel.includes('send') && !ariaLabel.includes('share') && !ariaLabel.includes('post')) {
-                    return button;
-                }
-            }
+      for (const selector of selectors) {
+        const button = document.querySelector(selector);
+        if (button) {
+          const text = button.textContent.toLowerCase().trim();
+          const ariaLabel =
+            button.getAttribute("aria-label")?.toLowerCase() || "";
+          if (
+            !text.includes("send") &&
+            !text.includes("share") &&
+            !ariaLabel.includes("send") &&
+            !ariaLabel.includes("share") &&
+            !ariaLabel.includes("post")
+          ) {
+            return button;
+          }
         }
+      }
 
-        const buttons = document.querySelectorAll('button, a');
-        for (const button of buttons) {
-            const text = button.textContent.toLowerCase().trim();
-            const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-            if ((text === 'message' || ariaLabel.includes('message')) && !ariaLabel.includes('send') && !ariaLabel.includes('share') && !ariaLabel.includes('post') && !text.includes('send') && !text.includes('share') && !text.includes('more')) {
-                return button;
-            }
+      const buttons = document.querySelectorAll("button, a");
+      for (const button of buttons) {
+        const text = button.textContent.toLowerCase().trim();
+        const ariaLabel =
+          button.getAttribute("aria-label")?.toLowerCase() || "";
+        if (
+          (text === "message" || ariaLabel.includes("message")) &&
+          !ariaLabel.includes("send") &&
+          !ariaLabel.includes("share") &&
+          !ariaLabel.includes("post") &&
+          !text.includes("send") &&
+          !text.includes("share") &&
+          !text.includes("more")
+        ) {
+          return button;
         }
-        return null;
+      }
+      return null;
     }
 
     async pasteMessageDirectly(messageInput, message) {
-        if (!messageInput) return;
-        messageInput.focus();
-        await this.delay(500);
+      if (!messageInput) return;
+      messageInput.focus();
+      await this.delay(500);
 
-        if (messageInput.contentEditable === 'true') {
-            messageInput.innerHTML = `<p>${message}</p>`;
-            const range = document.createRange();
-            const selection = window.getSelection();
-            const textNode = messageInput.querySelector('p') || messageInput;
-            range.selectNodeContents(textNode);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        } else {
-            messageInput.value = message;
-        }
+      if (messageInput.contentEditable === "true") {
+        messageInput.innerHTML = `<p>${message}</p>`;
+        const range = document.createRange();
+        const selection = window.getSelection();
+        const textNode = messageInput.querySelector("p") || messageInput;
+        range.selectNodeContents(textNode);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        messageInput.value = message;
+      }
 
-        const events = [new Event('focus', { bubbles: true }), new Event('input', { bubbles: true }), new Event('change', { bubbles: true }), new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }), new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' })];
-        for (const event of events) {
-            messageInput.dispatchEvent(event);
-            await this.delay(100);
-        }
-        messageInput.focus();
-        await this.delay(1000);
+      const events = [
+        new Event("focus", { bubbles: true }),
+        new Event("input", { bubbles: true }),
+        new Event("change", { bubbles: true }),
+        new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }),
+        new KeyboardEvent("keyup", { bubbles: true, key: "Enter" }),
+      ];
+      for (const event of events) {
+        messageInput.dispatchEvent(event);
+        await this.delay(100);
+      }
+      messageInput.focus();
+      await this.delay(1000);
     }
 
     async pasteUsingClipboard(messageInput, message) {
-        try {
-            messageInput.focus();
-            await this.delay(300);
-            messageInput.textContent = '';
-            await navigator.clipboard.writeText(message);
-            await this.delay(200);
+      try {
+        messageInput.focus();
+        await this.delay(300);
+        messageInput.textContent = "";
+        await navigator.clipboard.writeText(message);
+        await this.delay(200);
 
-            const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() });
-            pasteEvent.clipboardData.setData('text/plain', message);
-            messageInput.dispatchEvent(pasteEvent);
-            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-            messageInput.dispatchEvent(new Event('change', { bubbles: true }));
-            await this.delay(500);
-        } catch (error) {
-            messageInput.textContent = message;
-            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        const pasteEvent = new ClipboardEvent("paste", {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: new DataTransfer(),
+        });
+        pasteEvent.clipboardData.setData("text/plain", message);
+        messageInput.dispatchEvent(pasteEvent);
+        messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+        messageInput.dispatchEvent(new Event("change", { bubbles: true }));
+        await this.delay(500);
+      } catch (error) {
+        messageInput.textContent = message;
+        messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
 
     async findMessageInput() {
-        const selectors = ['.msg-form__contenteditable', '.msg-form__msg-content-container div[contenteditable="true"]', 'div[data-placeholder*="message"]', '.compose-form__message-field', 'div[contenteditable="true"][data-placeholder]', '.msg-form__msg-content-container--scrollable div[contenteditable="true"]', '.msg-form__placeholder + div[contenteditable="true"]', 'div[contenteditable="true"][role="textbox"]', '.msg-form div[contenteditable="true"]'];
+      const selectors = [
+        ".msg-form__contenteditable",
+        '.msg-form__msg-content-container div[contenteditable="true"]',
+        'div[data-placeholder*="message"]',
+        ".compose-form__message-field",
+        'div[contenteditable="true"][data-placeholder]',
+        '.msg-form__msg-content-container--scrollable div[contenteditable="true"]',
+        '.msg-form__placeholder + div[contenteditable="true"]',
+        'div[contenteditable="true"][role="textbox"]',
+        '.msg-form div[contenteditable="true"]',
+      ];
 
-        for (let attempt = 0; attempt < 8; attempt++) {
-            for (const selector of selectors) {
-                const input = document.querySelector(selector);
-                if (input && input.isContentEditable && input.offsetParent !== null) return input;
-            }
-
-            const allContentEditables = document.querySelectorAll('div[contenteditable="true"]');
-            for (const element of allContentEditables) {
-                if (element.offsetParent === null) continue;
-                const placeholder = element.getAttribute('data-placeholder') || element.getAttribute('aria-label') || element.getAttribute('placeholder');
-                if (placeholder && placeholder.toLowerCase().includes('message')) return element;
-                const parentContainer = element.closest('.msg-form, .compose-form');
-                if (parentContainer) return element;
-            }
-            await this.delay(1000);
+      for (let attempt = 0; attempt < 8; attempt++) {
+        for (const selector of selectors) {
+          const input = document.querySelector(selector);
+          if (input && input.isContentEditable && input.offsetParent !== null)
+            return input;
         }
-        return null;
+
+        const allContentEditables = document.querySelectorAll(
+          'div[contenteditable="true"]'
+        );
+        for (const element of allContentEditables) {
+          if (element.offsetParent === null) continue;
+          const placeholder =
+            element.getAttribute("data-placeholder") ||
+            element.getAttribute("aria-label") ||
+            element.getAttribute("placeholder");
+          if (placeholder && placeholder.toLowerCase().includes("message"))
+            return element;
+          const parentContainer = element.closest(".msg-form, .compose-form");
+          if (parentContainer) return element;
+        }
+        await this.delay(1000);
+      }
+      return null;
     }
 
     async typeText(element, text) {
-        if (element.contentEditable === 'true') {
-            element.focus();
-            if (!element.textContent.trim()) element.textContent = '';
-            element.textContent += text;
+      if (element.contentEditable === "true") {
+        element.focus();
+        if (!element.textContent.trim()) element.textContent = "";
+        element.textContent += text;
 
-            const range = document.createRange();
-            const selection = window.getSelection();
-            range.selectNodeContents(element);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
 
-            element.dispatchEvent(new Event('focus', { bubbles: true }));
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
-            element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-        } else {
-            element.focus();
-            element.value += text;
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
-            element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-        }
+        element.dispatchEvent(new Event("focus", { bubbles: true }));
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+      } else {
+        element.focus();
+        element.value += text;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+      }
     }
 
     async clickSendButton() {
-        await this.delay(2000);
-        const sendSelectors = ['.msg-form__send-button', 'button[type="submit"]', '.msg-form button[type="submit"]', 'button[data-control-name="send"]', 'button[aria-label*="Send"]:not([aria-label*="options"])', '.compose-form__send-button', '.msg-form__send-btn'];
+      await this.delay(2000);
+      const sendSelectors = [
+        ".msg-form__send-button",
+        'button[type="submit"]',
+        '.msg-form button[type="submit"]',
+        'button[data-control-name="send"]',
+        'button[aria-label*="Send"]:not([aria-label*="options"])',
+        ".compose-form__send-button",
+        ".msg-form__send-btn",
+      ];
 
-        for (let attempt = 0; attempt < 10; attempt++) {
-            for (const selector of sendSelectors) {
-                const button = document.querySelector(selector);
-                if (button && !button.disabled && button.offsetParent !== null) {
-                    const text = button.textContent.toLowerCase().trim();
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                    if (!text.includes('options') && !ariaLabel.includes('options')) {
-                        button.click();
-                        await this.delay(1000);
-                        return;
-                    }
-                }
+      for (let attempt = 0; attempt < 10; attempt++) {
+        for (const selector of sendSelectors) {
+          const button = document.querySelector(selector);
+          if (button && !button.disabled && button.offsetParent !== null) {
+            const text = button.textContent.toLowerCase().trim();
+            const ariaLabel =
+              button.getAttribute("aria-label")?.toLowerCase() || "";
+            if (!text.includes("options") && !ariaLabel.includes("options")) {
+              button.click();
+              await this.delay(1000);
+              return;
             }
-
-            const buttons = document.querySelectorAll('button');
-            for (const button of buttons) {
-                const text = button.textContent.toLowerCase().trim();
-                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                if (text === 'send' && !text.includes('options') && !ariaLabel.includes('options') && !button.disabled && button.offsetParent !== null && button.offsetWidth > 0 && button.offsetHeight > 0) {
-                    button.click();
-                    await this.delay(1000);
-                    return;
-                }
-            }
-            await this.delay(500);
+          }
         }
+
+        const buttons = document.querySelectorAll("button");
+        for (const button of buttons) {
+          const text = button.textContent.toLowerCase().trim();
+          const ariaLabel =
+            button.getAttribute("aria-label")?.toLowerCase() || "";
+          if (
+            text === "send" &&
+            !text.includes("options") &&
+            !ariaLabel.includes("options") &&
+            !button.disabled &&
+            button.offsetParent !== null &&
+            button.offsetWidth > 0 &&
+            button.offsetHeight > 0
+          ) {
+            button.click();
+            await this.delay(1000);
+            return;
+          }
+        }
+        await this.delay(500);
+      }
     }
     getPageInfo() {
-        return {
-            url: window.location.href,
-            title: document.title,
-            isSearchPage: this.isSearchResultsPage(),
-            connectButtonsCount: this.findConnectButtons().length
-        };
+      return {
+        url: window.location.href,
+        title: document.title,
+        isSearchPage: this.isSearchResultsPage(),
+        connectButtonsCount: this.findConnectButtons().length,
+      };
     }
 
     async collectProfiles() {
-        const profiles = [];
-        if (window.location.href.includes('/mynetwork/')) return this.collectNetworkProfiles();
+      const profiles = [];
+      if (window.location.href.includes("/mynetwork/"))
+        return this.collectNetworkProfiles();
 
-        let profileCards = [];
-        for (const selector of this.PROFILE_SELECTORS) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) {
-                console.log(`Found ${profileCards.length} profile cards using selector: ${selector}`);
-                break;
-            }
+      let profileCards = [];
+      for (const selector of this.PROFILE_SELECTORS) {
+        profileCards = document.querySelectorAll(selector);
+        if (profileCards.length > 0) {
+          console.log(
+            `Found ${profileCards.length} profile cards using selector: ${selector}`
+          );
+          break;
         }
+      }
 
-        profileCards.forEach((card) => {
-            const profile = this.extractProfileFromCard(card);
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-            }
-        });
-
-        if (profiles.length === 0) {
-            const alternativeProfiles = this.extractProfilesAlternative();
-            if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
-                profiles.push(...alternativeProfiles);
-            }
+      profileCards.forEach((card) => {
+        const profile = this.extractProfileFromCard(card);
+        if (profile?.name && profile?.url) {
+          profiles.push(profile);
         }
+      });
 
-        return profiles;
+      if (profiles.length === 0) {
+        const alternativeProfiles = this.extractProfilesAlternative();
+        if (
+          Array.isArray(alternativeProfiles) &&
+          alternativeProfiles.length > 0
+        ) {
+          profiles.push(...alternativeProfiles);
+        }
+      }
+
+      return profiles;
     }
 
     async collectCurrentPageOnly() {
-        const allProfiles = await this.collectProfiles();
-        const limitedProfiles = allProfiles.slice(0, 10);
-        limitedProfiles.forEach(profile => this.sendProfilesRealTime([profile]));
-        return limitedProfiles;
+      const allProfiles = await this.collectProfiles();
+      const limitedProfiles = allProfiles.slice(0, 10);
+      limitedProfiles.forEach((profile) =>
+        this.sendProfilesRealTime([profile])
+      );
+      return limitedProfiles;
     }
 
     async collectProfilesWithScrolling() {
-        const profiles = [];
-        const maxScrollAttempts = 5;
-        let scrollAttempts = 0;
+      const profiles = [];
+      const maxScrollAttempts = 5;
+      let scrollAttempts = 0;
 
-        // Initial collection without scrolling
-        let searchResults = this.getSearchResultElements();
-        searchResults.forEach((card) => {
-            if (profiles.length < 20) {
-                const profile = this.extractProfileFromCard(card);
-                if (profile && profile.name && profile.url) {
-                    profile.source = 'network-search';
-                    profiles.push(profile);
-                }
-            }
-        });
+      // Initial collection without scrolling
+      let searchResults = this.getSearchResultElements();
+      searchResults.forEach((card) => {
+        if (profiles.length < 20) {
+          const profile = this.extractProfileFromCard(card);
+          if (profile && profile.name && profile.url) {
+            profile.source = "network-search";
+            profiles.push(profile);
+          }
+        }
+      });
 
-        // Scroll to load more profiles
-        while (scrollAttempts < maxScrollAttempts && profiles.length < 20 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
-            scrollAttempts++;
-            const initialCount = profiles.length;
+      // Scroll to load more profiles
+      while (
+        scrollAttempts < maxScrollAttempts &&
+        profiles.length < 20 &&
+        this.isAutoCollectionEnabled &&
+        this.isRealTimeMode
+      ) {
+        scrollAttempts++;
+        const initialCount = profiles.length;
 
-            if (scrollAttempts <= 3) {
-                // Scroll down to load more content
-                window.scrollBy(0, window.innerHeight);
-                await this.delay(2000);
-                window.scrollTo(0, document.body.scrollHeight);
-            } else {
-                // Scroll back up
-                window.scrollBy(0, -window.innerHeight);
-                await this.delay(2000);
+        if (scrollAttempts <= 3) {
+          // Scroll down to load more content
+          window.scrollBy(0, window.innerHeight);
+          await this.delay(2000);
+          window.scrollTo(0, document.body.scrollHeight);
+        } else {
+          // Scroll back up
+          window.scrollBy(0, -window.innerHeight);
+          await this.delay(2000);
 
-                if (scrollAttempts === maxScrollAttempts) {
-                    window.scrollTo(0, 0);
-                }
-            }
-
-            await this.delay(2000);
-
-            // Collect newly loaded profiles
-            searchResults = this.getSearchResultElements();
-            searchResults.forEach((card) => {
-                if (profiles.length < 20) {
-                    const profile = this.extractProfileFromCard(card);
-                    if (profile && profile.name && profile.url) {
-                        const isDuplicate = profiles.some(p => p.url === profile.url);
-                        if (!isDuplicate) {
-                            profile.source = 'network-search';
-                            profiles.push(profile);
-                        }
-                    }
-                }
-            });
-
-            // If no new profiles were found, break early
-            if (profiles.length === initialCount) {
-                break;
-            }
+          if (scrollAttempts === maxScrollAttempts) {
+            window.scrollTo(0, 0);
+          }
         }
 
-        return profiles;
+        await this.delay(2000);
+
+        // Collect newly loaded profiles
+        searchResults = this.getSearchResultElements();
+        searchResults.forEach((card) => {
+          if (profiles.length < 20) {
+            const profile = this.extractProfileFromCard(card);
+            if (profile && profile.name && profile.url) {
+              const isDuplicate = profiles.some((p) => p.url === profile.url);
+              if (!isDuplicate) {
+                profile.source = "network-search";
+                profiles.push(profile);
+              }
+            }
+          }
+        });
+
+        // If no new profiles were found, break early
+        if (profiles.length === initialCount) {
+          break;
+        }
+      }
+
+      return profiles;
     }
 
     async collectMultiplePages(maxPages = 4) {
-        const allProfiles = [];
-        let currentPage = 1;
+      const allProfiles = [];
+      let currentPage = 1;
 
-        try {
-            this.sendCollectionStatus(`🚀 Starting collection from ${maxPages} pages...`);
+      try {
+        this.sendCollectionStatus(
+          `🚀 Starting collection from ${maxPages} pages...`
+        );
 
-            while (currentPage <= maxPages && this.isAutoCollectionEnabled && this.isRealTimeMode) {
-                this.sendCollectionStatus(`Processing page ${currentPage}`);
+        while (
+          currentPage <= maxPages &&
+          this.isAutoCollectionEnabled &&
+          this.isRealTimeMode
+        ) {
+          this.sendCollectionStatus(`Processing page ${currentPage}`);
 
-                // First scroll and collect profiles from current page
-                this.sendCollectionStatus(`Scrolling and collecting from page ${currentPage}`);
-                let pageProfiles = [];
+          // First scroll and collect profiles from current page
+          this.sendCollectionStatus(
+            `Scrolling and collecting from page ${currentPage}`
+          );
+          let pageProfiles = [];
 
-                try {
-                    // Wait for page to fully load before collecting
-                    await this.delay(2000);
-                    await this.waitForSearchResults();
+          try {
+            // Wait for page to fully load before collecting
+            await this.delay(2000);
+            await this.waitForSearchResults();
 
-                    // Try main collection method first
-                    this.sendCollectionStatus(`Trying main collection method...`);
-                    pageProfiles = await this.collectProfiles();
-                    if (!Array.isArray(pageProfiles)) pageProfiles = [];
+            // Try main collection method first
+            this.sendCollectionStatus(`Trying main collection method...`);
+            pageProfiles = await this.collectProfiles();
+            if (!Array.isArray(pageProfiles)) pageProfiles = [];
 
-                    if (pageProfiles.length === 0) {
-                        // Try scrolling method
-                        this.sendCollectionStatus(`No profiles found with main method, trying scrolling...`);
-                        pageProfiles = await this.collectProfilesWithScrolling();
-                        if (!Array.isArray(pageProfiles)) pageProfiles = [];
-                    }
-
-                    if (pageProfiles.length === 0) {
-                        // Try alternative collection method
-                        this.sendCollectionStatus(`No profiles found with scrolling, trying alternative method...`);
-                        const alternativeProfiles = this.extractProfilesAlternative();
-                        if (Array.isArray(alternativeProfiles) && alternativeProfiles.length > 0) {
-                            pageProfiles = alternativeProfiles.slice(0, 10);
-                            this.sendCollectionStatus(`Found ${pageProfiles.length} profiles using alternative method`);
-                        } else {
-                            this.sendCollectionStatus(`Page ${currentPage} completed (no profiles found)`);
-                        }
-                    } else {
-                        this.sendCollectionStatus(`Found ${pageProfiles.length} profiles on page ${currentPage}`);
-                    }
-                } catch (error) {
-                    console.error(`Error collecting from page ${currentPage}:`, error);
-                    pageProfiles = [];
-                    this.sendCollectionStatus(`Page ${currentPage} failed - ${error.message}`);
-                }
-
-                if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
-                    pageProfiles.forEach(profile => {
-                        if (profile && typeof profile === 'object') {
-                            profile.collectedFromPage = currentPage;
-                            profile.collectionTimestamp = new Date().toISOString();
-                        }
-                    });
-
-                    allProfiles.push(...pageProfiles);
-                    this.sendProfilesRealTime(pageProfiles);
-                    this.sendCollectionStatus(`Completed page ${currentPage} with ${pageProfiles.length} profiles`);
-                }
-
-                // Navigate to next page if not the last page
-                if (currentPage < maxPages) {
-                    const nextPage = currentPage + 1;
-                    this.sendCollectionStatus(`Navigating to page ${nextPage}`);
-                    let navigationSuccess = false;
-                    let attempts = 0;
-                    const maxAttempts = 3;
-
-                    while (!navigationSuccess && attempts < maxAttempts) {
-                        attempts++;
-                        this.sendCollectionStatus(`Attempt ${attempts}/${maxAttempts} to navigate to page ${nextPage}`);
-
-                        const clickSuccess = await this.clickPaginationButton(nextPage);
-
-                        if (clickSuccess) {
-                            await this.delay(3000);
-                            await this.waitForSearchResults();
-
-                            const verifiedPage = this.getCurrentPageNumber();
-                            if (verifiedPage === nextPage) {
-                                navigationSuccess = true;
-                                this.sendCollectionStatus(`Successfully navigated to page ${nextPage}`);
-                            } else {
-                                this.sendCollectionStatus(`Navigation verification failed: expected page ${nextPage}, got ${verifiedPage}`);
-                            }
-                        } else {
-                            this.sendCollectionStatus(`Failed to click pagination button for page ${nextPage}`);
-                        }
-
-                        if (!navigationSuccess && attempts < maxAttempts) {
-                            await this.delay(2000);
-                        }
-                    }
-
-                    if (!navigationSuccess) {
-                        this.sendCollectionStatus(`❌ Failed to navigate to page ${nextPage} after ${maxAttempts} attempts. Stopping collection.`);
-                        break;
-                    }
-                }
-
-                currentPage++;
-                if (currentPage <= maxPages) await this.delay(1000);
+            if (pageProfiles.length === 0) {
+              // Try scrolling method
+              this.sendCollectionStatus(
+                `No profiles found with main method, trying scrolling...`
+              );
+              pageProfiles = await this.collectProfilesWithScrolling();
+              if (!Array.isArray(pageProfiles)) pageProfiles = [];
             }
 
-            const pagesProcessed = currentPage - 1;
-            this.sendCollectionStatus(`All pages completed (${pagesProcessed}/${maxPages})`);
-            return allProfiles;
-
-        } catch (error) {
-            let errorMessage = 'Collection error occurred';
-            if (error.message.includes('iterable') || error.message.includes('Symbol.iterator')) {
-                errorMessage = 'Profile data format error - collection stopped';
-            } else if (error.message.includes('timeout')) {
-                errorMessage = 'Page loading timeout - collection stopped';
+            if (pageProfiles.length === 0) {
+              // Try alternative collection method
+              this.sendCollectionStatus(
+                `No profiles found with scrolling, trying alternative method...`
+              );
+              const alternativeProfiles = this.extractProfilesAlternative();
+              if (
+                Array.isArray(alternativeProfiles) &&
+                alternativeProfiles.length > 0
+              ) {
+                pageProfiles = alternativeProfiles.slice(0, 10);
+                this.sendCollectionStatus(
+                  `Found ${pageProfiles.length} profiles using alternative method`
+                );
+              } else {
+                this.sendCollectionStatus(
+                  `Page ${currentPage} completed (no profiles found)`
+                );
+              }
             } else {
-                errorMessage = `Collection error: ${error.message}`;
+              this.sendCollectionStatus(
+                `Found ${pageProfiles.length} profiles on page ${currentPage}`
+              );
             }
+          } catch (error) {
+            console.error(`Error collecting from page ${currentPage}:`, error);
+            pageProfiles = [];
+            this.sendCollectionStatus(
+              `Page ${currentPage} failed - ${error.message}`
+            );
+          }
 
-            this.sendCollectionStatus(errorMessage);
-            return Array.isArray(allProfiles) ? allProfiles : [];
-        }
-    }
+          if (Array.isArray(pageProfiles) && pageProfiles.length > 0) {
+            pageProfiles.forEach((profile) => {
+              if (profile && typeof profile === "object") {
+                profile.collectedFromPage = currentPage;
+                profile.collectionTimestamp = new Date().toISOString();
+              }
+            });
 
-    async clickPaginationButton(pageNumber) {
-        try {
-            // Enhanced selectors for different LinkedIn layouts
-            const selectors = [
-                `button[aria-label="Page ${pageNumber}"]`,
-                `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
-                `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
-                `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
-                `[data-test-pagination-page-btn="${pageNumber}"]`,
-                `.pagination button[aria-label="Page ${pageNumber}"]`,
-                `button[data-test-pagination-page-btn="${pageNumber}"]`,
-                `.artdeco-pagination__pages button[aria-label="Page ${pageNumber}"]`,
-                `button[data-test-id="pagination-page-${pageNumber}"]`,
-                `button[aria-label="${pageNumber}"]`,
-                `button:contains("${pageNumber}")`,
-                `.artdeco-pagination button:contains("${pageNumber}")`
-            ];
+            allProfiles.push(...pageProfiles);
+            this.sendProfilesRealTime(pageProfiles);
+            this.sendCollectionStatus(
+              `Completed page ${currentPage} with ${pageProfiles.length} profiles`
+            );
+          }
 
-            let pageButton = null;
+          // Navigate to next page if not the last page
+          if (currentPage < maxPages) {
+            const nextPage = currentPage + 1;
+            this.sendCollectionStatus(`Navigating to page ${nextPage}`);
+            let navigationSuccess = false;
+            let attempts = 0;
+            const maxAttempts = 3;
 
-            // First try direct selectors
-            for (const selector of selectors) {
-                try {
-                    pageButton = document.querySelector(selector);
-                    if (pageButton && !pageButton.disabled) {
-                        break;
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
+            while (!navigationSuccess && attempts < maxAttempts) {
+              attempts++;
+              this.sendCollectionStatus(
+                `Attempt ${attempts}/${maxAttempts} to navigate to page ${nextPage}`
+              );
 
-            // Fallback: search through all buttons
-            if (!pageButton) {
-                const allButtons = document.querySelectorAll('button');
+              const clickSuccess = await this.clickPaginationButton(nextPage);
 
-                for (const button of allButtons) {
-                    if (button.disabled) continue;
-
-                    const buttonText = button.textContent.trim();
-                    const span = button.querySelector('span');
-                    const spanText = span ? span.textContent.trim() : '';
-
-                    if (buttonText === pageNumber.toString() || spanText === pageNumber.toString()) {
-                        const ariaLabel = button.getAttribute('aria-label');
-                        const parentClass = button.parentElement ? button.parentElement.className : '';
-                        const buttonClass = button.className;
-
-                        const isPaginationButton =
-                            (ariaLabel && ariaLabel.toLowerCase().includes('page')) ||
-                            parentClass.includes('pagination') ||
-                            buttonClass.includes('pagination') ||
-                            parentClass.includes('artdeco-pagination') ||
-                            buttonClass.includes('artdeco-pagination') ||
-                            /^\d+$/.test(buttonText) ||
-                            /^\d+$/.test(spanText);
-
-                        if (isPaginationButton) {
-                            pageButton = button;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (pageButton) {
-    
-
-                // Ensure button is visible and clickable
-                pageButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.delay(1000);
-
-                // Try multiple click methods
-                try {
-                    pageButton.click();
-                } catch (clickError) {
-    
-                    pageButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                }
-
-                await this.delay(4000); // Increased wait time
-                await this.waitForSearchResults();
-
-
-                return true;
-            } else {
-
-                if (pageNumber > 1) {
-                    return await this.clickNextButtonToPage(pageNumber);
-                }
-                return false;
-            }
-
-        } catch (error) {
-            console.error(`Error clicking pagination button for page ${pageNumber}:`, error);
-            return false;
-        }
-    }
-
-    getCurrentPageNumber() {
-        try {
-            // Look for the current page button (aria-current="true")
-            const currentPageButton = document.querySelector('button[aria-current="true"]');
-            if (currentPageButton) {
-                const span = currentPageButton.querySelector('span');
-                if (span) {
-                    const pageNum = parseInt(span.textContent.trim());
-                    if (!isNaN(pageNum)) return pageNum;
-                }
-                // Try button text directly
-                const pageNum = parseInt(currentPageButton.textContent.trim());
-                if (!isNaN(pageNum)) return pageNum;
-            }
-
-            // Look for active/selected pagination button
-            const activeButton = document.querySelector('.artdeco-pagination__button--active, .pagination__button--active, button[aria-selected="true"]');
-            if (activeButton) {
-                const pageNum = parseInt(activeButton.textContent.trim());
-                if (!isNaN(pageNum)) return pageNum;
-            }
-
-            // Fallback: check URL for page parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            const pageParam = urlParams.get('page');
-            if (pageParam) {
-                const pageNum = parseInt(pageParam);
-                if (!isNaN(pageNum)) return pageNum;
-            }
-
-            return 1; // Default to page 1
-        } catch (error) {
-            console.error('Error getting current page number:', error);
-            return 1;
-        }
-    }
-
-    async clickNextButtonToPage(targetPage) {
-        try {
-            const currentPage = this.getCurrentPageNumber();
-            console.log(`Current page: ${currentPage}, Target page: ${targetPage}`);
-
-            if (currentPage >= targetPage) {
-                console.log('Already on or past target page');
-                return true;
-            }
-
-            const clicksNeeded = targetPage - currentPage;
-            console.log(`Need to click Next button ${clicksNeeded} times`);
-
-            for (let i = 0; i < clicksNeeded; i++) {
-                console.log(`Clicking Next button (${i + 1}/${clicksNeeded})`);
-
-                // Find Next button
-                const nextButton = this.findNextButton();
-                if (!nextButton) {
-        
-                    return false;
-                }
-
-                // Click Next button
-                nextButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.delay(500);
-                nextButton.click();
-
-                // Wait for navigation
+              if (clickSuccess) {
                 await this.delay(3000);
                 await this.waitForSearchResults();
 
-                const newPage = this.getCurrentPageNumber();
-
-                if (newPage === targetPage) {
-                    return true;
+                const verifiedPage = this.getCurrentPageNumber();
+                if (verifiedPage === nextPage) {
+                  navigationSuccess = true;
+                  this.sendCollectionStatus(
+                    `Successfully navigated to page ${nextPage}`
+                  );
+                } else {
+                  this.sendCollectionStatus(
+                    `Navigation verification failed: expected page ${nextPage}, got ${verifiedPage}`
+                  );
                 }
+              } else {
+                this.sendCollectionStatus(
+                  `Failed to click pagination button for page ${nextPage}`
+                );
+              }
+
+              if (!navigationSuccess && attempts < maxAttempts) {
+                await this.delay(2000);
+              }
             }
 
-            return this.getCurrentPageNumber() === targetPage;
+            if (!navigationSuccess) {
+              this.sendCollectionStatus(
+                `❌ Failed to navigate to page ${nextPage} after ${maxAttempts} attempts. Stopping collection.`
+              );
+              break;
+            }
+          }
 
-        } catch (error) {
-            console.error('Error in clickNextButtonToPage:', error);
-            return false;
+          currentPage++;
+          if (currentPage <= maxPages) await this.delay(1000);
         }
+
+        const pagesProcessed = currentPage - 1;
+        this.sendCollectionStatus(
+          `All pages completed (${pagesProcessed}/${maxPages})`
+        );
+        return allProfiles;
+      } catch (error) {
+        let errorMessage = "Collection error occurred";
+        if (
+          error.message.includes("iterable") ||
+          error.message.includes("Symbol.iterator")
+        ) {
+          errorMessage = "Profile data format error - collection stopped";
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "Page loading timeout - collection stopped";
+        } else {
+          errorMessage = `Collection error: ${error.message}`;
+        }
+
+        this.sendCollectionStatus(errorMessage);
+        return Array.isArray(allProfiles) ? allProfiles : [];
+      }
+    }
+
+    async clickPaginationButton(pageNumber) {
+      try {
+        // Enhanced selectors for different LinkedIn layouts
+        const selectors = [
+          `button[aria-label="Page ${pageNumber}"]`,
+          `button[aria-current="false"][aria-label="Page ${pageNumber}"]`,
+          `.artdeco-pagination__button[aria-label="Page ${pageNumber}"]`,
+          `.artdeco-pagination li button[aria-label="Page ${pageNumber}"]`,
+          `[data-test-pagination-page-btn="${pageNumber}"]`,
+          `.pagination button[aria-label="Page ${pageNumber}"]`,
+          `button[data-test-pagination-page-btn="${pageNumber}"]`,
+          `.artdeco-pagination__pages button[aria-label="Page ${pageNumber}"]`,
+          `button[data-test-id="pagination-page-${pageNumber}"]`,
+          `button[aria-label="${pageNumber}"]`,
+          `button:contains("${pageNumber}")`,
+          `.artdeco-pagination button:contains("${pageNumber}")`,
+        ];
+
+        let pageButton = null;
+
+        // First try direct selectors
+        for (const selector of selectors) {
+          try {
+            pageButton = document.querySelector(selector);
+            if (pageButton && !pageButton.disabled) {
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        // Fallback: search through all buttons
+        if (!pageButton) {
+          const allButtons = document.querySelectorAll("button");
+
+          for (const button of allButtons) {
+            if (button.disabled) continue;
+
+            const buttonText = button.textContent.trim();
+            const span = button.querySelector("span");
+            const spanText = span ? span.textContent.trim() : "";
+
+            if (
+              buttonText === pageNumber.toString() ||
+              spanText === pageNumber.toString()
+            ) {
+              const ariaLabel = button.getAttribute("aria-label");
+              const parentClass = button.parentElement
+                ? button.parentElement.className
+                : "";
+              const buttonClass = button.className;
+
+              const isPaginationButton =
+                (ariaLabel && ariaLabel.toLowerCase().includes("page")) ||
+                parentClass.includes("pagination") ||
+                buttonClass.includes("pagination") ||
+                parentClass.includes("artdeco-pagination") ||
+                buttonClass.includes("artdeco-pagination") ||
+                /^\d+$/.test(buttonText) ||
+                /^\d+$/.test(spanText);
+
+              if (isPaginationButton) {
+                pageButton = button;
+                break;
+              }
+            }
+          }
+        }
+
+        if (pageButton) {
+          // Ensure button is visible and clickable
+          pageButton.scrollIntoView({ behavior: "smooth", block: "center" });
+          await this.delay(1000);
+
+          // Try multiple click methods
+          try {
+            pageButton.click();
+          } catch (clickError) {
+            pageButton.dispatchEvent(
+              new MouseEvent("click", { bubbles: true, cancelable: true })
+            );
+          }
+
+          await this.delay(4000); // Increased wait time
+          await this.waitForSearchResults();
+
+          return true;
+        } else {
+          if (pageNumber > 1) {
+            return await this.clickNextButtonToPage(pageNumber);
+          }
+          return false;
+        }
+      } catch (error) {
+        console.error(
+          `Error clicking pagination button for page ${pageNumber}:`,
+          error
+        );
+        return false;
+      }
+    }
+
+    getCurrentPageNumber() {
+      try {
+        // Look for the current page button (aria-current="true")
+        const currentPageButton = document.querySelector(
+          'button[aria-current="true"]'
+        );
+        if (currentPageButton) {
+          const span = currentPageButton.querySelector("span");
+          if (span) {
+            const pageNum = parseInt(span.textContent.trim());
+            if (!isNaN(pageNum)) return pageNum;
+          }
+          // Try button text directly
+          const pageNum = parseInt(currentPageButton.textContent.trim());
+          if (!isNaN(pageNum)) return pageNum;
+        }
+
+        // Look for active/selected pagination button
+        const activeButton = document.querySelector(
+          '.artdeco-pagination__button--active, .pagination__button--active, button[aria-selected="true"]'
+        );
+        if (activeButton) {
+          const pageNum = parseInt(activeButton.textContent.trim());
+          if (!isNaN(pageNum)) return pageNum;
+        }
+
+        // Fallback: check URL for page parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageParam = urlParams.get("page");
+        if (pageParam) {
+          const pageNum = parseInt(pageParam);
+          if (!isNaN(pageNum)) return pageNum;
+        }
+
+        return 1; // Default to page 1
+      } catch (error) {
+        console.error("Error getting current page number:", error);
+        return 1;
+      }
+    }
+
+    async clickNextButtonToPage(targetPage) {
+      try {
+        const currentPage = this.getCurrentPageNumber();
+        console.log(`Current page: ${currentPage}, Target page: ${targetPage}`);
+
+        if (currentPage >= targetPage) {
+          console.log("Already on or past target page");
+          return true;
+        }
+
+        const clicksNeeded = targetPage - currentPage;
+        console.log(`Need to click Next button ${clicksNeeded} times`);
+
+        for (let i = 0; i < clicksNeeded; i++) {
+          console.log(`Clicking Next button (${i + 1}/${clicksNeeded})`);
+
+          // Find Next button
+          const nextButton = this.findNextButton();
+          if (!nextButton) {
+            return false;
+          }
+
+          // Click Next button
+          nextButton.scrollIntoView({ behavior: "smooth", block: "center" });
+          await this.delay(500);
+          nextButton.click();
+
+          // Wait for navigation
+          await this.delay(3000);
+          await this.waitForSearchResults();
+
+          const newPage = this.getCurrentPageNumber();
+
+          if (newPage === targetPage) {
+            return true;
+          }
+        }
+
+        return this.getCurrentPageNumber() === targetPage;
+      } catch (error) {
+        console.error("Error in clickNextButtonToPage:", error);
+        return false;
+      }
     }
 
     findNextButton() {
-        const nextSelectors = [
-            'button[aria-label="Next"]',
-            'button[aria-label="Next page"]',
-            'button:contains("Next")',
-            '.artdeco-pagination__button--next',
-            'button[data-test-pagination-page-btn="next"]',
-            '.artdeco-pagination button[aria-label*="Next"]',
-            '.pagination button[aria-label*="Next"]'
-        ];
+      const nextSelectors = [
+        'button[aria-label="Next"]',
+        'button[aria-label="Next page"]',
+        'button:contains("Next")',
+        ".artdeco-pagination__button--next",
+        'button[data-test-pagination-page-btn="next"]',
+        '.artdeco-pagination button[aria-label*="Next"]',
+        '.pagination button[aria-label*="Next"]',
+      ];
 
-        for (const selector of nextSelectors) {
-            try {
-                const button = document.querySelector(selector);
-                if (button && !button.disabled) return button;
-            } catch (e) {
-                continue;
-            }
+      for (const selector of nextSelectors) {
+        try {
+          const button = document.querySelector(selector);
+          if (button && !button.disabled) return button;
+        } catch (e) {
+          continue;
         }
+      }
 
-        // Fallback: look for buttons with "Next" text or arrow symbols
-        const allButtons = document.querySelectorAll('button');
+      // Fallback: look for buttons with "Next" text or arrow symbols
+      const allButtons = document.querySelectorAll("button");
 
-        for (const button of allButtons) {
-            if (button.disabled) continue;
+      for (const button of allButtons) {
+        if (button.disabled) continue;
 
-            const buttonText = button.textContent.toLowerCase().trim();
-            const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+        const buttonText = button.textContent.toLowerCase().trim();
+        const ariaLabel =
+          button.getAttribute("aria-label")?.toLowerCase() || "";
 
-            // Check for Next text or right arrow symbols
-            if ((buttonText.includes('next') ||
-                 ariaLabel.includes('next') ||
-                 buttonText.includes('→') ||
-                 buttonText.includes('›') ||
-                 button.innerHTML.includes('chevron-right') ||
-                 button.innerHTML.includes('arrow-right')) &&
-                (button.closest('.artdeco-pagination') ||
-                 button.closest('.pagination') ||
-                 ariaLabel.includes('page'))) {
-                return button;
-            }
+        // Check for Next text or right arrow symbols
+        if (
+          (buttonText.includes("next") ||
+            ariaLabel.includes("next") ||
+            buttonText.includes("→") ||
+            buttonText.includes("›") ||
+            button.innerHTML.includes("chevron-right") ||
+            button.innerHTML.includes("arrow-right")) &&
+          (button.closest(".artdeco-pagination") ||
+            button.closest(".pagination") ||
+            ariaLabel.includes("page"))
+        ) {
+          return button;
         }
+      }
 
-        return null;
+      return null;
     }
 
-
-
     buildPageUrl(baseUrl, pageNumber) {
-        const separator = baseUrl.includes('?') ? '&' : '?';
-        return `${baseUrl}${separator}page=${pageNumber}`;
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      return `${baseUrl}${separator}page=${pageNumber}`;
     }
 
     async waitForPageLoad() {
-        return new Promise((resolve) => {
-            if (document.readyState === 'complete') {
-                resolve();
-            } else {
-                window.addEventListener('load', resolve, { once: true });
-                // Fallback timeout
-                setTimeout(resolve, 5000);
-            }
-        });
+      return new Promise((resolve) => {
+        if (document.readyState === "complete") {
+          resolve();
+        } else {
+          window.addEventListener("load", resolve, { once: true });
+          // Fallback timeout
+          setTimeout(resolve, 5000);
+        }
+      });
     }
 
     async waitForSearchResults() {
-        return new Promise((resolve) => {
-            let attempts = 0;
-            const maxAttempts = 15; // Increased attempts
+      return new Promise((resolve) => {
+        let attempts = 0;
+        const maxAttempts = 15; // Increased attempts
 
-            const checkForResults = () => {
-                attempts++;
+        const checkForResults = () => {
+          attempts++;
 
-                // Check for LinkedIn search result containers
-                const searchResults = document.querySelector('.search-results-container') ||
-                                    document.querySelector('[data-view-name="search-entity-result-universal-template"]') ||
-                                    document.querySelector('.reusable-search__result-container') ||
-                                    document.querySelector('.search-result__wrapper') ||
-                                    document.querySelector('.entity-result') ||
-                                    document.querySelector('.search-result') ||
-                                    document.querySelector('[data-test-id="search-result"]');
+          // Check for LinkedIn search result containers
+          const searchResults =
+            document.querySelector(".search-results-container") ||
+            document.querySelector(
+              '[data-view-name="search-entity-result-universal-template"]'
+            ) ||
+            document.querySelector(".reusable-search__result-container") ||
+            document.querySelector(".search-result__wrapper") ||
+            document.querySelector(".entity-result") ||
+            document.querySelector(".search-result") ||
+            document.querySelector('[data-test-id="search-result"]');
 
-                if (searchResults || attempts >= maxAttempts) {
-    
-                    resolve();
-                } else {
-                    setTimeout(checkForResults, 800); // Increased interval
-                }
-            };
+          if (searchResults || attempts >= maxAttempts) {
+            resolve();
+          } else {
+            setTimeout(checkForResults, 800); // Increased interval
+          }
+        };
 
-            checkForResults();
-        });
+        checkForResults();
+      });
     }
 
     reinitializeAfterPageChange(previousState) {
-        try {
-            // Restore previous state
-            this.isRealTimeMode = previousState.isRealTimeMode;
-            this.isAutoCollecting = previousState.isAutoCollecting;
-            this.processedProfiles = new Set(previousState.processedProfiles);
+      try {
+        // Restore previous state
+        this.isRealTimeMode = previousState.isRealTimeMode;
+        this.isAutoCollecting = previousState.isAutoCollecting;
+        this.processedProfiles = new Set(previousState.processedProfiles);
 
-            // Re-setup message listeners
-            if (!window.linkedInAutomationReinitialized) {
-                chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-                    return this.handleMessage(message, sendResponse);
-                });
-                window.linkedInAutomationReinitialized = true;
+        // Re-setup message listeners
+        if (!window.linkedInAutomationReinitialized) {
+          chrome.runtime.onMessage.addListener(
+            (message, _sender, sendResponse) => {
+              return this.handleMessage(message, sendResponse);
             }
-
-            // Re-setup auto detection if needed
-            if (this.isAutoCollecting) {
-                this.setupAutoDetection();
-            }
-
-    
-        } catch (error) {
-            console.error('Error during re-initialization:', error);
+          );
+          window.linkedInAutomationReinitialized = true;
         }
+
+        // Re-setup auto detection if needed
+        if (this.isAutoCollecting) {
+          this.setupAutoDetection();
+        }
+      } catch (error) {
+        console.error("Error during re-initialization:", error);
+      }
     }
 
     sendCollectionStatus(message) {
-        try {
-            if (chrome.runtime?.id) {
-                chrome.runtime.sendMessage({
-                    action: 'collectionStatus',
-                    message: message
-                }).catch(() => {});
-            }
-        } catch (error) {}
+      try {
+        if (chrome.runtime?.id) {
+          chrome.runtime
+            .sendMessage({
+              action: "collectionStatus",
+              message: message,
+            })
+            .catch(() => {});
+        }
+      } catch (error) {}
     }
 
     sendProfilesRealTime(profiles) {
-        if (!this.isAutoCollectionEnabled || profiles.length === 0) return;
+      if (!this.isAutoCollectionEnabled || profiles.length === 0) return;
 
-        if (!chrome.runtime?.id) return;
+      if (!chrome.runtime?.id) return;
 
-        try {
-            chrome.runtime.sendMessage({
-                action: 'addProfilesRealTime',
-                profiles: profiles
-            }).catch(() => {});
-        } catch (error) {}
+      try {
+        chrome.runtime
+          .sendMessage({
+            action: "addProfilesRealTime",
+            profiles: profiles,
+          })
+          .catch(() => {});
+      } catch (error) {}
     }
 
     fixProfileData(profile) {
-        if (!profile.name ||
-            profile.name.includes('Status is') ||
-            profile.name.includes('offline') ||
-            profile.name.includes('reachable') ||
-            profile.name.length < 3) {
+      if (
+        !profile.name ||
+        profile.name.includes("Status is") ||
+        profile.name.includes("offline") ||
+        profile.name.includes("reachable") ||
+        profile.name.length < 3
+      ) {
+        if (profile.location) {
+          const nameMatch = profile.location.match(
+            /^([A-Za-z\s]+?)(?:View|•|\n)/
+          );
+          if (nameMatch && nameMatch[1].trim().length > 2) {
+            profile.name = nameMatch[1].trim();
+          }
 
-            if (profile.location) {
-                const nameMatch = profile.location.match(/^([A-Za-z\s]+?)(?:View|•|\n)/);
-                if (nameMatch && nameMatch[1].trim().length > 2) {
-                    profile.name = nameMatch[1].trim();
-                }
+          const titleMatch = profile.location.match(
+            /Full Stack Developer|Software Engineer|Developer|Engineer|Manager|Director|CEO|CTO|VP|President/i
+          );
+          if (titleMatch && !profile.title) {
+            profile.title = titleMatch[0];
+          }
 
-
-                const titleMatch = profile.location.match(/Full Stack Developer|Software Engineer|Developer|Engineer|Manager|Director|CEO|CTO|VP|President/i);
-                if (titleMatch && !profile.title) {
-                    profile.title = titleMatch[0];
-                }
-
-
-                const locationMatch = profile.location.match(/([A-Za-z\s]+,\s*[A-Za-z\s]+)(?:\n|$)/);
-                if (locationMatch) {
-                    const cleanLocation = locationMatch[1].trim();
-                    if (cleanLocation.includes(',') && !cleanLocation.includes('View')) {
-                        profile.location = cleanLocation;
-                    }
-                }
+          const locationMatch = profile.location.match(
+            /([A-Za-z\s]+,\s*[A-Za-z\s]+)(?:\n|$)/
+          );
+          if (locationMatch) {
+            const cleanLocation = locationMatch[1].trim();
+            if (
+              cleanLocation.includes(",") &&
+              !cleanLocation.includes("View")
+            ) {
+              profile.location = cleanLocation;
             }
+          }
         }
+      }
 
-        if (profile.title && profile.title.includes('degree connection')) {
-            if (profile.location) {
-                const titleMatch = profile.location.match(/\n\s*([A-Za-z\s]+(?:Developer|Engineer|Manager|Director|CEO|CTO|VP|President|Analyst|Consultant|Specialist)[A-Za-z\s]*)/i);
-                if (titleMatch) {
-                    profile.title = titleMatch[1].trim();
-                } else {
-                    profile.title = '';
-                }
-            } else {
-                profile.title = '';
-            }
+      if (profile.title && profile.title.includes("degree connection")) {
+        if (profile.location) {
+          const titleMatch = profile.location.match(
+            /\n\s*([A-Za-z\s]+(?:Developer|Engineer|Manager|Director|CEO|CTO|VP|President|Analyst|Consultant|Specialist)[A-Za-z\s]*)/i
+          );
+          if (titleMatch) {
+            profile.title = titleMatch[1].trim();
+          } else {
+            profile.title = "";
+          }
+        } else {
+          profile.title = "";
         }
+      }
 
-        if (profile.title && profile.title.includes(' at ') && !profile.company) {
-            const parts = profile.title.split(' at ');
-            if (parts.length === 2) {
-                profile.title = parts[0].trim();
-                profile.company = parts[1].trim();
-            }
+      if (profile.title && profile.title.includes(" at ") && !profile.company) {
+        const parts = profile.title.split(" at ");
+        if (parts.length === 2) {
+          profile.title = parts[0].trim();
+          profile.company = parts[1].trim();
         }
+      }
     }
 
     extractProfilesAlternative() {
-        const profiles = [];
-        const alternativeSelectors = [
-            // New LinkedIn layout selectors
-            'div[componentkey*="result"]',
-            'div[componentkey*="profile"]',
-            'div[componentkey*="person"]',
-            'div[componentkey*="entity"]',
-            // Fallback to any div containing a LinkedIn profile link
-            'div:has(a[href*="/in/"])',
-            // Original selectors
-            '.search-results-container .result-card',
-            '.search-results .search-result__wrapper',
-            '.artdeco-list .artdeco-list__item',
-            '.pvs-list .pvs-list__item'
-        ];
+      const profiles = [];
+      const alternativeSelectors = [
+        // New LinkedIn layout selectors
+        'div[componentkey*="result"]',
+        'div[componentkey*="profile"]',
+        'div[componentkey*="person"]',
+        'div[componentkey*="entity"]',
+        // Fallback to any div containing a LinkedIn profile link
+        'div:has(a[href*="/in/"])',
+        // Original selectors
+        ".search-results-container .result-card",
+        ".search-results .search-result__wrapper",
+        ".artdeco-list .artdeco-list__item",
+        ".pvs-list .pvs-list__item",
+      ];
 
-        for (const selector of alternativeSelectors) {
-            try {
-                const cards = document.querySelectorAll(selector);
-                if (cards.length > 0) {
-                    cards.forEach(card => {
-                        const profile = this.extractProfileFromCard(card);
-                        if (profile?.name && profile?.url) {
-                            profiles.push(profile);
-                        }
-                    });
-                    if (profiles.length > 0) break;
-                }
-            } catch (error) {
-                continue;
-            }
-        }
-
-        // If still no profiles, try a more generic approach
-        if (profiles.length === 0) {
-            const allLinks = document.querySelectorAll('a[href*="/in/"]');
-            const processedUrls = new Set();
-
-            allLinks.forEach(link => {
-                if (profiles.length >= 10) return; // Limit to prevent too many results
-
-                const url = link.href;
-                if (processedUrls.has(url)) return;
-                processedUrls.add(url);
-
-                const name = link.textContent.trim();
-                if (name && name.length > 2 && !name.includes('View') && !name.includes('Connect')) {
-                    const parentCard = link.closest('div');
-                    if (parentCard) {
-                        const profile = this.extractProfileFromCard(parentCard);
-                        if (profile?.name && profile?.url) {
-                            profiles.push(profile);
-                        } else {
-                            // Create basic profile if extraction fails
-                            profiles.push({
-                                name: name,
-                                url: url.split('?')[0],
-                                company: '',
-                                title: '',
-                                location: '',
-                                industry: '',
-                                profilePic: '',
-                                collectedAt: new Date().toISOString()
-                            });
-                        }
-                    }
-                }
+      for (const selector of alternativeSelectors) {
+        try {
+          const cards = document.querySelectorAll(selector);
+          if (cards.length > 0) {
+            cards.forEach((card) => {
+              const profile = this.extractProfileFromCard(card);
+              if (profile?.name && profile?.url) {
+                profiles.push(profile);
+              }
             });
+            if (profiles.length > 0) break;
+          }
+        } catch (error) {
+          continue;
         }
+      }
 
-        return profiles;
+      // If still no profiles, try a more generic approach
+      if (profiles.length === 0) {
+        const allLinks = document.querySelectorAll('a[href*="/in/"]');
+        const processedUrls = new Set();
+
+        allLinks.forEach((link) => {
+          if (profiles.length >= 10) return; // Limit to prevent too many results
+
+          const url = link.href;
+          if (processedUrls.has(url)) return;
+          processedUrls.add(url);
+
+          const name = link.textContent.trim();
+          if (
+            name &&
+            name.length > 2 &&
+            !name.includes("View") &&
+            !name.includes("Connect")
+          ) {
+            const parentCard = link.closest("div");
+            if (parentCard) {
+              const profile = this.extractProfileFromCard(parentCard);
+              if (profile?.name && profile?.url) {
+                profiles.push(profile);
+              } else {
+                // Create basic profile if extraction fails
+                profiles.push({
+                  name: name,
+                  url: url.split("?")[0],
+                  company: "",
+                  title: "",
+                  location: "",
+                  industry: "",
+                  profilePic: "",
+                  collectedAt: new Date().toISOString(),
+                });
+              }
+            }
+          }
+        });
+      }
+
+      return profiles;
     }
 
     async collectNetworkProfiles() {
-        const profiles = [];
+      const profiles = [];
 
-        const selectors = [
-            '.discover-entity-type-card',
-            '.mn-person-card',
-            '[data-test-id="person-card"]',
-            '.artdeco-entity-lockup',
-            '.discover-person-card'
-        ];
+      const selectors = [
+        ".discover-entity-type-card",
+        ".mn-person-card",
+        '[data-test-id="person-card"]',
+        ".artdeco-entity-lockup",
+        ".discover-person-card",
+      ];
 
-        let profileCards = [];
-        for (const selector of selectors) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) break;
+      let profileCards = [];
+      for (const selector of selectors) {
+        profileCards = document.querySelectorAll(selector);
+        if (profileCards.length > 0) break;
+      }
+
+      profileCards.forEach((card) => {
+        const profile = this.extractProfileFromCard(card, true); // Use unified extraction with network flag
+        if (profile?.name && profile?.url) {
+          profiles.push(profile);
         }
+      });
 
-        profileCards.forEach(card => {
-            const profile = this.extractProfileFromCard(card, true); // Use unified extraction with network flag
-            if (profile?.name && profile?.url) {
-                profiles.push(profile);
-            }
-        });
-
-        return profiles;
+      return profiles;
     }
 
     async collectSalesNavigatorProfiles() {
-        const profiles = [];
+      const profiles = [];
 
-        // Sales Navigator specific selectors
-        const selectors = [
-            '.artdeco-entity-lockup',
-            '[data-chameleon-result-urn]',
-            '.search-results__result-item',
-            '.result-lockup',
-            '.entity-result'
-        ];
+      // Sales Navigator specific selectors
+      const selectors = [
+        ".artdeco-entity-lockup",
+        "[data-chameleon-result-urn]",
+        ".search-results__result-item",
+        ".result-lockup",
+        ".entity-result",
+      ];
 
-        let profileCards = [];
-        for (const selector of selectors) {
-            profileCards = document.querySelectorAll(selector);
-            if (profileCards.length > 0) break;
+      let profileCards = [];
+      for (const selector of selectors) {
+        profileCards = document.querySelectorAll(selector);
+        if (profileCards.length > 0) break;
+      }
+
+      profileCards.forEach((card) => {
+        const profile = this.extractSalesNavigatorProfile(card);
+        if (profile?.name && profile?.url) {
+          profile.source = "sales-navigator";
+          profiles.push(profile);
         }
+      });
 
-        profileCards.forEach(card => {
-            const profile = this.extractSalesNavigatorProfile(card);
-            if (profile?.name && profile?.url) {
-                profile.source = 'sales-navigator';
-                profiles.push(profile);
-            }
-        });
-
-        return profiles;
+      return profiles;
     }
 
     extractSalesNavigatorProfile(card) {
-        const profile = {
-            name: '',
-            url: '',
-            company: '',
-            title: '',
-            location: '',
-            industry: '',
-            profilePic: '',
-            collectedAt: new Date().toISOString(),
-            source: 'sales-navigator'
-        };
+      const profile = {
+        name: "",
+        url: "",
+        company: "",
+        title: "",
+        location: "",
+        industry: "",
+        profilePic: "",
+        collectedAt: new Date().toISOString(),
+        source: "sales-navigator",
+      };
 
-        try {
-            // Sales Navigator name and URL extraction
-            const nameSelectors = [
-                '.artdeco-entity-lockup__title a',
-                '.result-lockup__name a',
-                'a[href*="/sales/lead/"]',
-                'a[href*="/in/"]'
-            ];
+      try {
+        // Sales Navigator name and URL extraction
+        const nameSelectors = [
+          ".artdeco-entity-lockup__title a",
+          ".result-lockup__name a",
+          'a[href*="/sales/lead/"]',
+          'a[href*="/in/"]',
+        ];
 
-            let nameElement = null;
-            for (const selector of nameSelectors) {
-                nameElement = card.querySelector(selector);
-                if (nameElement) break;
-            }
-
-            if (nameElement) {
-                profile.name = nameElement.textContent?.trim() || '';
-                profile.url = nameElement.href || '';
-            }
-
-            // Company and title extraction
-            const titleSelectors = [
-                '.artdeco-entity-lockup__subtitle',
-                '.result-lockup__highlight-keyword',
-                '.entity-result__primary-subtitle'
-            ];
-
-            for (const selector of titleSelectors) {
-                const titleElement = card.querySelector(selector);
-                if (titleElement) {
-                    const titleText = titleElement.textContent?.trim() || '';
-                    if (titleText.includes(' at ')) {
-                        const parts = titleText.split(' at ');
-                        profile.title = parts[0]?.trim() || '';
-                        profile.company = parts[1]?.trim() || '';
-                    } else {
-                        profile.title = titleText;
-                    }
-                    break;
-                }
-            }
-
-            // Location extraction
-            const locationSelectors = [
-                '.artdeco-entity-lockup__caption',
-                '.result-lockup__misc-item',
-                '.entity-result__secondary-subtitle'
-            ];
-
-            for (const selector of locationSelectors) {
-                const locationElement = card.querySelector(selector);
-                if (locationElement) {
-                    profile.location = locationElement.textContent?.trim() || '';
-                    break;
-                }
-            }
-
-            // Profile picture extraction
-            const imgSelectors = [
-                '.artdeco-entity-lockup__image img',
-                '.result-lockup__image img',
-                '.entity-result__image img'
-            ];
-
-            for (const selector of imgSelectors) {
-                const imgElement = card.querySelector(selector);
-                if (imgElement) {
-                    profile.profilePic = imgElement.src || '';
-                    break;
-                }
-            }
-
-        } catch (error) {
-            console.error('Error extracting Sales Navigator profile:', error);
+        let nameElement = null;
+        for (const selector of nameSelectors) {
+          nameElement = card.querySelector(selector);
+          if (nameElement) break;
         }
 
-        return profile;
+        if (nameElement) {
+          profile.name = nameElement.textContent?.trim() || "";
+          profile.url = nameElement.href || "";
+        }
+
+        // Company and title extraction
+        const titleSelectors = [
+          ".artdeco-entity-lockup__subtitle",
+          ".result-lockup__highlight-keyword",
+          ".entity-result__primary-subtitle",
+        ];
+
+        for (const selector of titleSelectors) {
+          const titleElement = card.querySelector(selector);
+          if (titleElement) {
+            const titleText = titleElement.textContent?.trim() || "";
+            if (titleText.includes(" at ")) {
+              const parts = titleText.split(" at ");
+              profile.title = parts[0]?.trim() || "";
+              profile.company = parts[1]?.trim() || "";
+            } else {
+              profile.title = titleText;
+            }
+            break;
+          }
+        }
+
+        // Location extraction
+        const locationSelectors = [
+          ".artdeco-entity-lockup__caption",
+          ".result-lockup__misc-item",
+          ".entity-result__secondary-subtitle",
+        ];
+
+        for (const selector of locationSelectors) {
+          const locationElement = card.querySelector(selector);
+          if (locationElement) {
+            profile.location = locationElement.textContent?.trim() || "";
+            break;
+          }
+        }
+
+        // Profile picture extraction
+        const imgSelectors = [
+          ".artdeco-entity-lockup__image img",
+          ".result-lockup__image img",
+          ".entity-result__image img",
+        ];
+
+        for (const selector of imgSelectors) {
+          const imgElement = card.querySelector(selector);
+          if (imgElement) {
+            profile.profilePic = imgElement.src || "";
+            break;
+          }
+        }
+      } catch (error) {
+        console.error("Error extracting Sales Navigator profile:", error);
+      }
+
+      return profile;
     }
 
     extractProfileFromCard(card, isNetworkPage = false) {
-        const profile = {
-            name: '',
-            url: '',
-            company: '',
-            title: '',
-            location: '',
-            industry: '',
-            profilePic: '',
-            collectedAt: new Date().toISOString()
-        };
+      const profile = {
+        name: "",
+        url: "",
+        company: "",
+        title: "",
+        location: "",
+        industry: "",
+        profilePic: "",
+        collectedAt: new Date().toISOString(),
+      };
 
-        try {
-            // Updated selectors for new LinkedIn layout
-            const nameSelectors = isNetworkPage ? [
-                'a[href*="/in/"]',
-                '.discover-entity-type-card__link',
-                '.mn-person-card__link',
-                '.artdeco-entity-lockup__title a'
-            ] : [
-                'a._00ec11e5.e729de72[href*="/in/"]', // New LinkedIn layout
-                '.entity-result__title-text a',
-                '.search-result__result-link',
-                'a[href*="/in/"]',
-                '.app-aware-link'
+      try {
+        // Updated selectors for new LinkedIn layout
+        const nameSelectors = isNetworkPage
+          ? [
+              'a[href*="/in/"]',
+              ".discover-entity-type-card__link",
+              ".mn-person-card__link",
+              ".artdeco-entity-lockup__title a",
+            ]
+          : [
+              'a._00ec11e5.e729de72[href*="/in/"]', // New LinkedIn layout
+              ".entity-result__title-text a",
+              ".search-result__result-link",
+              'a[href*="/in/"]',
+              ".app-aware-link",
             ];
 
-            let nameLink = null;
-            for (const selector of nameSelectors) {
-                nameLink = card.querySelector(selector);
-                if (nameLink) break;
-            }
-
-            if (nameLink) {
-                profile.name = this.cleanNameText(nameLink.textContent.trim());
-                profile.url = nameLink.href || '';
-            } else {
-                // Fallback: try to find name and URL separately
-                const nameResult = this.findNameInCard(card);
-                if (nameResult.name) {
-                    profile.name = nameResult.name;
-                    profile.url = nameResult.url || card.querySelector('a[href*="/in/"]')?.href || '';
-                }
-            }
-
-            if (profile.url) {
-                if (profile.url.startsWith('/')) {
-                    profile.url = 'https://www.linkedin.com' + profile.url;
-                }
-                if (profile.url.includes('?')) {
-                    profile.url = profile.url.split('?')[0];
-                }
-                profile.url = profile.url.replace(/\/$/, '');
-            }
-
-            // Updated image selectors for new LinkedIn layout
-            const imgSelectors = [
-                'img._4dab8b16._330f094a._2a7e48ae._8275b093', // New LinkedIn layout
-                '.entity-result__image img',
-                '.presence-entity__image img',
-                '.discover-entity-type-card__image img',
-                '.mn-person-card__picture img',
-                '.artdeco-entity-lockup__image img',
-                'img[alt*="profile"]',
-                'img[alt*="Photo"]',
-                'img[data-ghost-classes]',
-                'img[src*="profile"]',
-                'img'
-            ];
-
-            for (const selector of imgSelectors) {
-                const imgElement = card.querySelector(selector);
-                if (imgElement?.src &&
-                    !imgElement.src.includes('data:image') &&
-                    !imgElement.src.includes('ghost') &&
-                    imgElement.src.includes('http')) {
-                    profile.profilePic = imgElement.src;
-                    break;
-                }
-            }
-
-            // Updated subtitle selectors for new LinkedIn layout
-            const subtitleSelectors = isNetworkPage ? [
-                '.discover-entity-type-card__occupation',
-                '.mn-person-card__occupation',
-                '.artdeco-entity-lockup__subtitle'
-            ] : [
-                'p._9e82a86e.a4e0e831.cbb1f25c._63482a47._41ac81b1.efc3ceee.c26ae7d0._94b51cfc._374d2a1f._2d409b09.adae7f6d._79448f3c._41e849ee.ce713fa8', // New LinkedIn layout - title/company
-                '.entity-result__primary-subtitle',
-                '.search-result__truncate',
-                '.t-14.t-normal'
-            ];
-
-            for (const selector of subtitleSelectors) {
-                const subtitleElement = card.querySelector(selector);
-                if (subtitleElement) {
-                    const subtitle = subtitleElement.textContent.trim();
-                    const atIndex = subtitle.toLowerCase().indexOf(' at ');
-                    if (atIndex !== -1) {
-                        profile.title = subtitle.substring(0, atIndex).trim();
-                        profile.company = subtitle.substring(atIndex + 4).trim();
-                    } else {
-                        profile.title = subtitle;
-                    }
-                    break;
-                }
-            }
-
-            // Updated location selectors for new LinkedIn layout
-            const locationSelectors = [
-                'p._9e82a86e.a4e0e831.cbb1f25c._63482a47._41ac81b1.efc3ceee.c26ae7d0._94b51cfc._374d2a1f._2d409b09.adae7f6d._79448f3c.a9f41f8b.ce713fa8', // New LinkedIn layout - location
-                '.entity-result__secondary-subtitle',
-                '[data-anonymize="location"]',
-                '.t-12.t-black--light'
-            ];
-
-            for (const selector of locationSelectors) {
-                const locationElement = card.querySelector(selector);
-                if (locationElement) {
-                    const text = locationElement.textContent.trim();
-                    // Check if this looks like a location (contains common location indicators)
-                    if (text.includes(',') || text.includes('India') || text.includes('USA') || text.includes('UK') ||
-                        text.includes('Canada') || text.includes('Australia') || text.includes('Germany') ||
-                        text.includes('France') || text.includes('Singapore') || text.includes('Dubai') ||
-                        text.match(/\b(City|State|Province|Country|Area|Region)\b/i)) {
-                        profile.location = text;
-                        break;
-                    }
-                }
-            }
-
-            this.fixProfileData(profile);
-            if (!profile.name || !profile.url || !profile.url.includes('/in/')) {
-                return null;
-            }
-
-            return profile;
-
-        } catch (error) {
-            console.error('Error extracting profile data:', error);
-            return null;
+        let nameLink = null;
+        for (const selector of nameSelectors) {
+          nameLink = card.querySelector(selector);
+          if (nameLink) break;
         }
+
+        if (nameLink) {
+          profile.name = this.cleanNameText(nameLink.textContent.trim());
+          profile.url = nameLink.href || "";
+        } else {
+          // Fallback: try to find name and URL separately
+          const nameResult = this.findNameInCard(card);
+          if (nameResult.name) {
+            profile.name = nameResult.name;
+            profile.url =
+              nameResult.url ||
+              card.querySelector('a[href*="/in/"]')?.href ||
+              "";
+          }
+        }
+
+        if (profile.url) {
+          if (profile.url.startsWith("/")) {
+            profile.url = "https://www.linkedin.com" + profile.url;
+          }
+          if (profile.url.includes("?")) {
+            profile.url = profile.url.split("?")[0];
+          }
+          profile.url = profile.url.replace(/\/$/, "");
+        }
+
+        // Updated image selectors for new LinkedIn layout
+        const imgSelectors = [
+          "img._4dab8b16._330f094a._2a7e48ae._8275b093", // New LinkedIn layout
+          ".entity-result__image img",
+          ".presence-entity__image img",
+          ".discover-entity-type-card__image img",
+          ".mn-person-card__picture img",
+          ".artdeco-entity-lockup__image img",
+          'img[alt*="profile"]',
+          'img[alt*="Photo"]',
+          "img[data-ghost-classes]",
+          'img[src*="profile"]',
+          "img",
+        ];
+
+        for (const selector of imgSelectors) {
+          const imgElement = card.querySelector(selector);
+          if (
+            imgElement?.src &&
+            !imgElement.src.includes("data:image") &&
+            !imgElement.src.includes("ghost") &&
+            imgElement.src.includes("http")
+          ) {
+            profile.profilePic = imgElement.src;
+            break;
+          }
+        }
+
+        // Updated subtitle selectors for new LinkedIn layout
+        const subtitleSelectors = isNetworkPage
+          ? [
+              ".discover-entity-type-card__occupation",
+              ".mn-person-card__occupation",
+              ".artdeco-entity-lockup__subtitle",
+            ]
+          : [
+              "p._9e82a86e.a4e0e831.cbb1f25c._63482a47._41ac81b1.efc3ceee.c26ae7d0._94b51cfc._374d2a1f._2d409b09.adae7f6d._79448f3c._41e849ee.ce713fa8", // New LinkedIn layout - title/company
+              ".entity-result__primary-subtitle",
+              ".search-result__truncate",
+              ".t-14.t-normal",
+            ];
+
+        for (const selector of subtitleSelectors) {
+          const subtitleElement = card.querySelector(selector);
+          if (subtitleElement) {
+            const subtitle = subtitleElement.textContent.trim();
+            const atIndex = subtitle.toLowerCase().indexOf(" at ");
+            if (atIndex !== -1) {
+              profile.title = subtitle.substring(0, atIndex).trim();
+              profile.company = subtitle.substring(atIndex + 4).trim();
+            } else {
+              profile.title = subtitle;
+            }
+            break;
+          }
+        }
+
+        // Updated location selectors for new LinkedIn layout
+        const locationSelectors = [
+          "p._9e82a86e.a4e0e831.cbb1f25c._63482a47._41ac81b1.efc3ceee.c26ae7d0._94b51cfc._374d2a1f._2d409b09.adae7f6d._79448f3c.a9f41f8b.ce713fa8", // New LinkedIn layout - location
+          ".entity-result__secondary-subtitle",
+          '[data-anonymize="location"]',
+          ".t-12.t-black--light",
+        ];
+
+        for (const selector of locationSelectors) {
+          const locationElement = card.querySelector(selector);
+          if (locationElement) {
+            const text = locationElement.textContent.trim();
+            // Check if this looks like a location (contains common location indicators)
+            if (
+              text.includes(",") ||
+              text.includes("India") ||
+              text.includes("USA") ||
+              text.includes("UK") ||
+              text.includes("Canada") ||
+              text.includes("Australia") ||
+              text.includes("Germany") ||
+              text.includes("France") ||
+              text.includes("Singapore") ||
+              text.includes("Dubai") ||
+              text.match(/\b(City|State|Province|Country|Area|Region)\b/i)
+            ) {
+              profile.location = text;
+              break;
+            }
+          }
+        }
+
+        this.fixProfileData(profile);
+        if (!profile.name || !profile.url || !profile.url.includes("/in/")) {
+          return null;
+        }
+
+        return profile;
+      } catch (error) {
+        console.error("Error extracting profile data:", error);
+        return null;
+      }
     }
 
     // Helper methods to reduce duplication in profile extraction
     cleanNameText(nameText) {
-        if (nameText.includes('View') && nameText.includes('profile')) {
-            const match = nameText.match(/^(.+?)(?:View|•|\n)/);
-            if (match) {
-                return match[1].trim();
-            }
+      if (nameText.includes("View") && nameText.includes("profile")) {
+        const match = nameText.match(/^(.+?)(?:View|•|\n)/);
+        if (match) {
+          return match[1].trim();
         }
-        return nameText;
+      }
+      return nameText;
     }
 
     findNameInCard(card) {
-        const nameSelectors = [
-            'span[aria-hidden="true"]',
-            '.t-16.t-black.t-bold',
-            '[data-anonymize="person-name"] span',
-            '.entity-result__title-text span',
-            '.search-result__result-link span',
-            '.artdeco-entity-lockup__title span',
-            'span.t-16',
-            'span.t-bold'
-        ];
+      const nameSelectors = [
+        'span[aria-hidden="true"]',
+        ".t-16.t-black.t-bold",
+        '[data-anonymize="person-name"] span',
+        ".entity-result__title-text span",
+        ".search-result__result-link span",
+        ".artdeco-entity-lockup__title span",
+        "span.t-16",
+        "span.t-bold",
+      ];
 
-        for (const selector of nameSelectors) {
-            const nameSpan = card.querySelector(selector);
-            if (nameSpan && this.isValidNameText(nameSpan.textContent.trim())) {
-                const parentLink = nameSpan.closest('a') || card.querySelector('a[href*="/in/"]');
-                return {
-                    name: nameSpan.textContent.trim(),
-                    url: parentLink?.href || ''
-                };
-            }
+      for (const selector of nameSelectors) {
+        const nameSpan = card.querySelector(selector);
+        if (nameSpan && this.isValidNameText(nameSpan.textContent.trim())) {
+          const parentLink =
+            nameSpan.closest("a") || card.querySelector('a[href*="/in/"]');
+          return {
+            name: nameSpan.textContent.trim(),
+            url: parentLink?.href || "",
+          };
         }
+      }
 
-        // Final fallback: check all profile links
-        const allLinks = card.querySelectorAll('a[href*="/in/"]');
-        for (const link of allLinks) {
-            const text = link.textContent.trim();
-            if (this.isValidNameText(text) && text.split(' ').length >= 2) {
-                return { name: text, url: link.href };
-            }
+      // Final fallback: check all profile links
+      const allLinks = card.querySelectorAll('a[href*="/in/"]');
+      for (const link of allLinks) {
+        const text = link.textContent.trim();
+        if (this.isValidNameText(text) && text.split(" ").length >= 2) {
+          return { name: text, url: link.href };
         }
+      }
 
-        return { name: '', url: '' };
+      return { name: "", url: "" };
     }
 
     isValidNameText(text) {
-        return text && text.length > 2 &&
-               !text.includes('Status') &&
-               !text.includes('View') &&
-               !text.includes('•');
+      return (
+        text &&
+        text.length > 2 &&
+        !text.includes("Status") &&
+        !text.includes("View") &&
+        !text.includes("•")
+      );
     }
 
     async searchByCompany(companyName) {
-        try {
-            const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(companyName)}&origin=GLOBAL_SEARCH_HEADER`;
-            window.location.href = searchUrl;
+      try {
+        const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+          companyName
+        )}&origin=GLOBAL_SEARCH_HEADER`;
+        window.location.href = searchUrl;
 
-            return { success: true, message: `Searching for employees at ${companyName}` };
-        } catch (error) {
-            console.error('Error searching by company:', error);
-            return { success: false, message: error.message };
-        }
+        return {
+          success: true,
+          message: `Searching for employees at ${companyName}`,
+        };
+      } catch (error) {
+        console.error("Error searching by company:", error);
+        return { success: false, message: error.message };
+      }
     }
 
     async searchNetwork(criteria) {
-        try {
+      try {
+        const profiles = [];
+        // let scrollAttempts = 0;
+        // const maxScrollAttempts = 5;
 
-            const profiles = [];
-            // let scrollAttempts = 0;
-            // const maxScrollAttempts = 5;
+        this.setupContinuousMonitoring();
 
-            this.setupContinuousMonitoring();
+        if (
+          criteria.type === "sales-navigator" ||
+          window.location.href.includes("sales/search/people")
+        ) {
+          let searchResults = this.getSalesNavigatorResultElements();
 
-            if (criteria.type === 'sales-navigator' || window.location.href.includes('sales/search/people')) {
+          searchResults.forEach((card) => {
+            if (profiles.length < 20) {
+              const profile = this.extractSalesNavigatorProfile(card);
+              if (profile && profile.name && profile.url) {
+                profile.source = "sales-navigator";
+                profiles.push(profile);
+              }
+            }
+          });
+          // Removed pagination automation: do not scroll or load more pages for Sales Navigator
+          // Only collect profiles from the first page
+        } else if (
+          criteria.type === "search" ||
+          window.location.href.includes("search/results/people")
+        ) {
+          let searchResults = this.getSearchResultElements();
 
-                let searchResults = this.getSalesNavigatorResultElements();
+          searchResults.forEach((card) => {
+            if (profiles.length < 20) {
+              const profile = this.extractProfileFromCard(card);
+              if (profile && profile.name && profile.url) {
+                profile.source = "network-search";
+                profiles.push(profile);
+              }
+            }
+          });
 
-                searchResults.forEach((card) => {
-                    if (profiles.length < 20) {
-                        const profile = this.extractSalesNavigatorProfile(card);
-                        if (profile && profile.name && profile.url) {
-                            profile.source = 'sales-navigator';
-                            profiles.push(profile);
-                        }
-                    }
-                });
-                // Removed pagination automation: do not scroll or load more pages for Sales Navigator
-                // Only collect profiles from the first page
+          while (
+            scrollAttempts < maxScrollAttempts &&
+            profiles.length < 20 &&
+            this.isAutoCollectionEnabled &&
+            this.isRealTimeMode
+          ) {
+            scrollAttempts++;
 
-            } else if (criteria.type === 'search' || window.location.href.includes('search/results/people')) {
+            const initialCount = profiles.length;
 
-                let searchResults = this.getSearchResultElements();
+            if (scrollAttempts <= 3) {
+              window.scrollBy(0, window.innerHeight);
+              await this.delay(2000);
+              window.scrollTo(0, document.body.scrollHeight);
+            } else {
+              window.scrollBy(0, -window.innerHeight);
+              await this.delay(2000);
 
-                searchResults.forEach((card) => {
-                    if (profiles.length < 20) {
-                        const profile = this.extractProfileFromCard(card);
-                        if (profile && profile.name && profile.url) {
-                            profile.source = 'network-search';
-                            profiles.push(profile);
-
-                        }
-                    }
-                });
-
-                while (scrollAttempts < maxScrollAttempts && profiles.length < 20 && this.isAutoCollectionEnabled && this.isRealTimeMode) {
-                    scrollAttempts++;
-
-                    const initialCount = profiles.length;
-
-                    if (scrollAttempts <= 3) {
-                        window.scrollBy(0, window.innerHeight);
-                        await this.delay(2000);
-                        window.scrollTo(0, document.body.scrollHeight);
-
-                    } else {
-                        window.scrollBy(0, -window.innerHeight);
-                        await this.delay(2000);
-
-                        if (scrollAttempts === maxScrollAttempts) {
-                            window.scrollTo(0, 0);
-
-                        }
-                    }
-
-                    await this.delay(2000);
-                    searchResults = this.getSearchResultElements();
-                    searchResults.forEach((card) => {
-                        if (profiles.length < 20) {
-                            const profile = this.extractProfileFromCard(card);
-                            if (profile && profile.name && profile.url) {
-                                const isDuplicate = profiles.some(p => p.url === profile.url);
-                                if (!isDuplicate) {
-                                    profile.source = 'network-search';
-                                    profiles.push(profile);
-
-                                }
-                            }
-                        }
-                    });
-
-                    const newProfilesCount = profiles.length - initialCount;
-
-                    if (newProfilesCount === 0 && scrollAttempts >= 2) {
-
-                        break;
-                    }
-                }
-
-            } else if (criteria.type === 'connections' || window.location.href.includes('mynetwork') || window.location.href.includes('connections')) {
-                let connectionCards = document.querySelectorAll('.mn-connection-card');
-                if (connectionCards.length === 0) {
-                    connectionCards = document.querySelectorAll('.connection-card');
-                }
-                if (connectionCards.length === 0) {
-                    connectionCards = document.querySelectorAll('[data-control-name="connection_profile"]');
-                }
-                if (connectionCards.length === 0) {
-                    connectionCards = document.querySelectorAll('.artdeco-entity-lockup');
-                }
-                if (connectionCards.length === 0) {
-                    connectionCards = document.querySelectorAll('li');
-                }
-
-
-
-                connectionCards.forEach((card, index) => {
-                    if (index < 20) { // Process more profiles for better real-time experience
-                        const profile = this.extractProfileFromCard(card, true); // Use unified extraction
-                        if (profile?.name && profile?.url) {
-                            profile.source = 'connections';
-                            profiles.push(profile);
-
-                            if (profiles.length <= 3 || profiles.length % 2 === 0) {
-                                this.sendProfilesRealTime([profile]);
-                            }
-                        }
-                    }
-                });
+              if (scrollAttempts === maxScrollAttempts) {
+                window.scrollTo(0, 0);
+              }
             }
 
-            return profiles;
-        } catch (error) {
-            console.error('Error searching network:', error);
-            return [];
+            await this.delay(2000);
+            searchResults = this.getSearchResultElements();
+            searchResults.forEach((card) => {
+              if (profiles.length < 20) {
+                const profile = this.extractProfileFromCard(card);
+                if (profile && profile.name && profile.url) {
+                  const isDuplicate = profiles.some(
+                    (p) => p.url === profile.url
+                  );
+                  if (!isDuplicate) {
+                    profile.source = "network-search";
+                    profiles.push(profile);
+                  }
+                }
+              }
+            });
+
+            const newProfilesCount = profiles.length - initialCount;
+
+            if (newProfilesCount === 0 && scrollAttempts >= 2) {
+              break;
+            }
+          }
+        } else if (
+          criteria.type === "connections" ||
+          window.location.href.includes("mynetwork") ||
+          window.location.href.includes("connections")
+        ) {
+          let connectionCards = document.querySelectorAll(
+            ".mn-connection-card"
+          );
+          if (connectionCards.length === 0) {
+            connectionCards = document.querySelectorAll(".connection-card");
+          }
+          if (connectionCards.length === 0) {
+            connectionCards = document.querySelectorAll(
+              '[data-control-name="connection_profile"]'
+            );
+          }
+          if (connectionCards.length === 0) {
+            connectionCards = document.querySelectorAll(
+              ".artdeco-entity-lockup"
+            );
+          }
+          if (connectionCards.length === 0) {
+            connectionCards = document.querySelectorAll("li");
+          }
+
+          connectionCards.forEach((card, index) => {
+            if (index < 20) {
+              // Process more profiles for better real-time experience
+              const profile = this.extractProfileFromCard(card, true); // Use unified extraction
+              if (profile?.name && profile?.url) {
+                profile.source = "connections";
+                profiles.push(profile);
+
+                if (profiles.length <= 3 || profiles.length % 2 === 0) {
+                  this.sendProfilesRealTime([profile]);
+                }
+              }
+            }
+          });
         }
+
+        return profiles;
+      } catch (error) {
+        console.error("Error searching network:", error);
+        return [];
+      }
     }
 
     getSearchResultElements() {
-        // Use consolidated selectors plus additional ones for search results
-        const selectors = [...this.PROFILE_SELECTORS, 'li[data-reusable-search-result]'];
+      // Use consolidated selectors plus additional ones for search results
+      const selectors = [
+        ...this.PROFILE_SELECTORS,
+        "li[data-reusable-search-result]",
+      ];
 
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            if (elements.length > 0) return elements;
-        }
+      for (const selector of selectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) return elements;
+      }
 
-        // Fallback: find any elements containing LinkedIn profile links
-        const elements = document.querySelectorAll('li, div');
-        return Array.from(elements).filter(el =>
-            el.querySelector('a[href*="/in/"]') || el.querySelector('a[href*="linkedin.com/in/"]')
-        );
+      // Fallback: find any elements containing LinkedIn profile links
+      const elements = document.querySelectorAll("li, div");
+      return Array.from(elements).filter(
+        (el) =>
+          el.querySelector('a[href*="/in/"]') ||
+          el.querySelector('a[href*="linkedin.com/in/"]')
+      );
     }
 
     getSalesNavigatorResultElements() {
-        const selectors = [
-            '.artdeco-entity-lockup',
-            '[data-chameleon-result-urn]',
-            '.search-results__result-item',
-            '.result-lockup',
-            '.entity-result',
-            'li[data-test-result-item]'
-        ];
+      const selectors = [
+        ".artdeco-entity-lockup",
+        "[data-chameleon-result-urn]",
+        ".search-results__result-item",
+        ".result-lockup",
+        ".entity-result",
+        "li[data-test-result-item]",
+      ];
 
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            if (elements.length > 0) return elements;
-        }
+      for (const selector of selectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) return elements;
+      }
 
-        // Fallback for Sales Navigator
-        const elements = document.querySelectorAll('li');
-        return Array.from(elements).filter(li =>
-            li.querySelector('a[href*="/sales/lead/"]') ||
-            li.querySelector('a[href*="/in/"]') ||
-            li.querySelector('.artdeco-entity-lockup')
-        );
+      // Fallback for Sales Navigator
+      const elements = document.querySelectorAll("li");
+      return Array.from(elements).filter(
+        (li) =>
+          li.querySelector('a[href*="/sales/lead/"]') ||
+          li.querySelector('a[href*="/in/"]') ||
+          li.querySelector(".artdeco-entity-lockup")
+      );
     }
+  }
 
-}
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            window.linkedInAutomation = new LinkedInAutomation();
-        });
-    } else {
-        window.linkedInAutomation = new LinkedInAutomation();
-    }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      window.linkedInAutomation = new LinkedInAutomation();
+    });
+  } else {
+    window.linkedInAutomation = new LinkedInAutomation();
+  }
 }

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LinkedIn Automation</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <!-- Launch Interface - Shows initially -->
     <div id="launch-interface" class="launch-container">
@@ -35,7 +37,8 @@
                 <h3>Active Campaigns</h3>
                 <button class="btn btn-primary" id="create-campaign">+ New Campaign</button>
                 <button class="btn btn-secondary" id="sales-navigator-btn">SALES NAVIGATOR</button>
-                <button class="btn btn-linkedin-search" id="linkedin-search-btn">ADD PEOPLE FROM LINKEDIN SEARCH</button>
+                <button class="btn btn-linkedin-search" id="linkedin-search-btn">ADD PEOPLE FROM LINKEDIN
+                    SEARCH</button>
             </div>
         </div>
 
@@ -46,7 +49,8 @@
                 <div class="wizard-header-template hidden">
                     <button class="back-btn">&larr;</button>
                     <h3></h3>
-                    <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                    <span class="close"
+                        title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                 </div>
 
                 <!-- Step 1: Campaign Name -->
@@ -54,7 +58,8 @@
                     <div class="wizard-header">
                         <button class="back-btn hidden">&larr;</button>
                         <h3>Campaign name</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                        <span class="close"
+                            title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 1 out of 4</div>
 
@@ -72,7 +77,8 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-step-1">&larr;</button>
                         <h3>Add people</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                        <span class="close"
+                            title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 2 out of 4</div>
 
@@ -98,14 +104,17 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-step-2-from-network">&larr;</button>
                         <h3>Add people from your network</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                        <span class="close"
+                            title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
                     <div class="network-search-options">
                         <div class="search-instructions">
-                            <p>- Use native LinkedIn search filters to find people from your network. Scroll the filters to see more fields.</p>
-                            <p>- Once specified, click "Apply LinkedIn filters" to see the results and then press "Start Collecting People" to collect the people.</p>
+                            <p>- Use native LinkedIn search filters to find people from your network. Scroll the filters
+                                to see more fields.</p>
+                            <p>- Once specified, click "Apply LinkedIn filters" to see the results and then press "Start
+                                Collecting People" to collect the people.</p>
                         </div>
 
                         <div class="search-actions">
@@ -127,7 +136,8 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-search">&larr;</button>
                         <h3>Add people</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                        <span class="close"
+                            title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 3 out of 4</div>
 
@@ -139,7 +149,8 @@
 
                         <div class="page-progress" id="page-progress">
                             <div class="page-info">
-                                <span class="current-page">Page: <span id="current-page-number">1</span> / <span id="total-pages">4</span></span>
+                                <span class="current-page">Page: <span id="current-page-number">1</span> / <span
+                                        id="total-pages">4</span></span>
                                 <div class="page-progress-bar">
                                     <div class="page-progress-fill" id="page-progress-fill"></div>
                                 </div>
@@ -161,7 +172,8 @@
                     <div class="wizard-header">
                         <button class="back-btn" id="back-to-collecting">&larr;</button>
                         <h3>Select Profiles & Generate Messages</h3>
-                        <span class="close" title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
+                        <span class="close"
+                            title="Close button disabled. Use Ctrl+Shift+X to force close all modals.">&times;</span>
                     </div>
                     <div class="step-indicator">Create campaign: step 4 out of 4</div>
 
@@ -195,4 +207,5 @@
 
     <script src="popup.js"></script>
 </body>
+
 </html>
