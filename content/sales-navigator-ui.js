@@ -651,6 +651,7 @@ if (window.salesNavigatorUILoaded) {
           err.message
         );
       }
+      await this.wait(2000);
 
       // Company Headcount Filter ----------
       try {
@@ -763,6 +764,7 @@ if (window.salesNavigatorUILoaded) {
       } catch (err) {
         console.error("❌ Error during company headcount filter:", err.message);
       }
+      await this.wait(2000);
 
       // ---------- Company Headquartered Filter ----------
       try {
@@ -901,6 +903,7 @@ if (window.salesNavigatorUILoaded) {
       } catch (err) {
         console.error("❌ Failed to apply Company Headquarters filter:", err);
       }
+      await this.wait(2000);
 
       // ---------- Job Title filter ----------
       try {
@@ -951,6 +954,7 @@ if (window.salesNavigatorUILoaded) {
       } catch (err) {
         console.error("❌ Failed to apply Job Title filter:", err);
       }
+      await this.wait(2000);
 
       // ---------- Seniority Level filter ----------
       try {
@@ -1034,6 +1038,7 @@ if (window.salesNavigatorUILoaded) {
           err.message
         );
       }
+      await this.wait(2000);
 
       // ---------- Industry filter ----------
       try {
@@ -1085,6 +1090,7 @@ if (window.salesNavigatorUILoaded) {
       } catch (err) {
         console.error("❌ Failed to apply Industry filter:", err);
       }
+      await this.wait(2000);
 
       // ---------- Geography Filter ----------
       try {
