@@ -154,7 +154,7 @@ if (window.salesNavigatorUILoaded) {
         console.log("API Data:", apiData);
         return {
           industry: apiData.industry || "any",
-          jobTitle: apiData.job_title || "any", // Map snake_case to camelCase
+          jobTitles: apiData.job_titles || ["any"],
           seniorityLevel: apiData.seniority_level || "any",
           companyHeadquarters: apiData.company_headquarters || "any",
           companyHeadCount: apiData.company_head_count || "any",
@@ -907,52 +907,177 @@ if (window.salesNavigatorUILoaded) {
 
       // ---------- Job Title filter ----------
       try {
-        const jobTitleValue = filterData.jobTitle;
-        if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
+        const jobTitlesArray = filterData.jobTitles; // Support both naming styles
+        if (
+          jobTitlesArray &&
+          Array.isArray(jobTitlesArray) &&
+          jobTitlesArray.length > 0
+        ) {
+          console.log(
+            `🎯 Applying Job Title filter for ${jobTitlesArray.length} titles:`,
+            jobTitlesArray
+          );
+
           const jobTitleLegend = Array.from(
             document.querySelectorAll("legend span")
           ).find((el) => el.textContent.trim() === "Current job title");
+
           if (!jobTitleLegend)
             throw new Error("Job title filter legend not found");
+
           const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
-          const toggleBtn = sectionContainer?.querySelector(
+          if (!sectionContainer)
+            throw new Error("Job title container not found");
+
+          // Expand the filter if collapsed
+          const toggleBtn = sectionContainer.querySelector(
             "button[aria-expanded]"
           );
           if (toggleBtn?.getAttribute("aria-expanded") === "false") {
             toggleBtn.click();
             await this.wait(800);
+            console.log("⚡ Expanded Job Title filter section");
           }
-          const input = await waitForInput(10000);
-          const chips = sectionContainer?.querySelectorAll(
+
+          // Clear any existing job title selections
+          const existingChips = sectionContainer.querySelectorAll(
             'button[aria-label*="Remove"]'
           );
-          for (const chip of chips || []) {
-            chip.click();
-            await this.wait(300);
+          if (existingChips.length > 0) {
+            console.log("🧹 Clearing existing job title selections");
+            for (const chip of existingChips) {
+              chip.click();
+              await this.wait(300);
+            }
           }
-          await typeWithDelay(input, jobTitleValue, 300);
-          const suggestions = await waitForSuggestions(15000);
-          const suggestion = suggestions?.find((el) =>
-            (el.innerText || "")
-              .toLowerCase()
-              .includes(jobTitleValue.toLowerCase())
+
+          // Process each job title
+          for (let i = 0; i < jobTitlesArray.length; i++) {
+            const jobTitleValue = jobTitlesArray[i];
+            console.log(
+              `💼 Adding job title ${i + 1}/${
+                jobTitlesArray.length
+              }: "${jobTitleValue}"`
+            );
+
+            try {
+              // Get the input field (may need to be re-queried after DOM changes)
+              const input = await waitForInput(10000);
+              if (!input) {
+                console.error(
+                  `❌ Job title input not found for: ${jobTitleValue}`
+                );
+                continue;
+              }
+
+              // Type the job title
+              await typeWithDelay(input, jobTitleValue, 250);
+              await this.wait(800); // Wait for suggestions to load
+
+              // Wait for suggestions
+              const suggestions = await waitForSuggestions(10000);
+
+              if (suggestions && suggestions.length > 0) {
+                // Find the best matching suggestion
+                const matchingSuggestion = suggestions.find((el) => {
+                  const suggestionText = (el.innerText || "")
+                    .toLowerCase()
+                    .trim();
+                  const searchValue = jobTitleValue.toLowerCase().trim();
+                  return (
+                    suggestionText === searchValue ||
+                    suggestionText.includes(searchValue) ||
+                    searchValue.includes(suggestionText)
+                  );
+                });
+
+                if (matchingSuggestion) {
+                  console.log(
+                    `   ✅ Found matching suggestion for: ${jobTitleValue}`
+                  );
+
+                  // Click the include button or the suggestion itself
+                  const includeBtn = matchingSuggestion.querySelector(
+                    "._include-button_1cz98z, button"
+                  );
+                  if (includeBtn) {
+                    includeBtn.click();
+                    console.log(
+                      `   ✅ Clicked Include button for: ${jobTitleValue}`
+                    );
+                  } else {
+                    matchingSuggestion.click();
+                    console.log(
+                      `   ✅ Clicked suggestion for: ${jobTitleValue}`
+                    );
+                  }
+
+                  // Wait for the selection to be processed
+                  await this.wait(1000);
+                } else {
+                  console.warn(
+                    `   ⚠️ No matching suggestion found for: ${jobTitleValue}, adding as typed`
+                  );
+                  // Fallback: press Enter to accept typed input
+                  ["keydown", "keypress", "keyup"].forEach((evt) =>
+                    input.dispatchEvent(
+                      new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+                    )
+                  );
+                  await this.wait(800);
+                }
+              } else {
+                console.warn(
+                  `   ⚠️ No suggestions appeared for: ${jobTitleValue}, adding as typed`
+                );
+                // Fallback: press Enter to accept typed input
+                ["keydown", "keypress", "keyup"].forEach((evt) =>
+                  input.dispatchEvent(
+                    new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+                  )
+                );
+                await this.wait(800);
+              }
+
+              // Clear the input for the next job title
+              const currentInput = sectionContainer.querySelector(
+                "input.artdeco-typeahead__input.search-filter__focus-target--input"
+              );
+              if (currentInput) {
+                currentInput.value = "";
+                currentInput.focus();
+              }
+            } catch (jobTitleError) {
+              console.error(
+                `❌ Error processing job title "${jobTitleValue}":`,
+                jobTitleError.message
+              );
+              continue; // Continue with next job title
+            }
+          }
+
+          console.log(
+            `✅ Successfully applied Job Title filter for ${jobTitlesArray.length} titles`
           );
-          if (suggestion) {
-            const includeBtn = suggestion.querySelector(
-              "button, ._include-button_1cz98z"
-            );
-            if (includeBtn) includeBtn.click();
-            else suggestion.click();
-          } else {
-            ["keydown", "keypress", "keyup"].forEach((evt) =>
-              input.dispatchEvent(
-                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
-              )
-            );
+
+          // Auto-close filter after 2 seconds
+          const collapseBtn = sectionContainer.querySelector(
+            'button[aria-expanded="true"]'
+          );
+          if (collapseBtn) {
+            console.log("⏰ Auto-closing Job Title filter in 2 seconds...");
+            setTimeout(() => {
+              collapseBtn.click();
+              console.log("✅ Job Title filter auto-closed successfully");
+            }, 2000);
           }
+        } else {
+          console.log(
+            "ℹ️ No job titles specified or job titles array is empty"
+          );
         }
       } catch (err) {
-        console.error("❌ Failed to apply Job Title filter:", err);
+        console.error("❌ Failed to apply Job Title filter:", err.message);
       }
       await this.wait(2000);
 
