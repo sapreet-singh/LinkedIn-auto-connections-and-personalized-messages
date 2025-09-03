@@ -629,7 +629,7 @@ if (window.salesNavigatorUILoaded) {
         }
         return null;
       };
-      
+
       // ---------- Posted on LinkedIn filter ----------
       try {
         const postedLegend = Array.from(
@@ -836,7 +836,7 @@ if (window.salesNavigatorUILoaded) {
         console.error("❌ Failed to apply Industry filter:", err);
       }
 
-            // Company Headcount Filter with Popup Handling and Auto-Close
+      // Company Headcount Filter ----------
 
       try {
         const headcountValue = filterData.companyHeadCount; // Support both naming styles
@@ -952,53 +952,136 @@ if (window.salesNavigatorUILoaded) {
       // ---------- Company Headquartered Filter ----------
       try {
         const headquartersValue = filterData.companyHeadquarters;
-        if (headquartersValue && headquartersValue.toLowerCase() !== "any") {
-          const hqLegend = Array.from(
-            document.querySelectorAll("legend span")
-          ).find(
-            (el) => el.textContent.trim() === "Company headquarters location"
+        if (!headquartersValue || headquartersValue.toLowerCase() === "any") {
+          console.log(
+            "No company headquarters location specified or set to 'any'. Exiting."
           );
-          if (!hqLegend)
-            throw new Error("Company Headquarters filter legend not found");
-          const sectionContainer = hqLegend.closest("fieldset, div");
-          if (!sectionContainer)
-            throw new Error("Company Headquarters container not found");
-          const toggleBtn = sectionContainer.querySelector(
-            "button[aria-expanded]"
-          );
-          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-            toggleBtn.click();
-            await this.wait(800);
-          }
-          const input = await waitForInput(10000);
-          if (!input) throw new Error("Company Headquarters input not found");
-          const chips = sectionContainer.querySelectorAll(
-            'button[aria-label*="Remove"]'
-          );
+          return;
+        }
+        console.log(
+          `🔍 Applying Company Headquarters filter for location: "${headquartersValue}"`
+        );
+
+        // Find legend and container
+        const hqLegend = Array.from(
+          document.querySelectorAll("legend span")
+        ).find(
+          (el) => el.textContent.trim() === "Company headquarters location"
+        );
+        if (!hqLegend)
+          throw new Error("Company Headquarters filter legend not found");
+
+        const sectionContainer = hqLegend.closest("fieldset, div");
+        if (!sectionContainer)
+          throw new Error("Company Headquarters container not found");
+
+        // Expand if collapsed
+        const toggleBtn = sectionContainer.querySelector(
+          "button[aria-expanded]"
+        );
+        if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+          toggleBtn.click();
+          await this.wait(800);
+          console.log("⚡ Expanded Company Headquarters filter section.");
+        }
+
+        // Get input
+        const input = await waitForInput(10000);
+        if (!input) throw new Error("Company Headquarters input not found");
+
+        // Remove existing chips
+        const chips = sectionContainer.querySelectorAll(
+          'button[aria-label*="Remove"]'
+        );
+        if (chips.length > 0) {
+          console.log(`🧹 Clearing existing location selections`);
           for (const chip of chips) {
             chip.click();
             await this.wait(300);
           }
-          await typeWithDelay(input, headquartersValue, 200);
-          const suggestions = await waitForSuggestions(10000);
-          const suggestion = suggestions?.find((el) =>
-            (el.innerText || "")
-              .toLowerCase()
-              .includes(headquartersValue.toLowerCase())
+        }
+
+        // Type the location string
+        await typeWithDelay(input, headquartersValue, 200);
+        await this.wait(500);
+
+        // Wait for suggestions
+        const suggestions = await waitForSuggestions(10000);
+        if (!suggestions || suggestions.length === 0) {
+          console.warn(
+            `⚠️ No location suggestions found for "${headquartersValue}"`
           );
-          if (suggestion) {
-            const includeBtn = suggestion.querySelector(
-              "._include-button_1cz98z, button"
-            );
-            if (includeBtn) includeBtn.click();
-            else suggestion.click();
+          // Fallback: hit Enter to accept typed input
+          ["keydown", "keypress", "keyup"].forEach((evt) =>
+            input.dispatchEvent(
+              new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+            )
+          );
+          console.log(`✅ Added location (fallback): ${headquartersValue}`);
+          return;
+        }
+
+        // Filter suggestions containing the location string (case-insensitive)
+        const matchingSuggestions = Array.from(suggestions).filter((el) =>
+          (el.innerText || "")
+            .toLowerCase()
+            .includes(headquartersValue.toLowerCase())
+        );
+
+        if (matchingSuggestions.length === 0) {
+          console.warn(
+            `⚠️ No matching suggestions found containing "${headquartersValue}"`
+          );
+          // Fallback: accept typed input
+          ["keydown", "keypress", "keyup"].forEach((evt) =>
+            input.dispatchEvent(
+              new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+            )
+          );
+          console.log(`✅ Added location (fallback): ${headquartersValue}`);
+          return;
+        }
+
+        console.log(
+          `📍 Found ${matchingSuggestions.length} matching location(s) for "${headquartersValue}" to include:`
+        );
+
+        // Click "Include" on all matching suggestions
+        for (let i = 0; i < matchingSuggestions.length; i++) {
+          const suggestion = matchingSuggestions[i];
+          console.log(
+            `📍 Including location ${i + 1}/${matchingSuggestions.length}: ${(
+              suggestion.innerText || ""
+            ).trim()}`
+          );
+
+          const includeBtn = suggestion.querySelector(
+            "._include-button_1cz98z, button"
+          );
+          if (includeBtn) {
+            includeBtn.click();
           } else {
-            ["keydown", "keypress", "keyup"].forEach((evt) =>
-              input.dispatchEvent(
-                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
-              )
-            );
+            suggestion.click();
           }
+          await this.wait(300); // brief wait between clicks
+        }
+
+        console.log(
+          `✅ Successfully applied Company Headquarters filter with all matching locations for "${headquartersValue}"`
+        );
+
+        // Auto-close filter after 2 seconds if open
+        const collapseBtn = sectionContainer.querySelector(
+          'button[aria-expanded="true"]'
+        );
+        if (collapseBtn) {
+          console.log("⏰ Auto-closing headquarters filter in 2 seconds...");
+          setTimeout(() => {
+            collapseBtn.click();
+            console.log(
+              "✅ Company Headquarters filter auto-closed successfully"
+            );
+          }, 2000);
         }
       } catch (err) {
         console.error("❌ Failed to apply Company Headquarters filter:", err);
