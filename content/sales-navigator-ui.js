@@ -652,192 +652,7 @@ if (window.salesNavigatorUILoaded) {
         );
       }
 
-      // ---------- Job Title filter ----------
-      try {
-        const jobTitleValue = filterData.jobTitle;
-        if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
-          const jobTitleLegend = Array.from(
-            document.querySelectorAll("legend span")
-          ).find((el) => el.textContent.trim() === "Current job title");
-          if (!jobTitleLegend)
-            throw new Error("Job title filter legend not found");
-          const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
-          const toggleBtn = sectionContainer?.querySelector(
-            "button[aria-expanded]"
-          );
-          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-            toggleBtn.click();
-            await this.wait(800);
-          }
-          const input = await waitForInput(10000);
-          const chips = sectionContainer?.querySelectorAll(
-            'button[aria-label*="Remove"]'
-          );
-          for (const chip of chips || []) {
-            chip.click();
-            await this.wait(300);
-          }
-          await typeWithDelay(input, jobTitleValue, 300);
-          const suggestions = await waitForSuggestions(15000);
-          const suggestion = suggestions?.find((el) =>
-            (el.innerText || "")
-              .toLowerCase()
-              .includes(jobTitleValue.toLowerCase())
-          );
-          if (suggestion) {
-            const includeBtn = suggestion.querySelector(
-              "button, ._include-button_1cz98z"
-            );
-            if (includeBtn) includeBtn.click();
-            else suggestion.click();
-          } else {
-            ["keydown", "keypress", "keyup"].forEach((evt) =>
-              input.dispatchEvent(
-                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
-              )
-            );
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to apply Job Title filter:", err);
-      }
-
-      // ---------- Seniority Level filter ----------
-      try {
-        const seniorityValue = filterData.seniorityLevel;
-        if (seniorityValue && seniorityValue.toLowerCase() !== "any") {
-          const seniorityLegend = Array.from(
-            document.querySelectorAll("legend span")
-          ).find((el) => el.textContent.trim() === "Seniority level");
-          if (!seniorityLegend) throw new Error("Seniority legend not found");
-          const sectionContainer = seniorityLegend.closest("fieldset");
-          if (!sectionContainer)
-            throw new Error("Fieldset container not found");
-          const toggleBtn = sectionContainer.querySelector(
-            "button[aria-expanded]"
-          );
-          if (
-            toggleBtn &&
-            toggleBtn.getAttribute("aria-expanded") === "false"
-          ) {
-            toggleBtn.click();
-            await this.wait(1000);
-          }
-
-          const listContainer = await new Promise((resolve, reject) => {
-            const timeout = 15000,
-              interval = 500;
-            let elapsed = 0;
-            const check = () => {
-              const el = sectionContainer.querySelector(
-                'ul[aria-label="Seniority level filter suggestions"]'
-              );
-              if (el) resolve(el);
-              else if (elapsed >= timeout)
-                reject(
-                  new Error("Seniority filter list not found within timeout")
-                );
-              else {
-                elapsed += interval;
-                setTimeout(check, interval);
-              }
-            };
-            check();
-          });
-          const listItems = await new Promise((resolve, reject) => {
-            const timeout = 15000,
-              interval = 500;
-            let elapsed = 0;
-            const check = () => {
-              const options =
-                listContainer.querySelectorAll("li[role='option']");
-              if (options.length > 0) resolve(Array.from(options));
-              else if (elapsed >= timeout)
-                reject(new Error("Seniority options not found within timeout"));
-              else {
-                elapsed += interval;
-                setTimeout(check, interval);
-              }
-            };
-            check();
-          });
-          const match = listItems.find((el) => {
-            const text = el
-              .querySelector("span")
-              ?.textContent.trim()
-              .toLowerCase();
-            return (
-              text === seniorityValue.toLowerCase() ||
-              text.includes(seniorityValue.toLowerCase())
-            );
-          });
-          if (match) {
-            const includeBtn = match.querySelector("._include-button_1cz98z");
-            if (includeBtn) includeBtn.click();
-            else match.click();
-            await this.wait(500);
-          }
-        }
-      } catch (err) {
-        console.error(
-          "❌ Failed to apply Seniority Level filter:",
-          err.message
-        );
-      }
-
-      // ---------- Industry filter ----------
-      try {
-        const industryValue = filterData.industry;
-        if (industryValue && industryValue.toLowerCase() !== "any") {
-          const industryLegend = Array.from(
-            document.querySelectorAll("legend span")
-          ).find((el) => el.textContent.trim() === "Industry");
-          if (!industryLegend)
-            throw new Error("Industry filter legend not found");
-          const sectionContainer = industryLegend.closest("div, fieldset, li");
-          const toggleBtn = sectionContainer?.querySelector(
-            "button[aria-expanded]"
-          );
-          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
-            toggleBtn.click();
-            await this.wait(800);
-          }
-          const input = await waitForInput(10000);
-          if (!input) throw new Error("Industry input not found");
-          const chips = sectionContainer?.querySelectorAll(
-            'button[aria-label*="Remove"]'
-          );
-          for (const chip of chips || []) {
-            chip.click();
-            await this.wait(300);
-          }
-          await typeWithDelay(input, industryValue, 250);
-          const suggestions = await waitForSuggestions(10000);
-          const suggestion = suggestions?.find((el) =>
-            (el.innerText || "")
-              .toLowerCase()
-              .includes(industryValue.toLowerCase())
-          );
-          if (suggestion) {
-            const includeBtn = suggestion.querySelector(
-              "._include-button_1cz98z, button"
-            );
-            if (includeBtn) includeBtn.click();
-            else suggestion.click();
-          } else {
-            ["keydown", "keypress", "keyup"].forEach((evt) =>
-              input.dispatchEvent(
-                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
-              )
-            );
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to apply Industry filter:", err);
-      }
-
       // Company Headcount Filter ----------
-
       try {
         const headcountValue = filterData.companyHeadCount; // Support both naming styles
         if (headcountValue && headcountValue.toLowerCase() !== "any") {
@@ -1085,6 +900,439 @@ if (window.salesNavigatorUILoaded) {
         }
       } catch (err) {
         console.error("❌ Failed to apply Company Headquarters filter:", err);
+      }
+
+      // ---------- Job Title filter ----------
+      try {
+        const jobTitleValue = filterData.jobTitle;
+        if (jobTitleValue && jobTitleValue.toLowerCase() !== "any") {
+          const jobTitleLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Current job title");
+          if (!jobTitleLegend)
+            throw new Error("Job title filter legend not found");
+          const sectionContainer = jobTitleLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+          const input = await waitForInput(10000);
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+          await typeWithDelay(input, jobTitleValue, 300);
+          const suggestions = await waitForSuggestions(15000);
+          const suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(jobTitleValue.toLowerCase())
+          );
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "button, ._include-button_1cz98z"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Job Title filter:", err);
+      }
+
+      // ---------- Seniority Level filter ----------
+      try {
+        const seniorityValue = filterData.seniorityLevel;
+        if (seniorityValue && seniorityValue.toLowerCase() !== "any") {
+          const seniorityLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Seniority level");
+          if (!seniorityLegend) throw new Error("Seniority legend not found");
+          const sectionContainer = seniorityLegend.closest("fieldset");
+          if (!sectionContainer)
+            throw new Error("Fieldset container not found");
+          const toggleBtn = sectionContainer.querySelector(
+            "button[aria-expanded]"
+          );
+          if (
+            toggleBtn &&
+            toggleBtn.getAttribute("aria-expanded") === "false"
+          ) {
+            toggleBtn.click();
+            await this.wait(1000);
+          }
+
+          const listContainer = await new Promise((resolve, reject) => {
+            const timeout = 15000,
+              interval = 500;
+            let elapsed = 0;
+            const check = () => {
+              const el = sectionContainer.querySelector(
+                'ul[aria-label="Seniority level filter suggestions"]'
+              );
+              if (el) resolve(el);
+              else if (elapsed >= timeout)
+                reject(
+                  new Error("Seniority filter list not found within timeout")
+                );
+              else {
+                elapsed += interval;
+                setTimeout(check, interval);
+              }
+            };
+            check();
+          });
+          const listItems = await new Promise((resolve, reject) => {
+            const timeout = 15000,
+              interval = 500;
+            let elapsed = 0;
+            const check = () => {
+              const options =
+                listContainer.querySelectorAll("li[role='option']");
+              if (options.length > 0) resolve(Array.from(options));
+              else if (elapsed >= timeout)
+                reject(new Error("Seniority options not found within timeout"));
+              else {
+                elapsed += interval;
+                setTimeout(check, interval);
+              }
+            };
+            check();
+          });
+          const match = listItems.find((el) => {
+            const text = el
+              .querySelector("span")
+              ?.textContent.trim()
+              .toLowerCase();
+            return (
+              text === seniorityValue.toLowerCase() ||
+              text.includes(seniorityValue.toLowerCase())
+            );
+          });
+          if (match) {
+            const includeBtn = match.querySelector("._include-button_1cz98z");
+            if (includeBtn) includeBtn.click();
+            else match.click();
+            await this.wait(500);
+          }
+        }
+      } catch (err) {
+        console.error(
+          "❌ Failed to apply Seniority Level filter:",
+          err.message
+        );
+      }
+
+      // ---------- Industry filter ----------
+      try {
+        const industryValue = filterData.industry;
+        if (industryValue && industryValue.toLowerCase() !== "any") {
+          const industryLegend = Array.from(
+            document.querySelectorAll("legend span")
+          ).find((el) => el.textContent.trim() === "Industry");
+          if (!industryLegend)
+            throw new Error("Industry filter legend not found");
+          const sectionContainer = industryLegend.closest("div, fieldset, li");
+          const toggleBtn = sectionContainer?.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+          }
+          const input = await waitForInput(10000);
+          if (!input) throw new Error("Industry input not found");
+          const chips = sectionContainer?.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          for (const chip of chips || []) {
+            chip.click();
+            await this.wait(300);
+          }
+          await typeWithDelay(input, industryValue, 250);
+          const suggestions = await waitForSuggestions(10000);
+          const suggestion = suggestions?.find((el) =>
+            (el.innerText || "")
+              .toLowerCase()
+              .includes(industryValue.toLowerCase())
+          );
+          if (suggestion) {
+            const includeBtn = suggestion.querySelector(
+              "._include-button_1cz98z, button"
+            );
+            if (includeBtn) includeBtn.click();
+            else suggestion.click();
+          } else {
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Industry filter:", err);
+      }
+
+      // ---------- Geography Filter ----------
+      try {
+        const geographyValue = filterData.companyHeadquarters;
+        if (geographyValue && geographyValue.toLowerCase() !== "any") {
+          console.log(`🌍 Applying Geography filter for: "${geographyValue}"`);
+
+          // Find the geography legend - look for div with "Geography" text
+          const geographyLegend = Array.from(
+            document.querySelectorAll("legend div")
+          ).find((el) => el.textContent.trim() === "Geography");
+
+          if (!geographyLegend)
+            throw new Error("Geography filter legend not found");
+
+          const sectionContainer = geographyLegend.closest("fieldset");
+          if (!sectionContainer)
+            throw new Error("Geography container not found");
+
+          // Expand the filter if collapsed
+          const toggleBtn = sectionContainer.querySelector(
+            "button[aria-expanded]"
+          );
+          if (toggleBtn?.getAttribute("aria-expanded") === "false") {
+            toggleBtn.click();
+            await this.wait(800);
+            console.log("⚡ Expanded Geography filter section");
+          }
+
+          // Get the input field
+          const input = sectionContainer.querySelector(
+            "input.artdeco-typeahead__input[placeholder='Add locations']"
+          );
+          if (!input) throw new Error("Geography input field not found");
+
+          // Remove existing selected chips/filters
+          const chips = sectionContainer.querySelectorAll(
+            'button[aria-label*="Remove"]'
+          );
+          if (chips.length > 0) {
+            console.log("🧹 Clearing existing geography selections");
+            for (const chip of chips) {
+              chip.click();
+              await this.wait(300);
+            }
+          }
+
+          // Check if we need to select Region vs Postal Code radio button
+          const regionRadio = sectionContainer.querySelector(
+            'input[type="radio"][value="REGION"]'
+          );
+          const postalRadio = sectionContainer.querySelector(
+            'input[type="radio"][value="POSTAL_CODE"]'
+          );
+
+          // Default to Region unless the geography value looks like a postal code
+          const isPostalCode =
+            /^\d{5}(-\d{4})?$|^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i.test(
+              geographyValue.trim()
+            );
+
+          if (isPostalCode && postalRadio) {
+            postalRadio.click();
+            await this.wait(500);
+            console.log("📮 Selected Postal Code geography type");
+          } else if (regionRadio) {
+            regionRadio.click();
+            await this.wait(500);
+            console.log("🌍 Selected Region geography type");
+          }
+
+          // Clear input and focus
+          input.focus();
+          input.value = "";
+
+          // Type the geography value character by character
+          await typeWithDelay(input, geographyValue, 200);
+          await this.wait(1500); // Wait longer for suggestions to load
+
+          // Wait for suggestions to appear and store them in variable
+          const waitForAndStoreSuggestions = async (maxWaitTime = 15000) => {
+            const startTime = Date.now();
+            while (Date.now() - startTime < maxWaitTime) {
+              const suggestionsList = sectionContainer.querySelector(
+                'ul[aria-label="Add locations"]'
+              );
+              if (suggestionsList) {
+                const suggestions = Array.from(
+                  suggestionsList.querySelectorAll('li[role="option"]')
+                );
+                if (suggestions.length > 0) {
+                  console.log(
+                    `📍 Found ${suggestions.length} geography suggestions:`
+                  );
+
+                  // Store suggestions with their text content
+                  const storedSuggestions = suggestions.map(
+                    (suggestion, index) => {
+                      const text =
+                        suggestion
+                          .querySelector('span[aria-hidden="true"]')
+                          ?.textContent.trim() || suggestion.innerText.trim();
+                      console.log(`   ${index + 1}. ${text}`);
+                      return {
+                        element: suggestion,
+                        text: text,
+                        includeButton: suggestion.querySelector(
+                          "._include-button_1cz98z"
+                        ),
+                      };
+                    }
+                  );
+
+                  return storedSuggestions;
+                }
+              }
+              await this.wait(500);
+            }
+            return [];
+          };
+
+          const storedSuggestions = await waitForAndStoreSuggestions(15000);
+
+          if (storedSuggestions.length === 0) {
+            console.warn(
+              `⚠️ No geography suggestions found for "${geographyValue}"`
+            );
+            // Fallback: press Enter to accept typed input
+            ["keydown", "keypress", "keyup"].forEach((evt) =>
+              input.dispatchEvent(
+                new KeyboardEvent(evt, { key: "Enter", bubbles: true })
+              )
+            );
+            console.log(`✅ Added geography (fallback): ${geographyValue}`);
+            return;
+          }
+
+          // FIXED: Select only the exact match first, then add others one by one with longer delays
+          const searchValue = geographyValue.toLowerCase().trim();
+
+          // Find exact match first
+          const exactMatch = storedSuggestions.find(
+            (s) => s.text.toLowerCase() === searchValue
+          );
+
+          // Find other relevant matches
+          const otherMatches = storedSuggestions.filter(
+            (s) =>
+              s.text.toLowerCase().includes(searchValue) &&
+              s.text.toLowerCase() !== searchValue
+          );
+
+          console.log(
+            `🎯 Found exact match: ${exactMatch ? exactMatch.text : "None"}`
+          );
+          console.log(`🎯 Found ${otherMatches.length} other relevant matches`);
+
+          // Select exact match first
+          if (exactMatch) {
+            console.log(`🌍 Including primary location: ${exactMatch.text}`);
+            if (exactMatch.includeButton) {
+              exactMatch.includeButton.click();
+              console.log(
+                `   ✅ Clicked Include button for: ${exactMatch.text}`
+              );
+            } else {
+              exactMatch.element.click();
+              console.log(
+                `   ✅ Clicked suggestion element for: ${exactMatch.text}`
+              );
+            }
+
+            // Wait longer for the selection to be processed and page to stabilize
+            await this.wait(2000);
+          }
+
+          // Add other relevant locations one by one with delays
+          console.log(
+            `🌍 Adding ${otherMatches.length} additional locations...`
+          );
+
+          for (let i = 0; i < Math.min(otherMatches.length, 5); i++) {
+            // Limit to 5 additional locations
+            const suggestion = otherMatches[i];
+
+            console.log(`🌍 Adding location ${i + 1}/5: ${suggestion.text}`);
+
+            // Re-focus input (might have been lost due to page navigation)
+            const currentInput = sectionContainer.querySelector(
+              "input.artdeco-typeahead__input[placeholder='Add locations']"
+            );
+            if (currentInput) {
+              currentInput.focus();
+              currentInput.value = "";
+
+              // Type a partial search to trigger suggestions
+              await typeWithDelay(
+                currentInput,
+                suggestion.text.split(",")[0],
+                100
+              );
+              await this.wait(1000);
+
+              // Find the suggestion again (DOM may have changed)
+              const currentSuggestions = Array.from(
+                sectionContainer.querySelectorAll('li[role="option"]')
+              );
+
+              const matchingSuggestion = currentSuggestions.find((s) => {
+                const text =
+                  s
+                    .querySelector('span[aria-hidden="true"]')
+                    ?.textContent.trim() || s.innerText.trim();
+                return text === suggestion.text;
+              });
+
+              if (matchingSuggestion) {
+                const includeBtn = matchingSuggestion.querySelector(
+                  "._include-button_1cz98z"
+                );
+                if (includeBtn) {
+                  includeBtn.click();
+                  console.log(`   ✅ Added: ${suggestion.text}`);
+                  await this.wait(1500); // Wait longer between selections
+                }
+              }
+            }
+          }
+
+          console.log(
+            `✅ Successfully applied Geography filter for "${geographyValue}"`
+          );
+
+          // Auto-close filter after 3 seconds
+          const collapseBtn = sectionContainer.querySelector(
+            'button[aria-expanded="true"]'
+          );
+          if (collapseBtn) {
+            console.log("⏰ Auto-closing Geography filter in 3 seconds...");
+            setTimeout(() => {
+              collapseBtn.click();
+              console.log("✅ Geography filter auto-closed successfully");
+            }, 3000);
+          }
+        }
+      } catch (err) {
+        console.error("❌ Failed to apply Geography filter:", err.message);
+        console.error("Full error:", err);
       }
 
       console.log("🏁 Finished Sales Navigator Filters");
