@@ -58,20 +58,6 @@ With advanced Sales Navigator integration, you can easily apply filters to find 
 - **Smart Interface Switching**: Detects LinkedIn state and shows appropriate interface
 - **Modal Management**: Persistent modals that don't close accidentally
 
-## 🔎 Accepted Connections Monitoring
-
-- Add content script for monitoring LinkedIn connections and detecting accepted requests
-- Integrate accepted-request API with background service worker
-- Update manifest to inject monitoring on the LinkedIn connections page
-
-### 🎯 Advanced Campaign Management
-
-- **Campaign Wizard**: Step-by-step campaign creation process
-- **Multiple Data Sources**: LinkedIn search, network connections, CSV upload
-- **Profile Selection**: Choose specific profiles for messaging campaigns
-- **Message Strategy Configuration**: Single messages or multi-step follow-ups
-- **Campaign Tracking**: Monitor campaign progress and results
-
 ## 🚀 How to Use
 
 ### Method 1: Standard Campaign Workflow
@@ -135,11 +121,15 @@ With advanced Sales Navigator integration, you can easily apply filters to find 
 - Extension automatically opens LinkedIn Sales Navigator
 - Floating UI appears automatically on the Sales Navigator search page
 
-#### 2. Set Custom Prompt (Required)
+#### 2. Set Filters Custom Prompt (Not Required)
 
-- Click "Set Custom Prompt" in the floating UI
-- Enter your personalized message template
-- This prompt will be used for AI message generation
+- Industry filter (via prompt automation).
+- Posted on LinkedIn filter.
+- Company Headquarters filter (with auto-close after 2 seconds).
+- Company Headcount filter (with auto-close after 2 seconds).
+- Geography filter with smart location matching:
+  - Automatically distinguishes Region vs Postal Code.
+  - Fixes selector inconsistencies (div vs span).
 
 #### 3. Collect Profiles
 
@@ -148,7 +138,13 @@ With advanced Sales Navigator integration, you can easily apply filters to find 
 - Profiles are collected automatically as you scroll/navigate
 - View collected profiles in the floating UI list
 
-#### 4. Process Profiles
+#### 4. Set Custom Prompt (Required)
+
+- Click "Set Custom Prompt" in the floating UI
+- Enter your personalized message template
+- This prompt will be used for AI message generation
+
+#### 5. Process Profiles
 
 - Click "Next: Process Profiles" when ready
 - Extension starts automated workflow for each profile:
@@ -159,12 +155,25 @@ With advanced Sales Navigator integration, you can easily apply filters to find 
   - Sends connection request
   - Returns to Sales Navigator
 
-#### 5. Monitor Progress
+#### 6. Monitor Progress
 
 - Real-time status updates in the floating UI
 - Connection counters track sent requests
 - Automatic delays between profiles (5-30 seconds)
 - Error handling continues processing if individual profiles fail
+
+#### 7. Accepted Connections Monitoring
+
+- Add content script for monitoring LinkedIn connections and detecting accepted requests
+- Integrate accepted-request API with background service worker
+- Update manifest to inject monitoring on the LinkedIn connections page
+
+#### 8. Follow-up Messaging
+
+- Automatic Detection: When a connection request is accepted, the extension automatically detects the acceptance and queues the follow-up.
+- Sales Navigator Inbox: Follow-ups are delivered directly through the Sales Navigator messaging interface. The system locates the correct conversation thread and inserts your personalized message seamlessly.
+- Smart Scheduling: Default delay is 24 hours (configurable), ensuring a natural and non-intrusive follow-up cadence.
+- Personalization Options: Messages are generated using your custom prompt from the floating UI, with AI-powered personalization for each prospect.
 
 ## 🎯 Automation Capabilities
 
