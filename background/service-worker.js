@@ -18,8 +18,8 @@ class LinkedInAutomationBackground {
     });
 
     // Set up 1-minute alarm for monitoring connections
-    chrome.alarms.create("monitorConnections", { periodInMinutes: 1 });
-
+    //chrome.alarms.create("monitorConnections", { periodInMinutes: 1 });
+    chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === "monitorConnections") {
         console.log(

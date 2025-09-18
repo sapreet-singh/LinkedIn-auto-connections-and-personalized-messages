@@ -58,6 +58,12 @@ With advanced Sales Navigator integration, you can easily apply filters to find 
 - **Smart Interface Switching**: Detects LinkedIn state and shows appropriate interface
 - **Modal Management**: Persistent modals that don't close accidentally
 
+## 🔎 Accepted Connections Monitoring
+
+- Add content script for monitoring LinkedIn connections and detecting accepted requests
+- Integrate accepted-request API with background service worker
+- Update manifest to inject monitoring on the LinkedIn connections page
+
 ### 🎯 Advanced Campaign Management
 
 - **Campaign Wizard**: Step-by-step campaign creation process
