@@ -5,13 +5,28 @@ class LinkedInAutomationBackground {
   }
 
   init() {
+    const now = new Date().toISOString(); // Current time: 2025-09-15T13:21:00Z (06:51 PM IST)
+    console.log(`Service worker initialized at ${now}`);
+
     chrome.runtime.onInstalled.addListener(() => {
       this.onInstalled();
     });
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
-      return true;
+      return true; // Keep message channel open for async responses
+    });
+
+    // Set up 1-minute alarm for monitoring connections
+    //chrome.alarms.create("monitorConnections", { periodInMinutes: 1 });
+    chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === "monitorConnections") {
+        console.log(
+          `Monitoring connections triggered at ${new Date().toISOString()}`
+        );
+        this.monitorConnections();
+      }
     });
 
     setTimeout(() => {
@@ -22,6 +37,8 @@ class LinkedInAutomationBackground {
   onInstalled() {}
 
   handleMessage(message, sender, sendResponse) {
+    const now = new Date().toISOString();
+    console.log(`Received message ${message.action} at ${now}`);
     switch (message.action) {
       case "startCampaign":
         this.startCampaign(message.campaignId, sendResponse);
@@ -49,6 +66,113 @@ class LinkedInAutomationBackground {
         break;
       default:
         sendResponse({ error: "Unknown action" });
+    }
+  }
+
+  async normalizeDateString(dateInput) {
+    try {
+      const d = new Date(dateInput);
+      if (isNaN(d)) {
+        console.warn("⚠️ Could not parse date:", dateInput);
+        return null;
+      }
+      return (
+        d.getFullYear() +
+        "-" +
+        String(d.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(d.getDate()).padStart(2, "0")
+      );
+    } catch (err) {
+      console.error("❌ Error normalizing date:", dateInput, err);
+      return null;
+    }
+  }
+
+  async monitorConnections() {
+    try {
+      const connectionsUrl =
+        "https://www.linkedin.com/mynetwork/invite-connect/connections/?sort=RECENT";
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url: connectionsUrl, active: false }, resolve);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
+      const response = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(
+          tab.id,
+          { action: "scrapeConnections" },
+          resolve
+        );
+      });
+      await chrome.tabs.remove(tab.id);
+
+      console.log("🔎 Raw scrape response:", response);
+
+      if (!response || !response.connections) {
+        console.error(
+          `❌ Failed to scrape connections at ${new Date().toISOString()}:`,
+          response
+        );
+        return;
+      }
+
+      const today = await this.normalizeDateString(new Date());
+      const connections = response.connections;
+
+      for (const connection of connections) {
+        if (!connection.date) {
+          console.warn("⚠️ Skipping connection with no date:", connection);
+          continue;
+        }
+
+        const connectionDate = await this.normalizeDateString(connection.date);
+        if (connectionDate === today) {
+          console.log(`🎉 Found connection from today:`, connection);
+          this.sendToAPI(connection.url, connection.date);
+        } else {
+          console.log(
+            `⏳ Skipping (connection=${connectionDate}, today=${today})`
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `💥 Error monitoring connections at ${new Date().toISOString()}:`,
+        error
+      );
+    }
+  }
+
+  async sendToAPI(url, rawDate) {
+    try {
+      const payload = {
+        url: url,
+        date: rawDate
+      };
+      const response = await fetch(
+        "https://localhost:7120/api/linkedin/accepted-request",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      console.log("✅ Successfully sent connection to API:", url);
+    } catch (err) {
+      console.error(
+        `❌ Failed to send accepted connection ${url} to API:`,
+        err.message
+      );
     }
   }
 
@@ -88,7 +212,7 @@ class LinkedInAutomationBackground {
           });
           chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
             if (tabId === tab.id && changeInfo.status === "complete") {
-              this.executeAutomation(tab.id, campaign);
+              this.executeAutomation(tabId, campaign);
             }
           });
         });
@@ -220,7 +344,6 @@ class LinkedInAutomationBackground {
 
   openExtensionPopup(sendResponse) {
     try {
-      // Open the extension popup programmatically
       chrome.action.openPopup();
       sendResponse({ success: true });
     } catch (error) {
@@ -231,7 +354,6 @@ class LinkedInAutomationBackground {
 
   handleProfilesRealTime(profiles, sender, sendResponse) {
     try {
-      // Forward profiles to popup if it's open
       chrome.runtime
         .sendMessage({
           action: "profilesCollected",
@@ -249,7 +371,6 @@ class LinkedInAutomationBackground {
 
   handleCollectionStatus(message, sender, sendResponse) {
     try {
-      // Forward status to popup if it's open
       chrome.runtime
         .sendMessage({
           action: "collectionStatusUpdate",
