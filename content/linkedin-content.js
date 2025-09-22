@@ -1222,6 +1222,7 @@ if (window.linkedInAutomationInjected) {
         await this.delay(4000);
 
         const followUpText = await this.generateFollowUpMessage(profile);
+
         if (!followUpText || typeof followUpText !== "string") {
           throw new Error("Follow-up text not received from API");
         }
@@ -1243,9 +1244,27 @@ if (window.linkedInAutomationInjected) {
 
         // 5) Wait 10 seconds then send
         await this.delay(10000);
-        await this.clickSendButton();
+        //await this.clickSendButton();
 
         console.log("[FollowUp] Message sent successfully.");
+        try {
+          const logApiUrl = "https://localhost:7120/api/linkedin/FollowUp-log";
+          const logPayload = {
+            profileUrl: profile?.url || profile?.profileUrl || "",
+            followUp: followUpText,
+          };
+          await fetch(logApiUrl, {
+            method: "POST",
+            headers: {
+              Accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(logPayload),
+          });
+          console.log("[FollowUp] Log stored successfully.");
+        } catch (logErr) {
+          console.warn("[FollowUp] Failed to store log:", logErr);
+        }
         return { success: true };
       } catch (err) {
         console.error("[FollowUp] Error in startFollowUpFlow:", err);

@@ -110,7 +110,7 @@ class LinkedInAutomationBackground {
       let selected = null;
       if (Array.isArray(profileData)) {
         console.log(`[FollowUp] API returned ${profileData.length} items; selecting first valid with seleLeadUrl.`);
-        selected = profileData.find((p) => p && typeof p === "object" && p.seleLeadUrl) || null;
+        selected = profileData.find((p) => p && typeof p === "object" && p.saleleadUrl) || null;
       } else if (profileData && typeof profileData === "object") {
         selected = profileData;
       }
@@ -120,7 +120,7 @@ class LinkedInAutomationBackground {
         return;
       }
 
-      const leadUrl = selected.seleLeadUrl;
+      const leadUrl = selected.saleleadUrl;
       if (!leadUrl) {
         console.warn("[FollowUp] Invalid or missing LinkedIn URL in selected profile:", selected);
         return;
@@ -129,7 +129,7 @@ class LinkedInAutomationBackground {
       const profileForContent = {
         name: selected.name || "",
         title: selected.title || "",
-        url: selected.linkedinUrl || selected.url || selected.profileUrl || "",
+        url: selected.linkedinUrl ||"",
         location: selected.location || "",
         interests: selected.interests || "",
         previousMessage: selected.message || "",
@@ -149,9 +149,7 @@ class LinkedInAutomationBackground {
           try {
             chrome.tabs.onUpdated.removeListener(onUpdated);
             console.log("[FollowUp] Page loaded. Sending startFollowUp to content script.");
-            chrome.tabs.sendMessage(
-              tab.id,
-              { action: "startFollowUp", profile: profileForContent },
+            chrome.tabs.sendMessage(tab.id,{ action: "startFollowUp", profile: profileForContent },
               (response) => {
                 if (chrome.runtime.lastError) {
                   console.error("[FollowUp] Error sending message to content script:", chrome.runtime.lastError);
