@@ -441,6 +441,12 @@ if (window.linkedInAutomationInjected) {
           this.startAutomation(message.campaign);
           sendResponse({ success: true });
         },
+        startFollowUp: () => {
+          this.startFollowUpFlow(message.profile)
+            .then((result) => sendResponse({ success: true, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
         stopAutomation: () => {
           this.stopAutomation();
           sendResponse({ success: true });
@@ -924,6 +930,12 @@ if (window.linkedInAutomationInjected) {
     async findMessageButton() {
       await this.delay(2000);
       const selectors = [
+        // Sales Navigator specific patterns
+        'button[data-anchor-send-inmail]',
+        'button[aria-label^="Message "]',
+        'button._message-cta_1xow7n',
+        'button[id^="ember"][aria-label^="Message "]',
+        // General/consumer LinkedIn patterns
         'button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])',
         'button[data-control-name="message"]',
         '.pv-s-profile-actions button[aria-label*="Message"]',
@@ -1029,6 +1041,10 @@ if (window.linkedInAutomationInjected) {
 
     async findMessageInput() {
       const selectors = [
+        // Sales Navigator textarea
+        'textarea[name="message"]',
+        'textarea[aria-label*="Type your message here"]',
+        // Standard LinkedIn contenteditable inputs
         ".msg-form__contenteditable",
         '.msg-form__msg-content-container div[contenteditable="true"]',
         'div[data-placeholder*="message"]',
@@ -1043,8 +1059,16 @@ if (window.linkedInAutomationInjected) {
       for (let attempt = 0; attempt < 8; attempt++) {
         for (const selector of selectors) {
           const input = document.querySelector(selector);
-          if (input && input.isContentEditable && input.offsetParent !== null)
+          if (input && input.offsetParent !== null &&
+            (
+              input.isContentEditable === true ||
+              input.tagName === 'TEXTAREA' ||
+              input.tagName === 'INPUT'
+            )
+          ) {
+            console.debug('[FollowUp] Found message input via selector:', selector);
             return input;
+          }
         }
 
         const allContentEditables = document.querySelectorAll(
@@ -1060,6 +1084,23 @@ if (window.linkedInAutomationInjected) {
             return element;
           const parentContainer = element.closest(".msg-form, .compose-form");
           if (parentContainer) return element;
+        }
+
+        // Fallback: try any visible textarea that looks like a message box
+        const textareas = document.querySelectorAll('textarea');
+        for (const ta of textareas) {
+          if (ta.offsetParent === null) continue;
+          const aria = (ta.getAttribute('aria-label') || '').toLowerCase();
+          const ph = (ta.getAttribute('placeholder') || '').toLowerCase();
+          const name = (ta.getAttribute('name') || '').toLowerCase();
+          if (
+            name === 'message' ||
+            aria.includes('type your message') ||
+            ph.includes('message')
+          ) {
+            console.debug('[FollowUp] Fallback found textarea as message input');
+            return ta;
+          }
         }
         await this.delay(1000);
       }
@@ -1085,16 +1126,23 @@ if (window.linkedInAutomationInjected) {
         element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
       } else {
         element.focus();
-        element.value += text;
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-        element.dispatchEvent(new Event("change", { bubbles: true }));
-        element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+        const current = typeof element.value === 'string' ? element.value : '';
+        element.value = current + text;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
       }
     }
 
     async clickSendButton() {
       await this.delay(2000);
       const sendSelectors = [
+        // Sales Navigator specific
+        'button._button_fx0fxz[data-sales-action]',
+        'button[data-sales-action]',
+        'button._button_fx0fxz',
+        'button[id^="ember"][aria-disabled="false"]',
+        // Standard LinkedIn
         ".msg-form__send-button",
         'button[type="submit"]',
         '.msg-form button[type="submit"]',
@@ -1104,16 +1152,35 @@ if (window.linkedInAutomationInjected) {
         ".msg-form__send-btn",
       ];
 
+      const isButtonEnabled = (btn) => {
+        if (!btn) return false;
+        const ariaDisabled = btn.getAttribute('aria-disabled');
+        const isAriaDisabled = ariaDisabled === 'true';
+        return (
+          !btn.disabled &&
+          !isAriaDisabled &&
+          btn.offsetParent !== null &&
+          btn.offsetWidth > 0 &&
+          btn.offsetHeight > 0
+        );
+      };
+
       for (let attempt = 0; attempt < 10; attempt++) {
         for (const selector of sendSelectors) {
           const button = document.querySelector(selector);
-          if (button && !button.disabled && button.offsetParent !== null) {
+          if (button && isButtonEnabled(button)) {
             const text = button.textContent.toLowerCase().trim();
             const ariaLabel =
               button.getAttribute("aria-label")?.toLowerCase() || "";
             if (!text.includes("options") && !ariaLabel.includes("options")) {
-              button.click();
-              await this.delay(1000);
+              try { button.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
+              await this.delay(200);
+              try { button.click(); } catch (_) {}
+              await this.delay(400);
+              try {
+                button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              } catch (_) {}
+              await this.delay(800);
               return;
             }
           }
@@ -1125,7 +1192,7 @@ if (window.linkedInAutomationInjected) {
           const ariaLabel =
             button.getAttribute("aria-label")?.toLowerCase() || "";
           if (
-            text === "send" &&
+            (text === "send" || text.includes("send")) &&
             !text.includes("options") &&
             !ariaLabel.includes("options") &&
             !button.disabled &&
@@ -1139,6 +1206,115 @@ if (window.linkedInAutomationInjected) {
           }
         }
         await this.delay(500);
+      }
+    }
+
+    async startFollowUpFlow(profile) {
+      try {
+        console.log("[FollowUp] Starting follow-up flow with profile:", profile);
+
+        await this.delay(5000);
+        const messageButton = await this.findMessageButton();
+        if (!messageButton) {
+          throw new Error("Message button not found");
+        }
+        messageButton.click();
+        await this.delay(4000);
+
+        const followUpText = await this.generateFollowUpMessage(profile);
+        if (!followUpText || typeof followUpText !== "string") {
+          throw new Error("Follow-up text not received from API");
+        }
+
+        // 4) Find input and type word-by-word
+        const messageInput = await this.findMessageInput();
+        if (!messageInput) {
+          throw new Error("Message input not found");
+        }
+
+        // Clear any pre-filled text
+        if (messageInput.contentEditable === "true") {
+          messageInput.textContent = "";
+        } else if ("value" in messageInput) {
+          messageInput.value = "";
+        }
+
+        await this.typeWordsWithDelay(messageInput, followUpText, 150);
+
+        // 5) Wait 10 seconds then send
+        await this.delay(10000);
+        await this.clickSendButton();
+
+        console.log("[FollowUp] Message sent successfully.");
+        return { success: true };
+      } catch (err) {
+        console.error("[FollowUp] Error in startFollowUpFlow:", err);
+        return { success: false, error: err?.message || String(err) };
+      }
+    }
+
+    async generateFollowUpMessage(profile) {
+      try {
+        const apiUrl = "https://localhost:7120/api/linkedin/FollowUp";
+        const payload = {
+          name: profile?.name || "",
+          title: profile?.title || "",
+          url: profile?.url || profile?.profileUrl || "",
+          location: profile?.location || "",
+          interests: profile?.interests || "",
+          previousMessage: profile?.previousMessage || "",
+        };
+
+        console.log("[FollowUp] Requesting follow-up from:", apiUrl, payload);
+
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          throw new Error(`FollowUp API failed: ${res.status}`);
+        }
+
+        const text = await res.text();
+        let messageText = text;
+        try {
+          const json = this.safeJsonParse(text);
+          if (json) {
+            messageText = json.message || json.text || json.content || JSON.stringify(json);
+          }
+        } catch (_) {}
+
+        if (!messageText || typeof messageText !== "string") {
+          throw new Error("No message content returned by API");
+        }
+
+        return messageText.trim();
+      } catch (err) {
+        console.warn("[FollowUp] Using fallback message due to error:", err);
+        const name = (profile?.name || "there").split(" ")[0];
+        const title = profile?.title ? ` about your work as ${profile.title}` : "";
+        return `Hi ${name}, just following up on my previous note${title}. Would love to connect and explore if there's a fit to help you. Cheers!`;
+      }
+    }
+
+    async typeWordsWithDelay(element, text, delayMs = 150) {
+      const words = text.split(/(\s+)/); // keep spaces
+      for (const part of words) {
+        await this.typeText(element, part);
+        await this.delay(delayMs);
+      }
+    }
+
+    safeJsonParse(text) {
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return null;
       }
     }
 
