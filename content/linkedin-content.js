@@ -447,6 +447,12 @@ if (window.linkedInAutomationInjected) {
             .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
           return true;
         },
+        checkSalesInbox: () => {
+          this.checkSalesInbox()
+            .then((result) => sendResponse({ success: true, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
         stopAutomation: () => {
           this.stopAutomation();
           sendResponse({ success: true });
@@ -579,11 +585,155 @@ if (window.linkedInAutomationInjected) {
         : sendResponse({ error: "Unknown action: " + message.action });
     }
 
+    async checkSalesInbox() {
+      try {
+        if (!location.href.includes("linkedin.com/sales/inbox/2")) {
+          return { skipped: true, reason: "Not on Sales Navigator inbox page" };
+        }
+
+        const listSelectorCandidates = [
+          'div.artdeco-entity-lockup__content',
+          '.conversation-list-item__main-content',
+          'div[data-test-conversation-list-item]',
+          'a.msg-conversation-card',
+          'li.msg-conversations-container__convo-item',
+        ];
+
+        let attempts = 0;
+        let items = [];
+        while (attempts < 15) {
+          items = this.findSalesInboxItems(listSelectorCandidates);
+          if (items.length > 0) break;
+          await this.delay(500);
+          attempts++;
+        }
+
+        if (items.length === 0) {
+          return { found: 0, clicked: false };
+        }
+
+        items = items.map((el) => this.getSalesInboxRow(el)).filter(Boolean);
+        const seen = new Set();
+        items = items.filter((el) => { if (seen.has(el)) return false; seen.add(el); return true; });
+        items = items.filter((el) => this.isVisible(el));
+
+        const unreadItems = items.filter((el) => this.isSalesInboxItemUnread(el));
+        if (unreadItems.length === 0) {
+          return { found: items.length, foundVisible: items.length, clicked: false, unreadFound: 0, unreadFoundVisible: 0 };
+        }
+
+        const unreadWithInfo = unreadItems.map((el) => ({
+          el,
+          info: this.extractSalesInboxItemInfo(el),
+          top: (el.getBoundingClientRect ? el.getBoundingClientRect().top : Number.MAX_SAFE_INTEGER)
+        }));
+        unreadWithInfo.sort((a, b) => a.top - b.top);
+
+        const clickedItems = [];
+        for (const u of unreadWithInfo) {
+          const target = u.el;
+          const clickable = target.closest('a') || target.querySelector('a') || target;
+          clickedItems.push(u.info);
+          if (clickable && typeof clickable.click === 'function') {
+            clickable.click();
+          } else {
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          }
+          await this.delay(300);
+        }
+        return {
+          found: items.length,
+          foundVisible: items.length,
+          clicked: true,
+          clickedCount: clickedItems.length,
+          unreadPreferred: true,
+          unreadFound: unreadItems.length,
+          unreadFoundVisible: unreadItems.length,
+          unreadItems: unreadWithInfo.map(u => u.info),
+          clickedItems,
+          item: clickedItems[0] || null,
+        };
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    findSalesInboxItems(selectorCandidates) {
+      for (const selector of selectorCandidates) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        const filtered = nodes
+          .filter((n) =>
+            n.querySelector('[data-anonymize="person-name"], .t-16, .msg-conversation-card__participant-names') ||
+            n.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet')
+          )
+          .map((n) => this.getSalesInboxRow(n))
+          .filter(Boolean);
+        if (filtered.length > 0) return filtered;
+      }
+      const fallbacks = Array.from(document.querySelectorAll('div.artdeco-entity-lockup, li, a'))
+        .filter((n) =>
+          (n.className || '').toString().includes('conversation') || (n.className || '').toString().includes('entity-lockup')
+        )
+        .map((n) => this.getSalesInboxRow(n))
+        .filter(Boolean);
+      return fallbacks;
+    }
+
+    getSalesInboxRow(el) {
+      if (!el || el.nodeType !== 1) return null;
+      return (
+        el.closest('a.msg-conversation-card') ||
+        el.closest('li.msg-conversations-container__convo-item') ||
+        el.closest('div.artdeco-entity-lockup') ||
+        el
+      );
+    }
+
+    isVisible(el) {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      const hasSize = rect ? (rect.width > 0 && rect.height > 0) : true;
+      const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      const notHidden = style ? (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') : true;
+      return hasSize && notHidden;
+    }
+
+    isSalesInboxItemUnread(el) {
+      try {
+        if (
+          el.querySelector(
+            '[data-qa="unread-badge"], .msg-conversation-card__unread-count, .notification-badge, .artdeco-badge, .conversation-list-item__unread, .conversation-list-item__unread-indicator, .conversation-list-item__badge, [data-unread="true"], [aria-current="unread"]'
+          )
+        ) {
+          return true;
+        }
+        const classHasUnread = !!el.querySelector('[class*="unread"]');
+        if (classHasUnread) return true;
+        const isSelected = el.getAttribute('aria-selected') === 'true' || /\bselected\b/i.test(el.className || '');
+        if (!isSelected) {
+          const previewEl = el.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet');
+          const isBold = (node) => node && (getComputedStyle(node).fontWeight === '700' || parseInt(getComputedStyle(node).fontWeight, 10) >= 600);
+          if (isBold(previewEl)) return true;
+        }
+        
+        const containerWithAria = el.closest('[aria-label]') || el;
+        const aria = containerWithAria.getAttribute('aria-label') || '';
+        if (/\bunread\b/i.test(aria)) return true;
+      } catch (_) {}
+      return false;
+    }
+
+    extractSalesInboxItemInfo(el) {
+      const name = (el.querySelector('[data-anonymize="person-name"], .t-16, .msg-conversation-card__participant-names') || {}).textContent?.trim() || '';
+      const preview = (el.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet') || {}).textContent?.trim() || '';
+      const time = (el.querySelector('time, .conversation-list-item__timestamp, .msg-conversation-card__time-stamp') || {}).textContent?.trim() || '';
+      return { name, preview, time };
+    }
+
     async scrapeConnections() {
       try {
 
         console.log("🚀 Starting LinkedIn connection scraper...");
-
         const connectionCards = document.querySelectorAll( '[data-view-name="connections-profile"]');
 
         if (connectionCards.length === 0) {

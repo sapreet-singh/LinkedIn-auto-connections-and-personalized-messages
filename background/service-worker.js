@@ -19,8 +19,8 @@ class LinkedInAutomationBackground {
 
     chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
     chrome.alarms.create("followUpScheduler", { periodInMinutes: 1440 });
+    chrome.alarms.create("salesInboxCheck", { periodInMinutes: 1 });
     //chrome.alarms.create("followUpScheduler", { periodInMinutes: 1 });
-
 
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === "monitorConnections") {
@@ -33,6 +33,11 @@ class LinkedInAutomationBackground {
           `Follow-up scheduler triggered at ${new Date().toISOString()}`
         );
         this.performFollowUpCycle();
+      } else if (alarm.name === "salesInboxCheck") {
+        console.log(
+          `Sales inbox check triggered at ${new Date().toISOString()}`
+        );
+        this.openAndCheckSalesInbox();
       }
     });
 
@@ -488,6 +493,61 @@ class LinkedInAutomationBackground {
     } catch (error) {
       console.error("Error handling collection status:", error);
       sendResponse({ error: error.message });
+    }
+  }
+
+  async openAndCheckSalesInbox() {
+    try {
+      const inboxUrl = "https://www.linkedin.com/sales/inbox/2";
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url: inboxUrl, active: false }, resolve);
+      });
+
+      const timeoutId = setTimeout(() => {
+        try { chrome.tabs.remove(tab.id); } catch (_) {}
+      }, 60000);
+
+      const onUpdated = async (tabId, changeInfo) => {
+        if (tabId === tab.id && changeInfo.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          try {
+            chrome.tabs.sendMessage(
+              tab.id,
+              { action: "checkSalesInbox" },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn("[SalesInbox] Could not reach content script:",chrome.runtime.lastError);
+                } 
+                else {
+                  const res = response || {};
+                  const r = res.result || {};
+                  const unreadNames = Array.isArray(r.unreadItems) ? r.unreadItems.map(i => i.name).filter(Boolean) : [];
+                  const clickedItems = Array.isArray(r.clickedItems) ? r.clickedItems : (r.item ? [r.item] : []);
+                  console.log("[SalesInbox] Result:", {
+                    found: r.found,
+                    foundVisible: r.foundVisible,
+                    clicked: r.clicked,
+                    unreadFound: r.unreadFound,
+                    unreadFoundVisible: r.unreadFoundVisible,
+                    unreadNames,
+                    clickedItem: r.item,
+                    clickedItems
+                  });
+                }
+                //clearTimeout(timeoutId);
+                //try { chrome.tabs.remove(tab.id); } catch (_) {}
+              }
+            );
+          } catch (err) {
+            console.error("[SalesInbox] Error messaging content script:", err);
+            clearTimeout(timeoutId);
+            try { chrome.tabs.remove(tab.id); } catch (_) {}
+          }
+        }
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+    } catch (err) {
+      console.error("[SalesInbox] openAndCheckSalesInbox error:", err);
     }
   }
 }
