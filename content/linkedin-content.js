@@ -630,6 +630,8 @@ if (window.linkedInAutomationInjected) {
         unreadWithInfo.sort((a, b) => a.top - b.top);
 
         const clickedItems = [];
+        let sentCount = 0;
+        const fixedMessage = "Hi how are you";
         for (const u of unreadWithInfo) {
           const target = u.el;
           const clickable = target.closest('a') || target.querySelector('a') || target;
@@ -639,13 +641,28 @@ if (window.linkedInAutomationInjected) {
           } else {
             target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           }
-          await this.delay(300);
+          await this.delay(800);
+          const input = await this.findMessageInput();
+          if (input) {
+            if (input.isContentEditable || input.contentEditable === 'true') {
+              input.textContent = '';
+            } else if ('value' in input) {
+              input.value = '';
+            }
+            await this.typeWordsWithDelay(input, fixedMessage, 120);
+            await this.delay(300);
+            await this.clickSendButton();
+            sentCount++;
+          }
+
+          await this.delay(400);
         }
         return {
           found: items.length,
           foundVisible: items.length,
           clicked: true,
           clickedCount: clickedItems.length,
+          sentCount,
           unreadPreferred: true,
           unreadFound: unreadItems.length,
           unreadFoundVisible: unreadItems.length,

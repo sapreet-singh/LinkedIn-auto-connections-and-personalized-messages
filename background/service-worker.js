@@ -534,8 +534,8 @@ class LinkedInAutomationBackground {
                     clickedItems
                   });
                 }
-                //clearTimeout(timeoutId);
-                //try { chrome.tabs.remove(tab.id); } catch (_) {}
+                clearTimeout(timeoutId);
+                try { chrome.tabs.remove(tab.id); } catch (_) {}
               }
             );
           } catch (err) {
