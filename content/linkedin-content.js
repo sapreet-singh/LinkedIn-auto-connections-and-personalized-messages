@@ -453,6 +453,12 @@ if (window.linkedInAutomationInjected) {
             .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
           return true;
         },
+        markActiveConversationRead: () => {
+          this.markActiveConversationRead()
+            .then((result) => sendResponse({ success: !!result?.success, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
         stopAutomation: () => {
           this.stopAutomation();
           sendResponse({ success: true });
@@ -653,6 +659,10 @@ if (window.linkedInAutomationInjected) {
             await this.delay(300);
             await this.clickSendButton();
             sentCount++;
+            // Ensure this conversation is marked as read to avoid reprocessing
+            await this.ensureConversationMarkedRead(target);
+            // Backup: also attempt to mark the active conversation as read
+            await this.markActiveConversationRead();
           }
 
           await this.delay(400);
@@ -699,6 +709,9 @@ if (window.linkedInAutomationInjected) {
     getSalesInboxRow(el) {
       if (!el || el.nodeType !== 1) return null;
       return (
+        // Sales Navigator specific containers
+        el.closest('li.conversation-list-item') ||
+        el.closest('a.conversation-list-item__link') ||
         el.closest('a.msg-conversation-card') ||
         el.closest('li.msg-conversations-container__convo-item') ||
         el.closest('div.artdeco-entity-lockup') ||
@@ -717,6 +730,23 @@ if (window.linkedInAutomationInjected) {
 
     isSalesInboxItemUnread(el) {
       try {
+        // Treat the currently active/selected conversation as not unread
+        const activeAncestor = el.closest('li.conversation-list-item, a.conversation-list-item__link, li, a');
+        if (activeAncestor) {
+          const anchor = activeAncestor.matches('a') ? activeAncestor : activeAncestor.querySelector('a');
+          if (anchor && /\bactive\b/.test(anchor.className || '')) return false;
+        }
+        // Explicit Sales Navigator unread class
+        const rootItem = el.closest('li.conversation-list-item') || el.closest('li') || el;
+        if (rootItem && /\bis-unread\b/.test(rootItem.className || '')) return true;
+        // Button-based state from Sales Navigator actions area
+        if (rootItem) {
+          const hasMarkRead = rootItem.querySelector('button[data-control-name="mark_read"]');
+          const hasMarkUnread = rootItem.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkRead) return true;       // shows "Mark message as read" when currently unread
+          if (hasMarkUnread) return false;    // shows "Mark message as unread" when currently read
+        }
+
         if (
           el.querySelector(
             '[data-qa="unread-badge"], .msg-conversation-card__unread-count, .notification-badge, .artdeco-badge, .conversation-list-item__unread, .conversation-list-item__unread-indicator, .conversation-list-item__badge, [data-unread="true"], [aria-current="unread"]'
@@ -736,6 +766,99 @@ if (window.linkedInAutomationInjected) {
         const containerWithAria = el.closest('[aria-label]') || el;
         const aria = containerWithAria.getAttribute('aria-label') || '';
         if (/\bunread\b/i.test(aria)) return true;
+      } catch (_) {}
+      return false;
+    }
+
+    async markActiveConversationRead(timeoutMs = 5000) {
+      try {
+        // Identify the active conversation row in Sales Navigator
+        const activeLink = document.querySelector('a.conversation-list-item__link.active');
+        const li = (activeLink && activeLink.closest('li.conversation-list-item')) || null;
+        // If no explicit active row, attempt to use the first item with actions visible
+        const fallbackLi = li || document.querySelector('li.conversation-list-item');
+        const target = fallbackLi || activeLink || null;
+        if (!target) return { success: false, reason: 'No active conversation row found' };
+        // If it's already read, short-circuit
+        if (!/\bis-unread\b/.test((fallbackLi || {}).className || '')) {
+          // Also check button state: if mark_unread exists, it is read
+          const hasMarkUnread = fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkUnread) return { success: true, alreadyRead: true };
+        }
+        // Prefer the explicit "Mark message as read" action
+        const markReadBtn = (fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_read"]'))
+          || document.querySelector('button[data-control-name="mark_read"]');
+        if (markReadBtn && !markReadBtn.disabled) {
+          try { markReadBtn.click(); } catch (_) {}
+        }
+
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          await this.delay(250);
+          const freshActiveLink = document.querySelector('a.conversation-list-item__link.active');
+          const freshLi = (freshActiveLink && freshActiveLink.closest('li.conversation-list-item')) || fallbackLi;
+          if (freshLi && !/\bis-unread\b/.test((freshLi.className || ''))) {
+            const hasMarkUnreadNow = freshLi.querySelector('button[data-control-name="mark_unread"]');
+            if (hasMarkUnreadNow) return { success: true, marked: true };
+            return { success: true, marked: true };
+          }
+        }
+        return { success: false, timeout: true };
+      } catch (err) {
+        return { success: false, error: err?.message || String(err) };
+      }
+    }
+
+    async ensureConversationMarkedRead(targetEl, timeoutMs = 5000) {
+      try {
+        // Resolve target to the active conversation if not provided
+        let row = this.getSalesInboxRow(targetEl) || targetEl;
+        if (!row) {
+          const activeLink = document.querySelector('a.conversation-list-item__link.active');
+          row = (activeLink && activeLink.closest('li.conversation-list-item')) || activeLink || null;
+        }
+        const li = row.closest('li.conversation-list-item') || row.closest('li') || row;
+        const start = Date.now();
+        // If it's already not unread, we're done
+        if (li && !/\bis-unread\b/.test(li.className || '')) return true;
+        // Bring the row into view and simulate hover to reveal actions
+        try { (li || row).scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
+        try { (li || row).dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); } catch (_) {}
+        try { (li || row).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); } catch (_) {}
+        // Try clicking the explicit "Mark message as read" action if present (broadened selectors)
+        const findMarkRead = () => {
+          if (!document) return null;
+          const scope = li || document;
+          const direct = (
+            scope.querySelector('button[data-control-name="mark_read"]') ||
+            scope.querySelector('button[aria-describedby*="mark-as-read"]')
+          );
+          if (direct) return direct;
+          // Fallback: scan buttons by inner text
+          const buttons = Array.from(scope.querySelectorAll('button'));
+          return buttons.find(b => ((b.textContent || '').toLowerCase().includes('mark message as read')) ) || null;
+        };
+
+        let markReadBtn = findMarkRead();
+        if (markReadBtn && !markReadBtn.disabled) {
+          try { markReadBtn.click(); } catch (_) {}
+        } else {
+          // Attempt a brief wait then retry after hover
+          await this.delay(200);
+          markReadBtn = findMarkRead();
+          if (markReadBtn && !markReadBtn.disabled) {
+            try { markReadBtn.click(); } catch (_) {}
+          }
+        }
+
+        // Poll until the unread class disappears or timeout
+        while (Date.now() - start < timeoutMs) {
+          await this.delay(300);
+          if (li && !/\bis-unread\b/.test(li.className || '')) return true;
+          // If we now see the "mark_unread" button, consider it read
+          const hasMarkUnreadNow = li && li.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkUnreadNow) return true;
+        }
       } catch (_) {}
       return false;
     }
