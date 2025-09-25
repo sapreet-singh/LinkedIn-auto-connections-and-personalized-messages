@@ -18,6 +18,18 @@ if (window.linkedInAutomationInjected) {
       this.autoCollectionTimeout = null;
       this.processedProfiles = new Set();
 
+      // Sales Inbox processing controls
+      this.inboxMaxConversations = 2; // process at most 2 per run
+      this.inboxDelays = {
+        afterClick: 1000,       // wait after opening a conversation
+        beforeType: 300,        // wait before starting to type
+        typeDelay: 600,         // per word delay used by typeWordsWithDelay
+        afterType: 300,         // wait after typing completes
+        afterSend: 600,         // wait after clicking Send
+        afterMarkRead: 400      // wait after marking as read
+      };
+      this.processedConversations = new Set();
+
       this.dynamicMessage = {
         mode: 'api',
         apiUrl: 'https://localhost:7120/api/linkedin/InboxReply',
@@ -661,7 +673,9 @@ if (window.linkedInAutomationInjected) {
 
         const clickedItems = [];
         let sentCount = 0;
+        let handled = 0;
         for (const u of unreadWithInfo) {
+          if (handled >= this.inboxMaxConversations) break;
           const target = u.el;
           const clickable = target.closest('a') || target.querySelector('a') || target;
           clickedItems.push(u.info);
@@ -670,9 +684,14 @@ if (window.linkedInAutomationInjected) {
           } else {
             target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           }
-          await this.delay(800);
+          await this.delay(this.inboxDelays.afterClick);
           const input = await this.findMessageInput();
           if (input) {
+            const key = `${u.info.name || ''}::${u.info.time || ''}`.toLowerCase();
+            if (this.processedConversations.has(key)) {
+              // already handled this conversation in this page lifecycle
+              continue;
+            }
             if (input.isContentEditable || input.contentEditable === 'true') {
               input.textContent = '';
             } else if ('value' in input) {
@@ -682,17 +701,20 @@ if (window.linkedInAutomationInjected) {
             const messageToSend = (dynamicMsg && typeof dynamicMsg === 'string' && dynamicMsg.trim())
               ? dynamicMsg.trim()
               : 'Hi there!';
-            await this.typeWordsWithDelay(input, messageToSend, 120);
-            await this.delay(300);
+            await this.delay(this.inboxDelays.beforeType);
+            await this.typeWordsWithDelay(input, messageToSend, this.inboxDelays.typeDelay);
+            await this.delay(this.inboxDelays.afterType);
             await this.clickSendButton();
             sentCount++;
+            this.processedConversations.add(key);
             // Ensure this conversation is marked as read to avoid reprocessing
             await this.ensureConversationMarkedRead(target);
             // Backup: also attempt to mark the active conversation as read
             await this.markActiveConversationRead();
+            await this.delay(this.inboxDelays.afterMarkRead);
           }
-
-          await this.delay(400);
+          handled++;
+          await this.delay(200);
         }
         return {
           found: items.length,
@@ -1734,7 +1756,7 @@ if (window.linkedInAutomationInjected) {
       return `Hi ${name || 'there'}!`;
     }
 
-    async typeWordsWithDelay(element, text, delayMs = 150) {
+    async typeWordsWithDelay(element, text, delayMs = 600) {
       const words = text.split(/(\s+)/); // keep spaces
       for (const part of words) {
         await this.typeText(element, part);
