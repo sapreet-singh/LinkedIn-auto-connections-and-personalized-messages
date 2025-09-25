@@ -18,6 +18,12 @@ if (window.linkedInAutomationInjected) {
       this.autoCollectionTimeout = null;
       this.processedProfiles = new Set();
 
+      this.dynamicMessage = {
+        mode: 'api',
+        apiUrl: 'https://localhost:7120/api/linkedin/InboxReply',
+        maxMessages: 30
+      };
+
       // Consolidated selectors to avoid duplication
       this.PROFILE_SELECTORS = [
         "div.c2a2412c.b619b9f7._28ca1907._5f311868.a582f5c1._3a156bd9._10a87fcc.e5efaf8e.c0a5ca7f._5a2af3d2.db8addcf._5a920b17", // New LinkedIn layout
@@ -86,6 +92,24 @@ if (window.linkedInAutomationInjected) {
       } catch (error) {
         console.error("Error handling page change:", error);
       }
+    }
+
+    // Try to click "Load older messages" to fetch more history
+    async expandConversationHistory(scope) {
+      try {
+        const root = scope || document;
+        for (let i = 0; i < 3; i++) {
+          const btn = root.querySelector('button[aria-label="Load older messages"], button:has(span._text_ps32ck)');
+          if (btn && btn.offsetParent !== null && !btn.disabled) {
+            try { btn.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
+            await this.delay(200);
+            try { btn.click(); } catch (_) {}
+            await this.delay(1200);
+          } else {
+            break;
+          }
+        }
+      } catch (_) {}
     }
 
     async initSalesNavigatorUI() {
@@ -637,7 +661,6 @@ if (window.linkedInAutomationInjected) {
 
         const clickedItems = [];
         let sentCount = 0;
-        const fixedMessage = "Hi how are you";
         for (const u of unreadWithInfo) {
           const target = u.el;
           const clickable = target.closest('a') || target.querySelector('a') || target;
@@ -655,7 +678,11 @@ if (window.linkedInAutomationInjected) {
             } else if ('value' in input) {
               input.value = '';
             }
-            await this.typeWordsWithDelay(input, fixedMessage, 120);
+            const dynamicMsg = await this.generateDynamicMessageForInbox(u.info).catch(() => null);
+            const messageToSend = (dynamicMsg && typeof dynamicMsg === 'string' && dynamicMsg.trim())
+              ? dynamicMsg.trim()
+              : 'Hi there!';
+            await this.typeWordsWithDelay(input, messageToSend, 120);
             await this.delay(300);
             await this.clickSendButton();
             sentCount++;
@@ -709,7 +736,6 @@ if (window.linkedInAutomationInjected) {
     getSalesInboxRow(el) {
       if (!el || el.nodeType !== 1) return null;
       return (
-        // Sales Navigator specific containers
         el.closest('li.conversation-list-item') ||
         el.closest('a.conversation-list-item__link') ||
         el.closest('a.msg-conversation-card') ||
@@ -730,21 +756,18 @@ if (window.linkedInAutomationInjected) {
 
     isSalesInboxItemUnread(el) {
       try {
-        // Treat the currently active/selected conversation as not unread
         const activeAncestor = el.closest('li.conversation-list-item, a.conversation-list-item__link, li, a');
         if (activeAncestor) {
           const anchor = activeAncestor.matches('a') ? activeAncestor : activeAncestor.querySelector('a');
           if (anchor && /\bactive\b/.test(anchor.className || '')) return false;
         }
-        // Explicit Sales Navigator unread class
         const rootItem = el.closest('li.conversation-list-item') || el.closest('li') || el;
         if (rootItem && /\bis-unread\b/.test(rootItem.className || '')) return true;
-        // Button-based state from Sales Navigator actions area
         if (rootItem) {
           const hasMarkRead = rootItem.querySelector('button[data-control-name="mark_read"]');
           const hasMarkUnread = rootItem.querySelector('button[data-control-name="mark_unread"]');
-          if (hasMarkRead) return true;       // shows "Mark message as read" when currently unread
-          if (hasMarkUnread) return false;    // shows "Mark message as unread" when currently read
+          if (hasMarkRead) return true;      
+          if (hasMarkUnread) return false;  
         }
 
         if (
@@ -772,20 +795,15 @@ if (window.linkedInAutomationInjected) {
 
     async markActiveConversationRead(timeoutMs = 5000) {
       try {
-        // Identify the active conversation row in Sales Navigator
         const activeLink = document.querySelector('a.conversation-list-item__link.active');
         const li = (activeLink && activeLink.closest('li.conversation-list-item')) || null;
-        // If no explicit active row, attempt to use the first item with actions visible
         const fallbackLi = li || document.querySelector('li.conversation-list-item');
         const target = fallbackLi || activeLink || null;
         if (!target) return { success: false, reason: 'No active conversation row found' };
-        // If it's already read, short-circuit
         if (!/\bis-unread\b/.test((fallbackLi || {}).className || '')) {
-          // Also check button state: if mark_unread exists, it is read
           const hasMarkUnread = fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_unread"]');
           if (hasMarkUnread) return { success: true, alreadyRead: true };
         }
-        // Prefer the explicit "Mark message as read" action
         const markReadBtn = (fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_read"]'))
           || document.querySelector('button[data-control-name="mark_read"]');
         if (markReadBtn && !markReadBtn.disabled) {
@@ -811,7 +829,6 @@ if (window.linkedInAutomationInjected) {
 
     async ensureConversationMarkedRead(targetEl, timeoutMs = 5000) {
       try {
-        // Resolve target to the active conversation if not provided
         let row = this.getSalesInboxRow(targetEl) || targetEl;
         if (!row) {
           const activeLink = document.querySelector('a.conversation-list-item__link.active');
@@ -819,13 +836,10 @@ if (window.linkedInAutomationInjected) {
         }
         const li = row.closest('li.conversation-list-item') || row.closest('li') || row;
         const start = Date.now();
-        // If it's already not unread, we're done
         if (li && !/\bis-unread\b/.test(li.className || '')) return true;
-        // Bring the row into view and simulate hover to reveal actions
         try { (li || row).scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
         try { (li || row).dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); } catch (_) {}
         try { (li || row).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); } catch (_) {}
-        // Try clicking the explicit "Mark message as read" action if present (broadened selectors)
         const findMarkRead = () => {
           if (!document) return null;
           const scope = li || document;
@@ -834,7 +848,6 @@ if (window.linkedInAutomationInjected) {
             scope.querySelector('button[aria-describedby*="mark-as-read"]')
           );
           if (direct) return direct;
-          // Fallback: scan buttons by inner text
           const buttons = Array.from(scope.querySelectorAll('button'));
           return buttons.find(b => ((b.textContent || '').toLowerCase().includes('mark message as read')) ) || null;
         };
@@ -843,7 +856,6 @@ if (window.linkedInAutomationInjected) {
         if (markReadBtn && !markReadBtn.disabled) {
           try { markReadBtn.click(); } catch (_) {}
         } else {
-          // Attempt a brief wait then retry after hover
           await this.delay(200);
           markReadBtn = findMarkRead();
           if (markReadBtn && !markReadBtn.disabled) {
@@ -851,11 +863,9 @@ if (window.linkedInAutomationInjected) {
           }
         }
 
-        // Poll until the unread class disappears or timeout
         while (Date.now() - start < timeoutMs) {
           await this.delay(300);
           if (li && !/\bis-unread\b/.test(li.className || '')) return true;
-          // If we now see the "mark_unread" button, consider it read
           const hasMarkUnreadNow = li && li.querySelector('button[data-control-name="mark_unread"]');
           if (hasMarkUnreadNow) return true;
         }
@@ -1609,6 +1619,119 @@ if (window.linkedInAutomationInjected) {
         const title = profile?.title ? ` about your work as ${profile.title}` : "";
         return `Hi ${name}, just following up on my previous note${title}. Would love to connect and explore if there's a fit to help you. Cheers!`;
       }
+    }
+
+    async getActiveConversationMessages(maxCount = 8) {
+      try {
+        const containers = [
+          'section.message-container-align',
+          'section.thread-container',
+          'section[data-lss-force-hue-theme]',
+          'div.msg-s-message-listcontainer',
+          'div.msg-s-message-list__container',
+        ];
+        let root = null;
+        for (const sel of containers) {
+          const el = document.querySelector(sel);
+          if (el && el.offsetParent !== null) { root = el; break; }
+        }
+        if (!root) root = document;
+
+        await this.expandConversationHistory(root);
+
+        const nodes = Array.from(root.querySelectorAll(
+          'article[tabindex="0"], article.relative, article.mt4, li .msg-s-message-list__event'
+        ));
+
+        let currentDateText = '';
+        const messages = [];
+        const boundarySelectors = [
+          '.message-item__date-boundary time',
+          'div.message-item__date-boundary time',
+          'time.t-12.t-black--light.t-bold.text-uppercase'
+        ];
+
+        const listContainer = root.querySelector('ul.list-style-none') || root;
+        const walkerNodes = listContainer ? Array.from(listContainer.querySelectorAll('*')) : nodes;
+        for (const el of walkerNodes) {
+          if (boundarySelectors.some(sel => el.matches?.(sel))) {
+            currentDateText = (el.textContent || '').trim();
+            continue;
+          }
+          if (!nodes.includes(el)) continue;
+
+          let sender = '';
+          const isYou = !!el.querySelector('address span[aria-label="Message from you"], address .a11y-text, address span[aria-label="Message from you"]');
+          if (isYou) {
+            sender = 'you';
+          } else {
+            const nameEl = el.querySelector('address [data-anonymize="person-name"], address span[aria-label^="Message from"], address span');
+            sender = (nameEl?.textContent || '').trim() || 'other';
+            if (/^you$/i.test(sender)) sender = 'you';
+          }
+
+          const p = el.querySelector('div.message-content p, p[data-anonymize="general-blurb"], p.t-14, .message-content [data-anonymize="general-blurb"], .message-content');
+          const text = (p?.textContent || '').replace(/<!---->/g, '').trim();
+          if (!text) continue;
+
+          const tEl = el.querySelector('time.t-12.t-black--light, time');
+          const timeText = (tEl?.textContent || '').trim();
+
+          messages.push({ sender, text, time: timeText || currentDateText || '' });
+          if (messages.length >= maxCount) break;
+        }
+
+        return messages.slice(-maxCount);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    async generateDynamicMessageForInbox(itemInfo) {
+      const maxMsgs = Math.max(1, Math.min(100, this.dynamicMessage?.maxMessages || 30));
+      const recent = await this.getActiveConversationMessages(maxMsgs);
+      const lastIncoming = [...recent].reverse().find(m => m.sender !== 'you');
+      const name = (itemInfo?.name || '').split(' ')[0] || '';
+
+      if (this.dynamicMessage?.mode === 'api' && this.dynamicMessage?.apiUrl) {
+        try {
+          const payload = {
+            recipientName: itemInfo?.name || '',
+            preview: itemInfo?.preview || '',
+            time: itemInfo?.time || '',
+            recentMessages: recent.map(m => ({ sender: m.sender, text: m.text, time: m.time || '' })),
+            source: 'sales-inbox'
+          };
+          const res = await fetch(this.dynamicMessage.apiUrl, {
+            method: 'POST',
+            headers: { 'Accept': '*/*', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const txt = await res.text();
+            let out = txt;
+            try {
+              const json = this.safeJsonParse(txt);
+              if (json) out = json.message || json.text || json.content || JSON.stringify(json);
+            } catch (_) {}
+            if (typeof out === 'string' && out.trim()) return out.trim();
+          }
+        } catch (_) { }
+      }
+
+      if (lastIncoming) {
+        const t = lastIncoming.text.toLowerCase();
+        if (t.includes('how are you')) {
+          return `Hi ${name || ''}${name ? ', ' : ''}I’m doing well, thanks for asking! How’s your week going?`;
+        }
+        if (t.includes('hi') || t.includes('hello') || t.includes('hii')) {
+          return `Hi ${name || 'there'}! Great to hear from you. What can I help you with today?`;
+        }
+        if (t.endsWith('?')) {
+          return `Thanks ${name || ''}${name ? ' ' : ''}for the note — happy to help. Could you share a bit more context?`;
+        }
+      }
+      return `Hi ${name || 'there'}!`;
     }
 
     async typeWordsWithDelay(element, text, delayMs = 150) {
