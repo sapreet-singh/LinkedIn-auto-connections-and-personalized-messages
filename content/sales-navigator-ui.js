@@ -73,6 +73,7 @@ if (window.salesNavigatorUILoaded) {
             },
             body: JSON.stringify({
               linkedinUrl: profileUrl || null,
+              seleLeadUrl: profile.seleLeadUrl || null,
               name: profile.name || null,
               title: profile.title || null,
               location: profile.location || null,
@@ -81,6 +82,7 @@ if (window.salesNavigatorUILoaded) {
               message: message || null,
               reason: reason || null,
               interests: interests || null,
+              source: "sales-navigator",
               status: "pending" || null,
               createdAt: new Date(profile.timestamp).toISOString(),
             }),
@@ -1711,28 +1713,92 @@ if (window.salesNavigatorUILoaded) {
       });
     }
 
+    // extractProfileData(element) {
+    //   try {
+    //     const nameElement = element.querySelector(
+    //       'a[href*="/sales/lead/"], a[href*="/in/"]'
+    //     );
+    //     const titleBlock = element.querySelector(
+    //       ".artdeco-entity-lockup__subtitle"
+    //     );
+    //     const locationElement = element.querySelector(
+    //       ".artdeco-entity-lockup__caption"
+    //     );
+    //     const imageElement = element.querySelector('img[src*="profile"]');
+    //     if (!nameElement) return null;
+    //     let name = nameElement.textContent?.trim();
+    //     if (name && name.includes(" is reachable")) {
+    //       name = name.replace(" is reachable", "").trim();
+    //     }
+    //     const url = nameElement.href.startsWith("http")
+    //       ? nameElement.href
+    //       : `https://www.linkedin.com${nameElement.getAttribute("href")}`;
+    //     const location = locationElement?.textContent?.trim() || "";
+    //     const profilePic = imageElement?.src || "";
+    //     let title = "",
+    //       company = "";
+    //     if (titleBlock) {
+    //       const raw = titleBlock.innerText.trim();
+    //       if (raw.includes(" at ")) {
+    //         const parts = raw.split(" at ");
+    //         title = parts[0]?.trim() || "";
+    //         company = parts[1]?.trim() || "";
+    //       } else {
+    //         title = raw;
+    //       }
+    //     }
+    //     return {
+    //       name,
+    //       url,
+    //       title,
+    //       company,
+    //       location,
+    //       profilePic,
+    //       timestamp: Date.now(),
+    //       source: "sales-navigator",
+    //     };
+    //   } catch (error) {
+    //     console.error("Error extracting profile data:", error);
+    //     return null;
+    //   }
+    // }
+
     extractProfileData(element) {
       try {
+        // Main profile link (name or sales lead link)
         const nameElement = element.querySelector(
           'a[href*="/sales/lead/"], a[href*="/in/"]'
         );
-        const titleBlock = element.querySelector(
-          ".artdeco-entity-lockup__subtitle"
+    
+        // Sales Navigator lead-specific link (image or name link)
+        const seleLeadElement = element.querySelector(
+          'a[data-lead-search-result="profile-image-link-st240"], a[data-lead-search-result="profile-link-st240"]'
         );
-        const locationElement = element.querySelector(
-          ".artdeco-entity-lockup__caption"
-        );
+    
+        const titleBlock = element.querySelector(".artdeco-entity-lockup__subtitle");
+        const locationElement = element.querySelector(".artdeco-entity-lockup__caption");
         const imageElement = element.querySelector('img[src*="profile"]');
+    
         if (!nameElement) return null;
+    
         let name = nameElement.textContent?.trim();
         if (name && name.includes(" is reachable")) {
           name = name.replace(" is reachable", "").trim();
         }
+    
         const url = nameElement.href.startsWith("http")
           ? nameElement.href
           : `https://www.linkedin.com${nameElement.getAttribute("href")}`;
+    
+        const seleLeadUrl = seleLeadElement
+          ? (seleLeadElement.href.startsWith("http")
+              ? seleLeadElement.href
+              : `https://www.linkedin.com${seleLeadElement.getAttribute("href")}`)
+          : url; // fallback to main url if no dedicated lead link
+    
         const location = locationElement?.textContent?.trim() || "";
         const profilePic = imageElement?.src || "";
+    
         let title = "",
           company = "";
         if (titleBlock) {
@@ -1745,9 +1811,11 @@ if (window.salesNavigatorUILoaded) {
             title = raw;
           }
         }
+    
         return {
           name,
-          url,
+          url,           // generic profile url
+          seleLeadUrl,   // NEW: explicit Sales Navigator lead url
           title,
           company,
           location,
@@ -1760,6 +1828,7 @@ if (window.salesNavigatorUILoaded) {
         return null;
       }
     }
+    
 
     isDuplicateProfile(newProfile) {
       return this.profiles.some(

@@ -441,6 +441,24 @@ if (window.linkedInAutomationInjected) {
           this.startAutomation(message.campaign);
           sendResponse({ success: true });
         },
+        startFollowUp: () => {
+          this.startFollowUpFlow(message.profile)
+            .then((result) => sendResponse({ success: true, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
+        checkSalesInbox: () => {
+          this.checkSalesInbox()
+            .then((result) => sendResponse({ success: true, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
+        markActiveConversationRead: () => {
+          this.markActiveConversationRead()
+            .then((result) => sendResponse({ success: !!result?.success, result }))
+            .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+          return true;
+        },
         stopAutomation: () => {
           this.stopAutomation();
           sendResponse({ success: true });
@@ -573,11 +591,289 @@ if (window.linkedInAutomationInjected) {
         : sendResponse({ error: "Unknown action: " + message.action });
     }
 
+    async checkSalesInbox() {
+      try {
+        if (!location.href.includes("linkedin.com/sales/inbox/2")) {
+          return { skipped: true, reason: "Not on Sales Navigator inbox page" };
+        }
+
+        const listSelectorCandidates = [
+          'div.artdeco-entity-lockup__content',
+          '.conversation-list-item__main-content',
+          'div[data-test-conversation-list-item]',
+          'a.msg-conversation-card',
+          'li.msg-conversations-container__convo-item',
+        ];
+
+        let attempts = 0;
+        let items = [];
+        while (attempts < 15) {
+          items = this.findSalesInboxItems(listSelectorCandidates);
+          if (items.length > 0) break;
+          await this.delay(500);
+          attempts++;
+        }
+
+        if (items.length === 0) {
+          return { found: 0, clicked: false };
+        }
+
+        items = items.map((el) => this.getSalesInboxRow(el)).filter(Boolean);
+        const seen = new Set();
+        items = items.filter((el) => { if (seen.has(el)) return false; seen.add(el); return true; });
+        items = items.filter((el) => this.isVisible(el));
+
+        const unreadItems = items.filter((el) => this.isSalesInboxItemUnread(el));
+        if (unreadItems.length === 0) {
+          return { found: items.length, foundVisible: items.length, clicked: false, unreadFound: 0, unreadFoundVisible: 0 };
+        }
+
+        const unreadWithInfo = unreadItems.map((el) => ({
+          el,
+          info: this.extractSalesInboxItemInfo(el),
+          top: (el.getBoundingClientRect ? el.getBoundingClientRect().top : Number.MAX_SAFE_INTEGER)
+        }));
+        unreadWithInfo.sort((a, b) => a.top - b.top);
+
+        const clickedItems = [];
+        let sentCount = 0;
+        const fixedMessage = "Hi how are you";
+        for (const u of unreadWithInfo) {
+          const target = u.el;
+          const clickable = target.closest('a') || target.querySelector('a') || target;
+          clickedItems.push(u.info);
+          if (clickable && typeof clickable.click === 'function') {
+            clickable.click();
+          } else {
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          }
+          await this.delay(800);
+          const input = await this.findMessageInput();
+          if (input) {
+            if (input.isContentEditable || input.contentEditable === 'true') {
+              input.textContent = '';
+            } else if ('value' in input) {
+              input.value = '';
+            }
+            await this.typeWordsWithDelay(input, fixedMessage, 120);
+            await this.delay(300);
+            await this.clickSendButton();
+            sentCount++;
+            // Ensure this conversation is marked as read to avoid reprocessing
+            await this.ensureConversationMarkedRead(target);
+            // Backup: also attempt to mark the active conversation as read
+            await this.markActiveConversationRead();
+          }
+
+          await this.delay(400);
+        }
+        return {
+          found: items.length,
+          foundVisible: items.length,
+          clicked: true,
+          clickedCount: clickedItems.length,
+          sentCount,
+          unreadPreferred: true,
+          unreadFound: unreadItems.length,
+          unreadFoundVisible: unreadItems.length,
+          unreadItems: unreadWithInfo.map(u => u.info),
+          clickedItems,
+          item: clickedItems[0] || null,
+        };
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    findSalesInboxItems(selectorCandidates) {
+      for (const selector of selectorCandidates) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        const filtered = nodes
+          .filter((n) =>
+            n.querySelector('[data-anonymize="person-name"], .t-16, .msg-conversation-card__participant-names') ||
+            n.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet')
+          )
+          .map((n) => this.getSalesInboxRow(n))
+          .filter(Boolean);
+        if (filtered.length > 0) return filtered;
+      }
+      const fallbacks = Array.from(document.querySelectorAll('div.artdeco-entity-lockup, li, a'))
+        .filter((n) =>
+          (n.className || '').toString().includes('conversation') || (n.className || '').toString().includes('entity-lockup')
+        )
+        .map((n) => this.getSalesInboxRow(n))
+        .filter(Boolean);
+      return fallbacks;
+    }
+
+    getSalesInboxRow(el) {
+      if (!el || el.nodeType !== 1) return null;
+      return (
+        // Sales Navigator specific containers
+        el.closest('li.conversation-list-item') ||
+        el.closest('a.conversation-list-item__link') ||
+        el.closest('a.msg-conversation-card') ||
+        el.closest('li.msg-conversations-container__convo-item') ||
+        el.closest('div.artdeco-entity-lockup') ||
+        el
+      );
+    }
+
+    isVisible(el) {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      const hasSize = rect ? (rect.width > 0 && rect.height > 0) : true;
+      const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      const notHidden = style ? (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') : true;
+      return hasSize && notHidden;
+    }
+
+    isSalesInboxItemUnread(el) {
+      try {
+        // Treat the currently active/selected conversation as not unread
+        const activeAncestor = el.closest('li.conversation-list-item, a.conversation-list-item__link, li, a');
+        if (activeAncestor) {
+          const anchor = activeAncestor.matches('a') ? activeAncestor : activeAncestor.querySelector('a');
+          if (anchor && /\bactive\b/.test(anchor.className || '')) return false;
+        }
+        // Explicit Sales Navigator unread class
+        const rootItem = el.closest('li.conversation-list-item') || el.closest('li') || el;
+        if (rootItem && /\bis-unread\b/.test(rootItem.className || '')) return true;
+        // Button-based state from Sales Navigator actions area
+        if (rootItem) {
+          const hasMarkRead = rootItem.querySelector('button[data-control-name="mark_read"]');
+          const hasMarkUnread = rootItem.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkRead) return true;       // shows "Mark message as read" when currently unread
+          if (hasMarkUnread) return false;    // shows "Mark message as unread" when currently read
+        }
+
+        if (
+          el.querySelector(
+            '[data-qa="unread-badge"], .msg-conversation-card__unread-count, .notification-badge, .artdeco-badge, .conversation-list-item__unread, .conversation-list-item__unread-indicator, .conversation-list-item__badge, [data-unread="true"], [aria-current="unread"]'
+          )
+        ) {
+          return true;
+        }
+        const classHasUnread = !!el.querySelector('[class*="unread"]');
+        if (classHasUnread) return true;
+        const isSelected = el.getAttribute('aria-selected') === 'true' || /\bselected\b/i.test(el.className || '');
+        if (!isSelected) {
+          const previewEl = el.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet');
+          const isBold = (node) => node && (getComputedStyle(node).fontWeight === '700' || parseInt(getComputedStyle(node).fontWeight, 10) >= 600);
+          if (isBold(previewEl)) return true;
+        }
+        
+        const containerWithAria = el.closest('[aria-label]') || el;
+        const aria = containerWithAria.getAttribute('aria-label') || '';
+        if (/\bunread\b/i.test(aria)) return true;
+      } catch (_) {}
+      return false;
+    }
+
+    async markActiveConversationRead(timeoutMs = 5000) {
+      try {
+        // Identify the active conversation row in Sales Navigator
+        const activeLink = document.querySelector('a.conversation-list-item__link.active');
+        const li = (activeLink && activeLink.closest('li.conversation-list-item')) || null;
+        // If no explicit active row, attempt to use the first item with actions visible
+        const fallbackLi = li || document.querySelector('li.conversation-list-item');
+        const target = fallbackLi || activeLink || null;
+        if (!target) return { success: false, reason: 'No active conversation row found' };
+        // If it's already read, short-circuit
+        if (!/\bis-unread\b/.test((fallbackLi || {}).className || '')) {
+          // Also check button state: if mark_unread exists, it is read
+          const hasMarkUnread = fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkUnread) return { success: true, alreadyRead: true };
+        }
+        // Prefer the explicit "Mark message as read" action
+        const markReadBtn = (fallbackLi && fallbackLi.querySelector('button[data-control-name="mark_read"]'))
+          || document.querySelector('button[data-control-name="mark_read"]');
+        if (markReadBtn && !markReadBtn.disabled) {
+          try { markReadBtn.click(); } catch (_) {}
+        }
+
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          await this.delay(250);
+          const freshActiveLink = document.querySelector('a.conversation-list-item__link.active');
+          const freshLi = (freshActiveLink && freshActiveLink.closest('li.conversation-list-item')) || fallbackLi;
+          if (freshLi && !/\bis-unread\b/.test((freshLi.className || ''))) {
+            const hasMarkUnreadNow = freshLi.querySelector('button[data-control-name="mark_unread"]');
+            if (hasMarkUnreadNow) return { success: true, marked: true };
+            return { success: true, marked: true };
+          }
+        }
+        return { success: false, timeout: true };
+      } catch (err) {
+        return { success: false, error: err?.message || String(err) };
+      }
+    }
+
+    async ensureConversationMarkedRead(targetEl, timeoutMs = 5000) {
+      try {
+        // Resolve target to the active conversation if not provided
+        let row = this.getSalesInboxRow(targetEl) || targetEl;
+        if (!row) {
+          const activeLink = document.querySelector('a.conversation-list-item__link.active');
+          row = (activeLink && activeLink.closest('li.conversation-list-item')) || activeLink || null;
+        }
+        const li = row.closest('li.conversation-list-item') || row.closest('li') || row;
+        const start = Date.now();
+        // If it's already not unread, we're done
+        if (li && !/\bis-unread\b/.test(li.className || '')) return true;
+        // Bring the row into view and simulate hover to reveal actions
+        try { (li || row).scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
+        try { (li || row).dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); } catch (_) {}
+        try { (li || row).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); } catch (_) {}
+        // Try clicking the explicit "Mark message as read" action if present (broadened selectors)
+        const findMarkRead = () => {
+          if (!document) return null;
+          const scope = li || document;
+          const direct = (
+            scope.querySelector('button[data-control-name="mark_read"]') ||
+            scope.querySelector('button[aria-describedby*="mark-as-read"]')
+          );
+          if (direct) return direct;
+          // Fallback: scan buttons by inner text
+          const buttons = Array.from(scope.querySelectorAll('button'));
+          return buttons.find(b => ((b.textContent || '').toLowerCase().includes('mark message as read')) ) || null;
+        };
+
+        let markReadBtn = findMarkRead();
+        if (markReadBtn && !markReadBtn.disabled) {
+          try { markReadBtn.click(); } catch (_) {}
+        } else {
+          // Attempt a brief wait then retry after hover
+          await this.delay(200);
+          markReadBtn = findMarkRead();
+          if (markReadBtn && !markReadBtn.disabled) {
+            try { markReadBtn.click(); } catch (_) {}
+          }
+        }
+
+        // Poll until the unread class disappears or timeout
+        while (Date.now() - start < timeoutMs) {
+          await this.delay(300);
+          if (li && !/\bis-unread\b/.test(li.className || '')) return true;
+          // If we now see the "mark_unread" button, consider it read
+          const hasMarkUnreadNow = li && li.querySelector('button[data-control-name="mark_unread"]');
+          if (hasMarkUnreadNow) return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
+    extractSalesInboxItemInfo(el) {
+      const name = (el.querySelector('[data-anonymize="person-name"], .t-16, .msg-conversation-card__participant-names') || {}).textContent?.trim() || '';
+      const preview = (el.querySelector('[data-anonymize="general-blurb"], .t-14, .msg-conversation-card__message-snippet') || {}).textContent?.trim() || '';
+      const time = (el.querySelector('time, .conversation-list-item__timestamp, .msg-conversation-card__time-stamp') || {}).textContent?.trim() || '';
+      return { name, preview, time };
+    }
+
     async scrapeConnections() {
       try {
 
         console.log("🚀 Starting LinkedIn connection scraper...");
-
         const connectionCards = document.querySelectorAll( '[data-view-name="connections-profile"]');
 
         if (connectionCards.length === 0) {
@@ -924,6 +1220,12 @@ if (window.linkedInAutomationInjected) {
     async findMessageButton() {
       await this.delay(2000);
       const selectors = [
+        // Sales Navigator specific patterns
+        'button[data-anchor-send-inmail]',
+        'button[aria-label^="Message "]',
+        'button._message-cta_1xow7n',
+        'button[id^="ember"][aria-label^="Message "]',
+        // General/consumer LinkedIn patterns
         'button[aria-label*="Message"]:not([aria-label*="Send"]):not([aria-label*="Share"])',
         'button[data-control-name="message"]',
         '.pv-s-profile-actions button[aria-label*="Message"]',
@@ -1029,6 +1331,10 @@ if (window.linkedInAutomationInjected) {
 
     async findMessageInput() {
       const selectors = [
+        // Sales Navigator textarea
+        'textarea[name="message"]',
+        'textarea[aria-label*="Type your message here"]',
+        // Standard LinkedIn contenteditable inputs
         ".msg-form__contenteditable",
         '.msg-form__msg-content-container div[contenteditable="true"]',
         'div[data-placeholder*="message"]',
@@ -1043,8 +1349,16 @@ if (window.linkedInAutomationInjected) {
       for (let attempt = 0; attempt < 8; attempt++) {
         for (const selector of selectors) {
           const input = document.querySelector(selector);
-          if (input && input.isContentEditable && input.offsetParent !== null)
+          if (input && input.offsetParent !== null &&
+            (
+              input.isContentEditable === true ||
+              input.tagName === 'TEXTAREA' ||
+              input.tagName === 'INPUT'
+            )
+          ) {
+            console.debug('[FollowUp] Found message input via selector:', selector);
             return input;
+          }
         }
 
         const allContentEditables = document.querySelectorAll(
@@ -1060,6 +1374,23 @@ if (window.linkedInAutomationInjected) {
             return element;
           const parentContainer = element.closest(".msg-form, .compose-form");
           if (parentContainer) return element;
+        }
+
+        // Fallback: try any visible textarea that looks like a message box
+        const textareas = document.querySelectorAll('textarea');
+        for (const ta of textareas) {
+          if (ta.offsetParent === null) continue;
+          const aria = (ta.getAttribute('aria-label') || '').toLowerCase();
+          const ph = (ta.getAttribute('placeholder') || '').toLowerCase();
+          const name = (ta.getAttribute('name') || '').toLowerCase();
+          if (
+            name === 'message' ||
+            aria.includes('type your message') ||
+            ph.includes('message')
+          ) {
+            console.debug('[FollowUp] Fallback found textarea as message input');
+            return ta;
+          }
         }
         await this.delay(1000);
       }
@@ -1085,16 +1416,23 @@ if (window.linkedInAutomationInjected) {
         element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
       } else {
         element.focus();
-        element.value += text;
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-        element.dispatchEvent(new Event("change", { bubbles: true }));
-        element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+        const current = typeof element.value === 'string' ? element.value : '';
+        element.value = current + text;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
       }
     }
 
     async clickSendButton() {
       await this.delay(2000);
       const sendSelectors = [
+        // Sales Navigator specific
+        'button._button_fx0fxz[data-sales-action]',
+        'button[data-sales-action]',
+        'button._button_fx0fxz',
+        'button[id^="ember"][aria-disabled="false"]',
+        // Standard LinkedIn
         ".msg-form__send-button",
         'button[type="submit"]',
         '.msg-form button[type="submit"]',
@@ -1104,16 +1442,35 @@ if (window.linkedInAutomationInjected) {
         ".msg-form__send-btn",
       ];
 
+      const isButtonEnabled = (btn) => {
+        if (!btn) return false;
+        const ariaDisabled = btn.getAttribute('aria-disabled');
+        const isAriaDisabled = ariaDisabled === 'true';
+        return (
+          !btn.disabled &&
+          !isAriaDisabled &&
+          btn.offsetParent !== null &&
+          btn.offsetWidth > 0 &&
+          btn.offsetHeight > 0
+        );
+      };
+
       for (let attempt = 0; attempt < 10; attempt++) {
         for (const selector of sendSelectors) {
           const button = document.querySelector(selector);
-          if (button && !button.disabled && button.offsetParent !== null) {
+          if (button && isButtonEnabled(button)) {
             const text = button.textContent.toLowerCase().trim();
             const ariaLabel =
               button.getAttribute("aria-label")?.toLowerCase() || "";
             if (!text.includes("options") && !ariaLabel.includes("options")) {
-              button.click();
-              await this.delay(1000);
+              try { button.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch (_) {}
+              await this.delay(200);
+              try { button.click(); } catch (_) {}
+              await this.delay(400);
+              try {
+                button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              } catch (_) {}
+              await this.delay(800);
               return;
             }
           }
@@ -1125,7 +1482,7 @@ if (window.linkedInAutomationInjected) {
           const ariaLabel =
             button.getAttribute("aria-label")?.toLowerCase() || "";
           if (
-            text === "send" &&
+            (text === "send" || text.includes("send")) &&
             !text.includes("options") &&
             !ariaLabel.includes("options") &&
             !button.disabled &&
@@ -1139,6 +1496,134 @@ if (window.linkedInAutomationInjected) {
           }
         }
         await this.delay(500);
+      }
+    }
+
+    async startFollowUpFlow(profile) {
+      try {
+        console.log("[FollowUp] Starting follow-up flow with profile:", profile);
+
+        await this.delay(5000);
+        const messageButton = await this.findMessageButton();
+        if (!messageButton) {
+          throw new Error("Message button not found");
+        }
+        messageButton.click();
+        await this.delay(4000);
+
+        const followUpText = await this.generateFollowUpMessage(profile);
+
+        if (!followUpText || typeof followUpText !== "string") {
+          throw new Error("Follow-up text not received from API");
+        }
+
+        // 4) Find input and type word-by-word
+        const messageInput = await this.findMessageInput();
+        if (!messageInput) {
+          throw new Error("Message input not found");
+        }
+
+        // Clear any pre-filled text
+        if (messageInput.contentEditable === "true") {
+          messageInput.textContent = "";
+        } else if ("value" in messageInput) {
+          messageInput.value = "";
+        }
+
+        await this.typeWordsWithDelay(messageInput, followUpText, 150);
+
+        // 5) Wait 10 seconds then send
+        await this.delay(10000);
+        //await this.clickSendButton();
+
+        console.log("[FollowUp] Message sent successfully.");
+        try {
+          const logApiUrl = "https://localhost:7120/api/linkedin/FollowUp-log";
+          const logPayload = {
+            profileUrl: profile?.url || profile?.profileUrl || "",
+            followUp: followUpText,
+          };
+          await fetch(logApiUrl, {
+            method: "POST",
+            headers: {
+              Accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(logPayload),
+          });
+          console.log("[FollowUp] Log stored successfully.");
+        } catch (logErr) {
+          console.warn("[FollowUp] Failed to store log:", logErr);
+        }
+        return { success: true };
+      } catch (err) {
+        console.error("[FollowUp] Error in startFollowUpFlow:", err);
+        return { success: false, error: err?.message || String(err) };
+      }
+    }
+
+    async generateFollowUpMessage(profile) {
+      try {
+        const apiUrl = "https://localhost:7120/api/linkedin/FollowUp";
+        const payload = {
+          name: profile?.name || "",
+          title: profile?.title || "",
+          url: profile?.url || profile?.profileUrl || "",
+          location: profile?.location || "",
+          interests: profile?.interests || "",
+          previousMessage: profile?.previousMessage || "",
+        };
+
+        console.log("[FollowUp] Requesting follow-up from:", apiUrl, payload);
+
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          throw new Error(`FollowUp API failed: ${res.status}`);
+        }
+
+        const text = await res.text();
+        let messageText = text;
+        try {
+          const json = this.safeJsonParse(text);
+          if (json) {
+            messageText = json.message || json.text || json.content || JSON.stringify(json);
+          }
+        } catch (_) {}
+
+        if (!messageText || typeof messageText !== "string") {
+          throw new Error("No message content returned by API");
+        }
+
+        return messageText.trim();
+      } catch (err) {
+        console.warn("[FollowUp] Using fallback message due to error:", err);
+        const name = (profile?.name || "there").split(" ")[0];
+        const title = profile?.title ? ` about your work as ${profile.title}` : "";
+        return `Hi ${name}, just following up on my previous note${title}. Would love to connect and explore if there's a fit to help you. Cheers!`;
+      }
+    }
+
+    async typeWordsWithDelay(element, text, delayMs = 150) {
+      const words = text.split(/(\s+)/); // keep spaces
+      for (const part of words) {
+        await this.typeText(element, part);
+        await this.delay(delayMs);
+      }
+    }
+
+    safeJsonParse(text) {
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return null;
       }
     }
 

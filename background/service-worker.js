@@ -5,7 +5,7 @@ class LinkedInAutomationBackground {
   }
 
   init() {
-    const now = new Date().toISOString(); // Current time: 2025-09-15T13:21:00Z (06:51 PM IST)
+    const now = new Date().toISOString();
     console.log(`Service worker initialized at ${now}`);
 
     chrome.runtime.onInstalled.addListener(() => {
@@ -14,18 +14,30 @@ class LinkedInAutomationBackground {
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
-      return true; // Keep message channel open for async responses
+      return true;
     });
 
-    // Set up 1-minute alarm for monitoring connections
-    //chrome.alarms.create("monitorConnections", { periodInMinutes: 1 });
     chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
+    chrome.alarms.create("followUpScheduler", { periodInMinutes: 1440 });
+    chrome.alarms.create("salesInboxCheck", { periodInMinutes: 1 });
+    //chrome.alarms.create("followUpScheduler", { periodInMinutes: 1 });
+
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === "monitorConnections") {
         console.log(
           `Monitoring connections triggered at ${new Date().toISOString()}`
         );
         this.monitorConnections();
+      } else if (alarm.name === "followUpScheduler") {
+        console.log(
+          `Follow-up scheduler triggered at ${new Date().toISOString()}`
+        );
+        this.performFollowUpCycle();
+      } else if (alarm.name === "salesInboxCheck") {
+        console.log(
+          `Sales inbox check triggered at ${new Date().toISOString()}`
+        );
+        this.openAndCheckSalesInbox();
       }
     });
 
@@ -42,6 +54,11 @@ class LinkedInAutomationBackground {
     switch (message.action) {
       case "startCampaign":
         this.startCampaign(message.campaignId, sendResponse);
+        break;
+      case "triggerFollowUpNow":
+        this.performFollowUpCycle()
+          .then(() => sendResponse({ success: true }))
+          .catch((err) => sendResponse({ success: false, error: err?.message || String(err) }));
         break;
       case "pauseCampaign":
         this.pauseCampaign(message.campaignId, sendResponse);
@@ -66,6 +83,99 @@ class LinkedInAutomationBackground {
         break;
       default:
         sendResponse({ error: "Unknown action" });
+    }
+  }
+
+  async performFollowUpCycle() {
+    try {
+      const apiUrl = "https://localhost:7120/api/linkedin/Get-Connection";
+      console.log("[FollowUp] Fetching next connection from:", apiUrl);
+      const res = await fetch(apiUrl, {
+        method: "GET",
+        headers: { Accept: "*/*" },
+      });
+
+      if (!res.ok) {
+        throw new Error(`[FollowUp] Get-Connection failed: ${res.status}`);
+      }
+
+      let profileData = null;
+      try {
+        profileData = await res.json();
+      } catch (e) {
+        console.warn("[FollowUp] Response not JSON, attempting text parse");
+        const text = await res.text();
+        try {
+          profileData = JSON.parse(text);
+        } catch (e2) {
+          throw new Error("[FollowUp] Could not parse profile data from API");
+        }
+      }
+
+      let selected = null;
+      if (Array.isArray(profileData)) {
+        console.log(`[FollowUp] API returned ${profileData.length} items; selecting first valid with seleLeadUrl.`);
+        selected = profileData.find((p) => p && typeof p === "object" && p.saleleadUrl) || null;
+      } else if (profileData && typeof profileData === "object") {
+        selected = profileData;
+      }
+
+      if (!selected) {
+        console.log("[FollowUp] No usable profile item returned, skipping this cycle.");
+        return;
+      }
+
+      const leadUrl = selected.saleleadUrl;
+      if (!leadUrl) {
+        console.warn("[FollowUp] Invalid or missing LinkedIn URL in selected profile:", selected);
+        return;
+      }
+
+      const profileForContent = {
+        name: selected.name || "",
+        title: selected.title || "",
+        url: selected.linkedinUrl ||"",
+        location: selected.location || "",
+        interests: selected.interests || "",
+        previousMessage: selected.message || "",
+        leadUrl: leadUrl,
+        profilePicUrl: selected.profilePicUrl || "",
+        source: selected.source || "",
+        status: selected.status || "",
+        createdAt: selected.createdAt || null,
+      };
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url: leadUrl, active: false }, resolve);
+      });
+
+      const onUpdated = async (tabId, changeInfo) => {
+        if (tabId === tab.id && changeInfo.status === "complete") {
+          try {
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            console.log("[FollowUp] Page loaded. Sending startFollowUp to content script.");
+            chrome.tabs.sendMessage(tab.id,{ action: "startFollowUp", profile: profileForContent },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.error("[FollowUp] Error sending message to content script:", chrome.runtime.lastError);
+                } else {
+                  console.log("[FollowUp] Content script acknowledged:", response);
+                  const wasSent = !!(response && response.success && response.result && response.result.success);
+                  if (wasSent) {
+                    console.log("[FollowUp] Message sent. Closing tab.");
+                    try { chrome.tabs.remove(tab.id); } catch (e) { console.warn("[FollowUp] Failed to close tab:", e); }
+                  }
+                }
+              }
+            );
+          } catch (err) {
+            console.error("[FollowUp] onUpdated handler error:", err);
+          }
+        }
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+    } catch (error) {
+      console.error("[FollowUp] performFollowUpCycle error:", error);
     }
   }
 
@@ -383,6 +493,61 @@ class LinkedInAutomationBackground {
     } catch (error) {
       console.error("Error handling collection status:", error);
       sendResponse({ error: error.message });
+    }
+  }
+
+  async openAndCheckSalesInbox() {
+    try {
+      const inboxUrl = "https://www.linkedin.com/sales/inbox/2";
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url: inboxUrl, active: false }, resolve);
+      });
+
+      const timeoutId = setTimeout(() => {
+        try { chrome.tabs.remove(tab.id); } catch (_) {}
+      }, 60000);
+
+      const onUpdated = async (tabId, changeInfo) => {
+        if (tabId === tab.id && changeInfo.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          try {
+            chrome.tabs.sendMessage(
+              tab.id,
+              { action: "checkSalesInbox" },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn("[SalesInbox] Could not reach content script:",chrome.runtime.lastError);
+                } 
+                else {
+                  const res = response || {};
+                  const r = res.result || {};
+                  const unreadNames = Array.isArray(r.unreadItems) ? r.unreadItems.map(i => i.name).filter(Boolean) : [];
+                  const clickedItems = Array.isArray(r.clickedItems) ? r.clickedItems : (r.item ? [r.item] : []);
+                  console.log("[SalesInbox] Result:", {
+                    found: r.found,
+                    foundVisible: r.foundVisible,
+                    clicked: r.clicked,
+                    unreadFound: r.unreadFound,
+                    unreadFoundVisible: r.unreadFoundVisible,
+                    unreadNames,
+                    clickedItem: r.item,
+                    clickedItems
+                  });
+                }
+                clearTimeout(timeoutId);
+                try { chrome.tabs.remove(tab.id); } catch (_) {}
+              }
+            );
+          } catch (err) {
+            console.error("[SalesInbox] Error messaging content script:", err);
+            clearTimeout(timeoutId);
+            try { chrome.tabs.remove(tab.id); } catch (_) {}
+          }
+        }
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+    } catch (err) {
+      console.error("[SalesInbox] openAndCheckSalesInbox error:", err);
     }
   }
 }
