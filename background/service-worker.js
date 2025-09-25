@@ -163,7 +163,7 @@ class LinkedInAutomationBackground {
                   const wasSent = !!(response && response.success && response.result && response.result.success);
                   if (wasSent) {
                     console.log("[FollowUp] Message sent. Closing tab.");
-                    try { chrome.tabs.remove(tab.id); } catch (e) { console.warn("[FollowUp] Failed to close tab:", e); }
+                    this.safeRemoveTab(tab.id);
                   }
                 }
               }
@@ -448,6 +448,18 @@ class LinkedInAutomationBackground {
     };
   }
 
+  // Safely remove a tab, swallowing benign errors like "No tab with id"
+  async safeRemoveTab(tabId) {
+    try {
+      const maybePromise = chrome.tabs.remove(tabId);
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        await maybePromise.catch(() => {});
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
   loadCampaigns() {
     // No storage operations needed
   }
@@ -503,9 +515,7 @@ class LinkedInAutomationBackground {
         chrome.tabs.create({ url: inboxUrl, active: false }, resolve);
       });
 
-      const timeoutId = setTimeout(() => {
-        try { chrome.tabs.remove(tab.id); } catch (_) {}
-      }, 60000);
+      // No fixed timeout. We will close the tab only after the content script responds.
 
       const onUpdated = async (tabId, changeInfo) => {
         if (tabId === tab.id && changeInfo.status === "complete") {
@@ -514,7 +524,7 @@ class LinkedInAutomationBackground {
             chrome.tabs.sendMessage(
               tab.id,
               { action: "checkSalesInbox" },
-              (response) => {
+              async (response) => {
                 if (chrome.runtime.lastError) {
                   console.warn("[SalesInbox] Could not reach content script:",chrome.runtime.lastError);
                 } 
@@ -534,14 +544,12 @@ class LinkedInAutomationBackground {
                     clickedItems
                   });
                 }
-                clearTimeout(timeoutId);
-                try { chrome.tabs.remove(tab.id); } catch (_) {}
+                await this.safeRemoveTab(tab.id);
               }
             );
           } catch (err) {
             console.error("[SalesInbox] Error messaging content script:", err);
-            clearTimeout(timeoutId);
-            try { chrome.tabs.remove(tab.id); } catch (_) {}
+            await this.safeRemoveTab(tab.id);
           }
         }
       };
