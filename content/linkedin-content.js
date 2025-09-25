@@ -1566,7 +1566,7 @@ if (window.linkedInAutomationInjected) {
 
         // 5) Wait 10 seconds then send
         await this.delay(10000);
-        //await this.clickSendButton();
+        await this.clickSendButton();
 
         console.log("[FollowUp] Message sent successfully.");
         try {

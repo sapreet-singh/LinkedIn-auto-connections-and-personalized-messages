@@ -17,10 +17,11 @@ class LinkedInAutomationBackground {
       return true;
     });
 
-    chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
-    chrome.alarms.create("followUpScheduler", { periodInMinutes: 1440 });
+    //chrome.alarms.create("monitorConnections", { periodInMinutes: 60 });
+    //chrome.alarms.create("followUpScheduler", { periodInMinutes: 1440 });
     chrome.alarms.create("salesInboxCheck", { periodInMinutes: 1 });
-    //chrome.alarms.create("followUpScheduler", { periodInMinutes: 1 });
+    chrome.alarms.create("monitorConnections", { periodInMinutes: 4 });
+    chrome.alarms.create("followUpScheduler", { periodInMinutes: 3 });
 
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === "monitorConnections") {
