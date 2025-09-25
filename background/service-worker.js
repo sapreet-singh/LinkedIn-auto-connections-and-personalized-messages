@@ -1,3 +1,13 @@
+// Load shared LinkedIn API wrapper (MV3 service worker classic script)
+try {
+  importScripts('../common/linkedin-api.js');
+} catch (e) {
+  console.warn('LinkedIn API wrapper not loaded in background:', e);
+}
+if (typeof LinkedInApi !== 'undefined' && LinkedInApi.config && LinkedInApi.config.setBase) {
+  try { LinkedInApi.config.setBase('https://localhost:7120'); } catch (_) {}
+}
+
 class LinkedInAutomationBackground {
   constructor() {
     this.activeCampaigns = new Map();
@@ -89,29 +99,14 @@ class LinkedInAutomationBackground {
 
   async performFollowUpCycle() {
     try {
-      const apiUrl = "https://localhost:7120/api/linkedin/Get-Connection";
-      console.log("[FollowUp] Fetching next connection from:", apiUrl);
-      const res = await fetch(apiUrl, {
-        method: "GET",
-        headers: { Accept: "*/*" },
-      });
-
-      if (!res.ok) {
-        throw new Error(`[FollowUp] Get-Connection failed: ${res.status}`);
-      }
-
-      let profileData = null;
-      try {
-        profileData = await res.json();
-      } catch (e) {
-        console.warn("[FollowUp] Response not JSON, attempting text parse");
-        const text = await res.text();
-        try {
-          profileData = JSON.parse(text);
-        } catch (e2) {
-          throw new Error("[FollowUp] Could not parse profile data from API");
-        }
-      }
+      console.log("[FollowUp] Fetching next connection via LinkedInApi.getConnection");
+      const profileData = (typeof LinkedInApi !== 'undefined' && LinkedInApi.getConnection)
+        ? await LinkedInApi.getConnection()
+        : await (async () => {
+            const res = await fetch('https://localhost:7120/api/linkedin/Get-Connection', { headers: { Accept: '*/*' }});
+            if (!res.ok) throw new Error(`[FollowUp] Get-Connection failed: ${res.status}`);
+            return await res.json();
+          })();
 
       let selected = null;
       if (Array.isArray(profileData)) {
@@ -259,25 +254,17 @@ class LinkedInAutomationBackground {
 
   async sendToAPI(url, rawDate) {
     try {
-      const payload = {
-        url: url,
-        date: rawDate
-      };
-      const response = await fetch(
-        "https://localhost:7120/api/linkedin/accepted-request",
-        {
+      const payload = { url, date: rawDate };
+      if (typeof LinkedInApi !== 'undefined' && LinkedInApi.acceptedRequest) {
+        await LinkedInApi.acceptedRequest(payload);
+      } else {
+        const response = await fetch("https://localhost:7120/api/linkedin/accepted-request", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        });
+        if (!response.ok) throw new Error(`API request failed: ${response.status}`);
       }
-
       console.log("✅ Successfully sent connection to API:", url);
     } catch (err) {
       console.error(

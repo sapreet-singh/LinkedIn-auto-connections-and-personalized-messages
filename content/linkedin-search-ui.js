@@ -1828,26 +1828,31 @@ class LinkedInSearchFloatingUI {
 
   async generateMessageForProfile(profileUrl, customPrompt) {
     try {
-      const response = await fetch(
-        "https://localhost:7007/api/linkedin/messages",
-        {
-          method: "POST",
-          headers: {
-            accept: "*/*",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            url: profileUrl,
-            prompt: customPrompt,
-          }),
+      let apiData;
+      if (typeof LinkedInApi !== 'undefined' && LinkedInApi.message) {
+        apiData = await LinkedInApi.message({ url: profileUrl, prompt: customPrompt });
+      } else {
+        const response = await fetch(
+          "https://localhost:7120/api/linkedin/message",
+          {
+            method: "POST",
+            headers: {
+              accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: profileUrl,
+              prompt: customPrompt,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        apiData = await response.json();
       }
-
-      const apiData = await response.json();
       console.log("API Data:", apiData);
       const message =
         apiData?.messages?.message1 ||

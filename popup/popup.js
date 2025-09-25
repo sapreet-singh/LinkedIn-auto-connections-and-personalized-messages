@@ -14,37 +14,26 @@ const CONSTANTS = {
     PEOPLE_SEARCH: "https://www.linkedin.com/search/results/people/",
     SALES_NAVIGATOR: "https://www.linkedin.com/sales/search/people",
   },
-  API: {
-    BASE_URL: "https://localhost:7007",
-    ENDPOINTS: { MESSAGES: "/api/linkedin/messages" },
-  },
+  // API configuration handled by LinkedInApi wrapper
 };
 
 const APIService = {
-  async generateMessage(profileUrl) {
+  // Generates a message using backend: prefers LinkedInApi.message, falls back to fetch
+  async generateMessage(profileUrl, prompt = "") {
     try {
-      const response = await fetch(
-        `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`,
-        {
-          method: "POST",
-          headers: {
-            accept: "*/*",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            url: profileUrl,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `API request failed: ${response.status} ${response.statusText}`
-        );
+      if (typeof LinkedInApi !== "undefined" && LinkedInApi.message) {
+        return await LinkedInApi.message({ url: profileUrl, prompt });
       }
-
-      const data = await response.json();
-      return data;
+      // Fallback to direct fetch using provided OpenAPI spec
+      const response = await fetch("https://localhost:7120/api/linkedin/message", {
+        method: "POST",
+        headers: { accept: "*/*", "Content-Type": "application/json" },
+        body: JSON.stringify({ url: profileUrl, prompt }),
+      });
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      return await response.json();
     } catch (error) {
       throw error;
     }
@@ -57,17 +46,9 @@ const APIService = {
     for (const profile of limitedProfiles) {
       try {
         const messageData = await this.generateMessage(profile.url);
-        results.push({
-          profile,
-          messageData,
-          success: true,
-        });
+        results.push({ profile, messageData, success: true });
       } catch (error) {
-        results.push({
-          profile,
-          error: error.message,
-          success: false,
-        });
+        results.push({ profile, error: error.message, success: false });
       }
     }
 

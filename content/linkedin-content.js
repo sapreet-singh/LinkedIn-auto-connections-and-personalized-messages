@@ -1570,19 +1570,20 @@ if (window.linkedInAutomationInjected) {
 
         console.log("[FollowUp] Message sent successfully.");
         try {
-          const logApiUrl = "https://localhost:7120/api/linkedin/FollowUp-log";
           const logPayload = {
             profileUrl: profile?.url || profile?.profileUrl || "",
             followUp: followUpText,
           };
-          await fetch(logApiUrl, {
-            method: "POST",
-            headers: {
-              Accept: "*/*",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(logPayload),
-          });
+          if (typeof LinkedInApi !== 'undefined' && LinkedInApi.followUpLog) {
+            await LinkedInApi.followUpLog(logPayload);
+          } else {
+            const logApiUrl = "https://localhost:7120/api/linkedin/FollowUp-log";
+            await fetch(logApiUrl, {
+              method: "POST",
+              headers: { Accept: "*/*", "Content-Type": "application/json" },
+              body: JSON.stringify(logPayload),
+            });
+          }
           console.log("[FollowUp] Log stored successfully.");
         } catch (logErr) {
           console.warn("[FollowUp] Failed to store log:", logErr);
@@ -1596,7 +1597,6 @@ if (window.linkedInAutomationInjected) {
 
     async generateFollowUpMessage(profile) {
       try {
-        const apiUrl = "https://localhost:7120/api/linkedin/FollowUp";
         const payload = {
           name: profile?.name || "",
           title: profile?.title || "",
@@ -1606,22 +1606,22 @@ if (window.linkedInAutomationInjected) {
           previousMessage: profile?.previousMessage || "",
         };
 
-        console.log("[FollowUp] Requesting follow-up from:", apiUrl, payload);
+        console.log("[FollowUp] Requesting follow-up with payload:", payload);
 
-        const res = await fetch(apiUrl, {
-          method: "POST",
-          headers: {
-            "Accept": "*/*",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          throw new Error(`FollowUp API failed: ${res.status}`);
+        let text;
+        if (typeof LinkedInApi !== 'undefined' && LinkedInApi.followUp) {
+          const data = await LinkedInApi.followUp(payload);
+          text = (typeof data === 'string') ? data : (data?.message || data?.text || data?.content || JSON.stringify(data));
+        } else {
+          const apiUrl = "https://localhost:7120/api/linkedin/FollowUp";
+          const res = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Accept": "*/*", "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`FollowUp API failed: ${res.status}`);
+          text = await res.text();
         }
-
-        const text = await res.text();
         let messageText = text;
         try {
           const json = this.safeJsonParse(text);
@@ -1724,27 +1724,34 @@ if (window.linkedInAutomationInjected) {
             recentMessages: recent.map(m => ({ sender: m.sender, text: m.text, time: m.time || '' })),
             source: 'sales-inbox'
           };
-          const res = await fetch(this.dynamicMessage.apiUrl, {
-            method: 'POST',
-            headers: { 'Accept': '*/*', 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (res.ok) {
-            const txt = await res.text();
-            let out = txt;
-            try {
-              const json = this.safeJsonParse(txt);
-              if (json) out = json.message || json.text || json.content || JSON.stringify(json);
-            } catch (_) {}
-            if (typeof out === 'string' && out.trim()) return out.trim();
+          let txt;
+          if (typeof LinkedInApi !== 'undefined' && LinkedInApi.inboxReply) {
+            const result = await LinkedInApi.inboxReply(payload);
+            txt = (typeof result === 'string') ? result : (result?.message || result?.text || result?.content || JSON.stringify(result));
+          } else {
+            const res = await fetch(this.dynamicMessage.apiUrl, {
+              method: 'POST',
+              headers: { 'Accept': '*/*', 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(`InboxReply API failed: ${res.status}`);
+            txt = await res.text();
           }
-        } catch (_) { }
+          let out = txt;
+          try {
+            const json = this.safeJsonParse(txt);
+            if (json) out = json.message || json.text || json.content || JSON.stringify(json);
+          } catch (_) {}
+          if (out && typeof out === 'string' && out.trim()) return out.trim();
+        } catch (err) {
+          console.warn('[InboxReply] API failed, using fallback:', err);
+        }
       }
 
       if (lastIncoming) {
         const t = lastIncoming.text.toLowerCase();
         if (t.includes('how are you')) {
-          return `Hi ${name || ''}${name ? ', ' : ''}I’m doing well, thanks for asking! How’s your week going?`;
+          return `Hi ${name || ''}${name ? ', ' : ''}I'm doing well, thanks for asking! How's your week going?`;
         }
         if (t.includes('hi') || t.includes('hello') || t.includes('hii')) {
           return `Hi ${name || 'there'}! Great to hear from you. What can I help you with today?`;

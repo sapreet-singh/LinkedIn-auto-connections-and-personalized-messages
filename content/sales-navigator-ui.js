@@ -18,26 +18,20 @@ if (window.salesNavigatorUILoaded) {
   const APIService = {
     async generateMessage(customPrompt, profileUrl) {
       try {
-        const response = await fetch(
-          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`,
-          {
-            method: "POST",
-            headers: {
-              accept: "*/*",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              url: profileUrl,
-              prompt: customPrompt,
-            }),
-          }
-        );
-        if (!response.ok) {
-          throw new Error(
-            `API request failed: ${response.status} ${response.statusText}`
-          );
-        }
-        const apiData = await response.json();
+        const apiData = (typeof LinkedInApi !== 'undefined' && LinkedInApi.message)
+          ? await LinkedInApi.message({ url: profileUrl, prompt: customPrompt })
+          : await (async () => {
+              const response = await fetch(
+                `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.MESSAGES}`,
+                {
+                  method: "POST",
+                  headers: { accept: "*/*", "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: profileUrl, prompt: customPrompt }),
+                }
+              );
+              if (!response.ok) throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+              return await response.json();
+            })();
         console.log("api Message", apiData);
         const messageTest = apiData?.messages?.message;
         const interestMessage = apiData?.messages?.interests;
@@ -63,15 +57,8 @@ if (window.salesNavigatorUILoaded) {
     ) {
       try {
         console.log("Request Data", profile, customPrompt, message, profileUrl);
-        const response = await fetch(
-          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.PROFILES}`,
-          {
-            method: "POST",
-            headers: {
-              accept: "*/*",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+        const result = (typeof LinkedInApi !== 'undefined' && LinkedInApi.profiles?.post)
+          ? await LinkedInApi.profiles.post({
               linkedinUrl: profileUrl || null,
               seleLeadUrl: profile.seleLeadUrl || null,
               name: profile.name || null,
@@ -85,18 +72,29 @@ if (window.salesNavigatorUILoaded) {
               source: "sales-navigator",
               status: "pending" || null,
               createdAt: new Date(profile.timestamp).toISOString(),
-            }),
-          }
-        );
-        if (!response.ok) {
-          if (response.status === 409) {
-            throw new Error("Profile with this URL already exists");
-          }
-          throw new Error(
-            `Failed to add profile: ${response.status} ${response.statusText}`
-          );
-        }
-        const result = await response.json();
+            })
+          : await (async () => {
+              const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.PROFILES}`,{ method: 'POST', headers: { accept: '*/*', 'Content-Type': 'application/json' }, body: JSON.stringify({
+                linkedinUrl: profileUrl || null,
+                seleLeadUrl: profile.seleLeadUrl || null,
+                name: profile.name || null,
+                title: profile.title || null,
+                location: profile.location || null,
+                profilePicUrl: profile.profilePic || null,
+                prompt: customPrompt || null,
+                message: message || null,
+                reason: reason || null,
+                interests: interests || null,
+                source: 'sales-navigator',
+                status: 'pending' || null,
+                createdAt: new Date(profile.timestamp).toISOString(),
+              })});
+              if (!response.ok){
+                if (response.status === 409) throw new Error('Profile with this URL already exists');
+                throw new Error(`Failed to add profile: ${response.status} ${response.statusText}`);
+              }
+              return await response.json();
+            })();
         return {
           profileId: result.profileId,
           connectionRequestId: result.connectionRequestId,
@@ -110,21 +108,13 @@ if (window.salesNavigatorUILoaded) {
     },
     async getStatus() {
       try {
-        const response = await fetch(
-          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.STATUS}`,
-          {
-            method: "GET",
-            headers: {
-              accept: "*/*",
-            },
-          }
-        );
-        if (!response.ok) {
-          throw new Error(
-            `API request failed: ${response.status} ${response.statusText}`
-          );
-        }
-        const apiData = await response.json();
+        const apiData = (typeof LinkedInApi !== 'undefined' && LinkedInApi.getStatus)
+          ? await LinkedInApi.getStatus()
+          : await (async () => {
+              const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.STATUS}`, { headers: { accept: '*/*' }});
+              if (!response.ok) throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+              return await response.json();
+            })();
         return {
           sendConnectCount: apiData.sendConnect || 0,
           FailedConnectCount: apiData.failedConnect || 0,
@@ -136,23 +126,15 @@ if (window.salesNavigatorUILoaded) {
     },
     async generateFilterPrompt(prompt) {
       try {
-        const response = await fetch(
-          `${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.FILTER_PROMPT}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              accept: "*/*",
-            },
-            body: JSON.stringify({ prompt }), // Send string prompt
-          }
-        );
-        if (!response.ok) {
-          throw new Error(
-            `API request failed: ${response.status} ${response.statusText}`
-          );
-        }
-        const apiData = await response.json();
+        const apiData = (typeof LinkedInApi !== 'undefined' && LinkedInApi.filterPrompt)
+          ? await LinkedInApi.filterPrompt({ prompt })
+          : await (async () => {
+              const response = await fetch(`${CONSTANTS.API.BASE_URL}${CONSTANTS.API.ENDPOINTS.FILTER_PROMPT}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', accept: '*/*' }, body: JSON.stringify({ prompt })
+              });
+              if (!response.ok) throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+              return await response.json();
+            })();
         console.log("API Data:", apiData);
         return {
           industry: apiData.industry || "any",
