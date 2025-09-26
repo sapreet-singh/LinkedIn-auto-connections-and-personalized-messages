@@ -73,7 +73,7 @@ if (window.salesNavigatorUILoaded) {
             },
             body: JSON.stringify({
               linkedinUrl: profileUrl || null,
-              seleLeadUrl: profile.seleLeadUrl || null,
+              saleleadUrl: profile.saleleadUrl || null,
               name: profile.name || null,
               title: profile.title || null,
               location: profile.location || null,
@@ -1707,6 +1707,7 @@ if (window.salesNavigatorUILoaded) {
       }
       profileElements.forEach((element) => {
         const profile = this.extractProfileData(element);
+        console.log("Profile:", profile);
         if (profile && !this.isDuplicateProfile(profile)) {
           this.addProfile(profile);
         }
@@ -1771,8 +1772,8 @@ if (window.salesNavigatorUILoaded) {
         );
     
         // Sales Navigator lead-specific link (image or name link)
-        const seleLeadElement = element.querySelector(
-          'a[data-lead-search-result="profile-image-link-st240"], a[data-lead-search-result="profile-link-st240"]'
+        const saleLeadElement = element.querySelector(
+          'a[data-lead-search-result*="profile-image-link"], a[data-lead-search-result*="profile-link"]'
         );
     
         const titleBlock = element.querySelector(".artdeco-entity-lockup__subtitle");
@@ -1790,10 +1791,10 @@ if (window.salesNavigatorUILoaded) {
           ? nameElement.href
           : `https://www.linkedin.com${nameElement.getAttribute("href")}`;
     
-        const seleLeadUrl = seleLeadElement
-          ? (seleLeadElement.href.startsWith("http")
-              ? seleLeadElement.href
-              : `https://www.linkedin.com${seleLeadElement.getAttribute("href")}`)
+        const saleleadUrl = saleLeadElement
+          ? (saleLeadElement.href.startsWith("http")
+              ? saleLeadElement.href
+              : `https://www.linkedin.com${saleLeadElement.getAttribute("href")}`)
           : url; // fallback to main url if no dedicated lead link
     
         const location = locationElement?.textContent?.trim() || "";
@@ -1815,7 +1816,7 @@ if (window.salesNavigatorUILoaded) {
         return {
           name,
           url,           // generic profile url
-          seleLeadUrl,   // NEW: explicit Sales Navigator lead url
+          saleleadUrl,   // NEW: explicit Sales Navigator lead url
           title,
           company,
           location,
